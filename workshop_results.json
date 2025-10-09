@@ -1,0 +1,524 @@
+[
+  {
+    "workshop_id": "W001",
+    "theme": "Direction commerciale - IA pour la veille marché, la vente et la relation client",
+    "use_cases": [
+      {
+        "title": "Intégration et analyse des données marché et CRM",
+        "objective": "Consolider et analyser les données marché (ex. Excel) et les données clients pour des insights actionnables.",
+        "benefits": [
+          "Meilleure qualité et traçabilité des données",
+          "Support à la prise de décision commerciale"
+        ]
+      },
+      {
+        "title": "Veille marché et intelligence concurrentielle",
+        "objective": "Surveiller l’actualité marché, les ventes, les acheteurs et les brevets; anticiper et prioriser les marchés et analyser la concurrence.",
+        "benefits": [
+          "Identification d’opportunités et risques",
+          "Réduction du time-to-market",
+          "Benchmark concurrentiel"
+        ]
+      },
+      {
+        "title": "Gestion de l’expérience client et NPS",
+        "objective": "Analyser et agir sur le Net Promoter Score et les taux de satisfaction client.",
+        "benefits": [
+          "Amélioration de la fidélisation",
+          "Réduction des churns",
+          "Alertes proactives"
+        ]
+      },
+      {
+        "title": "Optimisation des tournées et planning commerciale",
+        "objective": "Analyser secteurs géographiques et tendances clients pour optimiser les tournées de rendez-vous et l’acquisition client.",
+        "benefits": [
+          "Réduction des coûts de déplacement",
+          "Augmentation du nombre d’entretiens efficaces"
+        ]
+      },
+      {
+        "title": "Pricing international et yield management",
+        "objective": "Définir des prix adaptés par marché et pays et optimiser les marges via le yield management.",
+        "benefits": [
+          "Meilleure compétitivité",
+          "Marge optimisée par marché"
+        ]
+      },
+      {
+        "title": "Formation et fidélisation via l’Academy",
+        "objective": "Automatiser le suivi des formations, mesurer le taux de transformation et de fidélisation des apprenants.",
+        "benefits": [
+          "Renforcement des compétences",
+          "Meilleure rétention des talents/partenaires"
+        ]
+      },
+      {
+        "title": "Prévision et définition du budget vente par client",
+        "objective": "Prévoir le budget et les ressources commerciales par client.",
+        "benefits": [
+          "Planification précise",
+          " Allocation efficace des ressources"
+        ]
+      },
+      {
+        "title": "Aide à la décision commerciale - alertes et actions",
+        "objective": "Analyser les chiffres de vente, détecter les hausses/baisse et proposer des actions.",
+        "benefits": [
+          "Réactivité accrue",
+          "Amélioration du taux de conversion client"
+        ]
+      },
+      {
+        "title": "Gestion de la base clients historiques et réactivation",
+        "objective": "Consolider et exploiter les anciens clients et projets pour réactivation.",
+        "benefits": [
+          "Nouveaux débouchés réactivables",
+          "Historique centralisé"
+        ]
+      },
+      {
+        "title": "Identification des KOLs et influenceurs",
+        "objective": "Identifier les futurs leaders d’opinion pour cibler rapidement.",
+        "benefits": [
+          "Ciblage d’influenceurs pertinents",
+          "Amplification de l’awareness"
+        ]
+      },
+      {
+        "title": "Profilage décideurs et ciblage emailing personnalisé",
+        "objective": "Profilage des décideurs et des sociétés pour générer des emails personnalisés.",
+        "benefits": [
+          "Taux de réponse amélioré",
+          "Ciblage plus pertinent"
+        ]
+      },
+      {
+        "title": "Gestion des appels entrants et support client",
+        "objective": "Gérer les appels et emails entrants avec une meilleure pertinence et service client.",
+        "benefits": [
+          "Réactivité du support",
+          "Satisfaction client"
+        ]
+      },
+      {
+        "title": "Veille client et base prospects",
+        "objective": "Suivre les acteurs liés à nos produits et constituer une base de prospects.",
+        "benefits": [
+          "Pipeline prospects enrichi",
+          "Meilleure connaissance du marché"
+        ]
+      },
+      {
+        "title": "Chiffrage automatique et benchmarking des devis",
+        "objective": "Automatiser le chiffrage des devis avec un benchmark client.",
+        "benefits": [
+          "Raccourcissement du cycle de devis",
+          "Devis compétitifs"
+        ]
+      },
+      {
+        "title": "Automatisation des réponses aux emails et demandes",
+        "objective": "Analyser les emails et proposer des réponses automatiquement.",
+        "benefits": [
+          "Réponse plus rapide",
+          "Cohérence des messages"
+        ]
+      },
+      {
+        "title": "Analyse des followers et réseaux sociaux",
+        "objective": "Analyser les followers sur LinkedIn et autres réseaux pour repérer les opportunités.",
+        "benefits": [
+          "Insights social pour le prospecting",
+          "Meilleure détection d’audiences"
+        ]
+      },
+      {
+        "title": "Veille et stratégie internationale - réglementation et système de santé",
+        "objective": "Veiller sur les aspects réglementaires et systèmes de santé à l’international pour une approche geo-politiquement informée.",
+        "benefits": [
+          "Conformité accrue",
+          "Stratégie internationale mieux informée"
+        ]
+      },
+      {
+        "title": "Récupération et saisie des cartes de visite dans le CRM",
+        "objective": "Automatiser la collecte et l’intégration des cartes de visite dans le CRM.",
+        "benefits": [
+          "Base CRM enrichie",
+          "Gain de temps"
+        ]
+      },
+      {
+        "title": "Diffusion multilingue d’informations produit",
+        "objective": "Diffuser les informations produits dans la langue de l’utilisateur pour le vendeur.",
+        "benefits": [
+          "Adoption produit accrue",
+          "Vente locale facilitée"
+        ]
+      },
+      {
+        "title": "Tarification des remboursements par pays",
+        "objective": "Établir le prix des remboursements par pays.",
+        "benefits": [
+          "Tarifs clairs et compétitifs",
+          "Meilleure transparence"
+        ]
+      },
+      {
+        "title": "Offre adaptée au portefeuille du prospect",
+        "objective": "Adapter l’offre aux besoins du portefeuille prospect.",
+        "benefits": [
+          "Augmentation du taux de conversion",
+          "Offres plus pertinentes"
+        ]
+      },
+      {
+        "title": "Identification des signaux du marché",
+        "objective": "Détecter les signaux d’évolution du marché pour action rapide.",
+        "benefits": [
+          "Réactivité stratégique",
+          "Opportunités prioritaires"
+        ]
+      },
+      {
+        "title": "Identification des praticiens/influenceurs dans les établissements",
+        "objective": "Détecter et prioriser les praticiens et influenceurs dans les établissements (vers qui aller en premier).",
+        "benefits": [
+          "Prospection priorisée",
+          "Rendement des visites"
+        ]
+      },
+      {
+        "title": "Suivi en direct des livraisons et accusés de réception",
+        "objective": "Gérer le suivi des livraisons et les accusés de réception avec le client en temps réel.",
+        "benefits": [
+          "Transparence livraison",
+          "Expérience client améliorée"
+        ]
+      },
+      {
+        "title": "Réponses automatiques aux demandes d’offres (AO)",
+        "objective": "Automatiser la partie administrative des AO.",
+        "benefits": [
+          "Génération plus rapide des réponses",
+          "Standardisation"
+        ]
+      },
+      {
+        "title": "Data centralisée sur les clients des clients (formations des médecins)",
+        "objective": "Rassembler les données sur les clients des clients (professionnels formés).",
+        "benefits": [
+          "Connaissance chaîne client",
+          "Ciblage mieux informé"
+        ]
+      },
+      {
+        "title": "Veille douanière et conformité administrative",
+        "objective": "Veiller automatiquement sur les processus douaniers et les exigences administratives liées au commerce international.",
+        "benefits": [
+          "Conformité accrue",
+          "Réduction des délais et risques"
+        ]
+      }
+    ]
+  },
+  {
+    "workshop_id": "W002",
+    "theme": "Excellence Opérationnelle par l'IA et l'automatisation",
+    "use_cases": [
+      {
+        "title": "Automatisation documentaire et génération de livrables",
+        "objective": "Standardiser, accélérer la production et la mise à jour des documents (Word/Excel, fiches produit, plaquettes, rapports, comptes rendus, flowscharts) et réduire les erreurs manuelles.",
+        "benefits": [
+          "Gain de temps significatif",
+          "Cohérence et traçabilité des documents",
+          "Réduction des erreurs humaines"
+        ]
+      },
+      {
+        "title": "Extraction et analyse de données de production et LCA",
+        "objective": "Automatiser l'extraction des données de production et composants pour réaliser l’analyse du cycle de vie et le bilan carbone par produit.",
+        "benefits": [
+          "Cartographie de l’impact environnemental par produit",
+          "Données prêtes pour le reporting ESG",
+          "Meilleure prise de décision écologique"
+        ]
+      },
+      {
+        "title": "Contrôles qualité et traçabilité par vision par ordinateur",
+        "objective": "Utiliser la vision par ordinateur pour vérifier présence/qualité (étiquettes, soudures, défauts sur sachets, tricots) et accélérer les contrôles en production.",
+        "benefits": [
+          "Détection précoce des défauts",
+          "Réduction des retours et des non-conformités",
+          "Flux de production plus rapide"
+        ]
+      },
+      {
+        "title": "Planification expérimentale et DOE",
+        "objective": "Concevoir et analyser des plans d’expérience complexes pour optimiser les procédés et valider les paramètres de fabrication.",
+        "benefits": [
+          "Gain de temps dans les essais",
+          "Meilleure compréhension des facteurs critiques",
+          "Optimisation du procédé"
+        ]
+      },
+      {
+        "title": "Gestion avancée des stocks et planification de la production",
+        "objective": "Mettre à jour automatiquement les projections de stock, analyser les écarts et relancer les ordres de fabrication selon les besoins.",
+        "benefits": [
+          "Réduction des ruptures de stock",
+          "Alignement production-stock",
+          "Réactivité face aux besoins"
+        ]
+      },
+      {
+        "title": "Dossiers de lots: numérisation et détection d'erreurs",
+        "objective": "Scanner et analyser les dossiers de lots pour détecter les erreurs et fiabiliser le suivi.",
+        "benefits": [
+          "Moins d’erreurs administratives",
+          "Traçabilité renforcée",
+          "Gain de temps sur les vérifications"
+        ]
+      },
+      {
+        "title": "Post-Market Surveillance et gestion des réclamations",
+        "objective": "Gérer l’historique des FRC et les PMS pour les réclamations clients et les surveillances Post-Market.",
+        "benefits": [
+          "Traçabilité des réclamations",
+          "Réactivité et conformité réglementaire",
+          "Meilleure qualité produit"
+        ]
+      },
+      {
+        "title": "Approvisionnement automatisé et rapprochement documents",
+        "objective": "Attribuer des commandes automatiques (basées sur stock minimal), mettre à jour les délais et rapprocher factures et bons de livraison.",
+        "benefits": [
+          "Réduction des ruptures et des retards",
+          "Gain de temps administratif",
+          "Meilleure maîtrise des coûts"
+        ]
+      },
+      {
+        "title": "KPI et reporting BI automatisés",
+        "objective": "Mettre à jour les KPIs de production et générer des rapports BI à intervalle régulier.",
+        "benefits": [
+          "Suivi en temps réel",
+          "Meilleure prise de décision",
+          "Réduction d’efforts de reporting"
+        ]
+      },
+      {
+        "title": "Maintenance prédictive et suivi énergétique",
+        "objective": "Implémenter la maintenance prédictive pour les CTA et suivre la consommation énergétique pour optimiser l’énergie.",
+        "benefits": [
+          "Réduction des pannes et des coûts énergétiques",
+          "Détection de dérives plus rapide",
+          "Impact positif sur l’empreinte environnementale"
+        ]
+      },
+      {
+        "title": "Gestion des accès et sécurité IT",
+        "objective": "Automatiser l’attribution des rôles, la gestion des accès et surveiller les comportements machine pour prévenir les attaques.",
+        "benefits": [
+          "Sécurité renforcée",
+          "Efficacité opérationnelle",
+          "Conformité IT"
+        ]
+      },
+      {
+        "title": "Assistance interne et connaissances techniques",
+        "objective": "Fournir un assistant IA interne avec accès à la GED QI/QO/QP pour répondre aux questions techniques.",
+        "benefits": [
+          "Réduction du temps de réponse technique",
+          "Meilleure cohérence des réponses",
+          "Soutien à l’ingénierie et maintenance"
+        ]
+      },
+      {
+        "title": "Recrutement prod et fiches de poste (HR IA)",
+        "objective": "Aider au recrutement pour la production et la rédaction de fiches de poste (ATS TeamTailor).",
+        "benefits": [
+          "Gain de temps RH",
+          "Amélioration de la pertinence des profils",
+          "Meilleure expérience candidat"
+        ]
+      },
+      {
+        "title": "Automatisation et standardisation des documents sous-traitance et conception",
+        "objective": "Automatiser et standardiser les documents liés à la sous-traitance et à la conception (Word/Excel).",
+        "benefits": [
+          "Cohérence et traçabilité",
+          "Gain de temps sur les processus de conception et sous-traitance"
+        ]
+      },
+      {
+        "title": "Reconnaissance visuelle et contrôle inbound en entrepôt",
+        "objective": "Utiliser la reconnaissance visuelle pour les contrôles d’entrées dans la warehouse et accélérer le flux.",
+        "benefits": [
+          "Accélération des flux logistiques",
+          "Réduction d’erreurs de réception"
+        ]
+      }
+    ]
+  },
+  {
+    "workshop_id": "W003",
+    "theme": "Capital des données - Formation, capitalisation et excellence opérationnelle",
+    "use_cases": [
+      {
+        "title": "Suivi de carrière et plan de formation personnalisés",
+        "objective": "Permettre le suivi des parcours professionnels en s'appuyant sur l'historique, les compétences et les formations disponibles sur le marché.",
+        "benefits": [
+          "Plan de progression clair et transparent",
+          "Identification proactive des lacunes et des formations pertinentes",
+          "Alignement compétences-emplois et mobilité interne"
+        ]
+      },
+      {
+        "title": "Analyse et centralisation des données marché internes et compétences",
+        "objective": "Regrouper et analyser les données marché générées par les collaborateurs (formations, historique, FT) pour mieux connaître l'état des compétences internes et les tendances.",
+        "benefits": [
+          "Insight sur les compétences et les besoins en formation",
+          "Base de référence pour plan de formation et recrutement"
+        ]
+      },
+      {
+        "title": "Génération et synthèse automatique de comptes rendus",
+        "objective": "Générer des comptes rendus automatiques quelle que soit la nature de l'échange (réunions, entretiens, salons).",
+        "benefits": [
+          "Gain de temps significatif",
+          "Standardisation et traçabilité des informations"
+        ]
+      },
+      {
+        "title": "Validation des connaissances et capitalisation transversale",
+        "objective": "Réaliser des questionnaires de validation des connaissances, avec capitalisation transversale des résultats entre services.",
+        "benefits": [
+          "Meilleure traçabilité des compétences",
+          "Réduction des redondances et des écarts de formation"
+        ]
+      },
+      {
+        "title": "Veille documentaire et protocole d'étude",
+        "objective": "Réaliser l'historique des études (veille documentaire) et synthétiser la littérature pour rédiger des protocoles d'étude.",
+        "benefits": [
+          "Rédaction de protocoles plus rapide",
+          "Veille consolidée et reproductible"
+        ]
+      },
+      {
+        "title": "Sourcing et recrutement assistés par IA (CV et fiches de poste)",
+        "objective": "Automatiser le screening de CV et maintenir des fiches de poste à jour pour attirer les bons profils.",
+        "benefits": [
+          "Réduction du temps de tri des CV",
+          "Amélioration de l'attractivité et de la pertinence des postes"
+        ]
+      },
+      {
+        "title": "Gestion documentaire et conformité",
+        "objective": "Automatiser les mises à jour des documents procédures (versioning) et réaliser des analyses d'écarts (gap analysis).",
+        "benefits": [
+          "Traçabilité et conformité améliorées",
+          "Réduction des erreurs et des retours en arrière"
+        ]
+      },
+      {
+        "title": "Optimisation des tests microbiologiques",
+        "objective": "Ajuster la fréquence des tests microbiologiques en fonction des résultats internes et de la sensibilité des matières premières.",
+        "benefits": [
+          "Maintien de la qualité et conformité",
+          "Optimisation des ressources et coûts"
+        ]
+      },
+      {
+        "title": "Rapports réglementaires et marketing (PMS/PSUR)",
+        "objective": "Générer et consolider les rapports PMS (marketing) et PSUR (réglementaire).",
+        "benefits": [
+          "Gain de temps important",
+          "Conformité et consolidation des données"
+        ]
+      },
+      {
+        "title": "Mise à jour automatique des questionnaires après MAJ des procédures",
+        "objective": "Mettre à jour automatiquement les questionnaires auto lorsque les procédures évoluent.",
+        "benefits": [
+          "Formation et conformité à jour",
+          "Réduction des écarts entre procédures et formation"
+        ]
+      },
+      {
+        "title": "Veille scientifique et clinique: base d'articles et tri priorisé",
+        "objective": "Maintenir une base d'articles avec mots-clés et utiliser l'IA pour identifier les 4-5 articles les plus pertinents et proposer des push hebdomadaires.",
+        "benefits": [
+          "Veille efficace et focalisée",
+          "Réduction du temps de lecture et d'analyse"
+        ]
+      },
+      {
+        "title": "Récupération et interrogation des documents (GED)",
+        "objective": "Récupérer les événements et comptes rendus, et interroger un système (GED) pour savoir ce qui existe ou pas.",
+        "benefits": [
+          "Gain de temps",
+          "Accès rapide à l'information pertinente"
+        ]
+      },
+      {
+        "title": "Production marketing: animations et supports visuels IA",
+        "objective": "Réaliser des animations pour supports marketing et générer des éléments visuels (images, vidéos).",
+        "benefits": [
+          "Production accélérée",
+          "Pertinence visuelle et engagement"
+        ]
+      },
+      {
+        "title": "Traduction automatique et supports de formation",
+        "objective": "Traduire automatiquement supports audio et générer les supports de formation associés.",
+        "benefits": [
+          "Accessibilité multilingue",
+          "Gain de temps et cohérence des contenus"
+        ]
+      },
+      {
+        "title": "Numérisation et capture d'infos papier vers le système logistique",
+        "objective": "Utiliser l'IA pour capturer les informations papier et les intégrer dans le système logistique.",
+        "benefits": [
+          "Gain de temps",
+          "Réduction des erreurs manuelles"
+        ]
+      },
+      {
+        "title": "Production de films de formation à partir de témoignages et cas cliniques",
+        "objective": "Outil pour créer des films de formation à partir de témoignages, d'interviews et d'illustrations (anatomie, chirurgies...).",
+        "benefits": [
+          "Rapidité de production",
+          "Cohérence pédagogique"
+        ]
+      },
+      {
+        "title": "Offboarding et gestion des données internes",
+        "objective": "Améliorer l'offboarding des collaborateurs et déterminer quelles données garder en interne et l'image de la société.",
+        "benefits": [
+          "Maintien de l'image de l'entreprise",
+          "Conformité et sécurité des données"
+        ]
+      },
+      {
+        "title": "Base de connaissances et chatbot technique",
+        "objective": "Créer une base de connaissances techniques et interroger le système via un chatbot.",
+        "benefits": [
+          "Gain de temps",
+          "Assistance rapide et self-service"
+        ]
+      },
+      {
+        "title": "Catalogue des organismes de formation et sujets",
+        "objective": "Identifier les organismes proposant des sujets précis et les organismes adaptés à nos besoins.",
+        "benefits": [
+          "Planification formation facilitée",
+          "Diversification des sources de formation"
+        ]
+      }
+    ]
+  }
+]

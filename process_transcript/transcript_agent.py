@@ -26,24 +26,26 @@ class TranscriptAgent:
     
     def process_single_pdf(self, pdf_path: str) -> Dict[str, Any]:
         """
-        Traite un seul PDF de transcription
+        Traite un seul PDF de transcription de manière optimisée
         """
         logger.info(f"=== Début du traitement du PDF: {pdf_path} ===")
         
         try:
-            # Étape 1: Parsing du PDF
+            # Étape 1: Parsing du PDF (UNE SEULE FOIS)
             logger.info("Étape 1: Parsing du PDF")
             interventions = self.pdf_parser.parse_transcript(pdf_path)
             logger.info(f"✓ {len(interventions)} interventions extraites")
             
-            # Étape 2: Filtrage des parties intéressantes
+            # Étape 2: Filtrage des parties intéressantes (sur les données déjà parsées)
             logger.info("Étape 2: Filtrage des parties intéressantes")
-            interesting_data = self.interesting_parts_agent.process_pdf(pdf_path)
-            logger.info(f"✓ {interesting_data['interesting_interventions']} interventions intéressantes identifiées")
+            interesting_interventions = self.interesting_parts_agent._filter_interesting_parts(interventions)
+            logger.info(f"✓ {len(interesting_interventions)} interventions intéressantes identifiées")
             
-            # Étape 3: Analyse sémantique
+            # Étape 3: Analyse sémantique (sur les données déjà filtrées)
             logger.info("Étape 3: Analyse sémantique avec GPT-5-nano")
-            semantic_result = self.semantic_filter_agent.analyze_transcript(pdf_path)
+            semantic_analysis = self.semantic_filter_agent._perform_semantic_analysis(
+                self.semantic_filter_agent._prepare_text_for_analysis(interesting_interventions)
+            )
             logger.info("✓ Analyse sémantique terminée")
             
             # Résultat final
@@ -52,14 +54,15 @@ class TranscriptAgent:
                 "status": "success",
                 "parsing": {
                     "total_interventions": len(interventions),
-                    "speakers": self.pdf_parser.get_speakers(interventions)
+                    "speakers": self.pdf_parser.get_speakers(interventions),
+                    "interventions": interventions  # Garder les interventions originales
                 },
                 "interesting_parts": {
-                    "count": interesting_data["interesting_interventions"],
-                    "interventions": interesting_data["interventions"]
+                    "count": len(interesting_interventions),
+                    "interventions": interesting_interventions
                 },
-                "semantic_analysis": semantic_result.get("semantic_analysis", {}),
-                "summary": self.semantic_filter_agent.get_summary(semantic_result)
+                "semantic_analysis": semantic_analysis,
+                "summary": self.semantic_filter_agent.get_summary({"semantic_analysis": semantic_analysis})
             }
             
             logger.info(f"=== Traitement terminé avec succès ===")
