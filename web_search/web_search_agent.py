@@ -64,7 +64,9 @@ class WebSearchAgent:
                 max_results=8
             )
 
-            
+            print(search_results)
+            print(financial_results)
+            print(news_results)
             # Traitement et structuration des résultats
             company_info = self._process_search_results(
                 company_name, 
@@ -123,10 +125,14 @@ class WebSearchAgent:
         if "results" in results and results["results"]:
             # Prendre le premier résultat qui contient une description
             for result in results["results"]:
+                print("result dans extract_description")
+                print(result)
                 if "content" in result:
                     content = result["content"]
                     # Si le contenu dépasse 500 caractères, le résumer avec LLM
                     if len(content) > 500:
+                        print("content dans extract_description")
+                        print(content)
                         return self._summarize_with_llm(content, "description")
                     else:
                         return content
@@ -244,6 +250,7 @@ class WebSearchAgent:
         """
         try:
             if content_type == "description":
+                print(f"Description: {content}")
                 prompt = f"""Résume cette description d'entreprise en 2-3 phrases concises, en gardant les informations clés sur l'activité, le secteur et les caractéristiques principales :
 
 {content}"""
@@ -252,16 +259,16 @@ class WebSearchAgent:
 
 {content}"""
             
-            response = self.openai_client.chat.completions.create(
+            response = self.openai_client.responses.create(
                 model="gpt-5-nano",
-                messages=[
-                    {"role": "system", "content": "Tu es un assistant spécialisé dans le résumé de contenu. Tu dois fournir des résumés concis et informatifs."},
+                input=[
+                    {"role": "developer", "content": "Tu es un assistant spécialisé dans le résumé de contenu. Tu dois fournir des résumés concis et informatifs."},
                     {"role": "user", "content": prompt}
                 ],
-                max_completion_tokens=200
+                max_output_tokens=500
             )
             
-            summary = response.choices[0].message.content.strip()
+            summary = response.output_text
             return summary if summary else content[:500] + "..."
             
         except Exception as e:
