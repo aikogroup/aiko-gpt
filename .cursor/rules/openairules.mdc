@@ -1,0 +1,9 @@
+---
+description:Open AI Rules
+globs:
+alwaysApply: true
+---
+
+- Always use OPEN AI Response API
+- Never use chat.completion
+- Always use the model gpt-5-nano

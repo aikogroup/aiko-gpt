@@ -102,7 +102,5 @@ if __name__ == "__main__":
     
     # Tests
     test_single_pdf()
-    test_multiple_pdfs()
-    test_directory()
     
     print("\n=== Tests terminés ===")

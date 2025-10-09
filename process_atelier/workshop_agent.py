@@ -154,18 +154,24 @@ class WorkshopAgent:
             """
             
             try:
-                # Appel à l'API OpenAI
-                response = self.client.chat.completions.create(
+                # Appel à l'API OpenAI Responses
+                response = self.client.responses.create(
                     model="gpt-5-nano",
-                    messages=[
-                        {"role": "system", "content": "Vous êtes un expert en analyse de cas d'usage IA. Structurez les données de manière claire et professionnelle."},
-                        {"role": "user", "content": prompt}
-                    ],
-                    max_completion_tokens=4000
+                    input=[
+                        {
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "input_text",
+                                    "text": f"Vous êtes un expert en analyse de cas d'usage IA. Structurez les données de manière claire et professionnelle.\n\n{prompt}"
+                                }
+                            ]
+                        }
+                    ]
                 )
                 
                 # Parse de la réponse JSON
-                llm_response = response.choices[0].message.content
+                llm_response = response.output_text
                 logger.info(f"Réponse LLM pour {atelier_name}:")
                 logger.info(llm_response)
                 

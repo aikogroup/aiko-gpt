@@ -82,19 +82,24 @@ class SemanticFilterAgent:
         prompt = SEMANTIC_ANALYSIS_PROMPT_V2.format(transcript_text=text)
         
         try:
-            response = openai.chat.completions.create(
+            response = openai.responses.create(
                 model="gpt-5-nano",
-                messages=[
-                    {"role": "system", "content": SEMANTIC_ANALYSIS_SYSTEM_PROMPT_V2},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.3,
-                max_completion_tokens=2000
+                input=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "input_text",
+                                "text": f"{SEMANTIC_ANALYSIS_SYSTEM_PROMPT_V2}\n\n{prompt}"
+                            }
+                        ]
+                    }
+                ]
             )
             
             # Parser la réponse JSON
             import json
-            response_text = response.choices[0].message.content.strip()
+            response_text = response.output_text.strip()
             logger.info(f"Réponse LLM: {response_text[:200]}...")
             
             try:
