@@ -177,7 +177,7 @@ Analyse thématique et extraction des besoins
 
 Préparation pour la génération du rapport
 
-💡 Report Generation Agent (2 sections)
+##💡 Report Generation Agent (2 sections)
 
 Rôle : Générer le rapport final en deux sections
 Entrées : Output du Needs Analysis Agent
