@@ -56,14 +56,16 @@ class NeedAnalysisWorkflow:
     Workflow LangGraph pour l'analyse des besoins métier
     """
     
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str, dev_mode: bool = False):
         """
         Initialise le workflow avec la clé API OpenAI.
         
         Args:
             api_key: Clé API OpenAI
+            dev_mode: Mode développement (utilise les données mockées)
         """
         self.api_key = api_key
+        self.dev_mode = dev_mode
         self.llm = ChatOpenAI(
             model="gpt-5-nano",
             api_key=api_key
@@ -97,8 +99,11 @@ class NeedAnalysisWorkflow:
         workflow.add_node("check_success", self._check_success_node)
         workflow.add_node("finalize_results", self._finalize_results_node)
         
-        # Définition du flux - point d'entrée unique
-        workflow.set_entry_point("start_agents")
+        # Définition du flux - point d'entrée selon le mode
+        if self.dev_mode:
+            workflow.set_entry_point("collect_data")
+        else:
+            workflow.set_entry_point("start_agents")
         
         # Flux séquentiel
         workflow.add_edge("start_agents", "collect_data")
@@ -189,10 +194,33 @@ class NeedAnalysisWorkflow:
             État mis à jour
         """
         try:
-            # Agrégation des résultats des 3 agents
-            state["workshop_data"] = state.get("workshop_results", {})
-            state["transcript_data"] = state.get("transcript_results", [])
-            state["web_search_data"] = state.get("web_search_results", {})
+            if self.dev_mode:
+                # Mode développement - charger les données mockées
+                import json
+                try:
+                    # Charger les données mockées
+                    with open('/home/addeche/aiko/aikoGPT/workshop_results.json', 'r', encoding='utf-8') as f:
+                        workshop_data = json.load(f)
+                    
+                    with open('/home/addeche/aiko/aikoGPT/transcript_results.json', 'r', encoding='utf-8') as f:
+                        transcript_data = json.load(f)
+                    
+                    with open('/home/addeche/aiko/aikoGPT/web_search_cousin_surgery.json', 'r', encoding='utf-8') as f:
+                        web_search_data = json.load(f)
+                    
+                    # Agrégation des données mockées
+                    state["workshop_data"] = {"workshops": workshop_data}
+                    state["transcript_data"] = transcript_data.get("results", [])
+                    state["web_search_data"] = web_search_data
+                    
+                except Exception as e:
+                    state["messages"] = state.get("messages", []) + [HumanMessage(content=f"Erreur chargement données mockées: {str(e)}")]
+                    return state
+            else:
+                # Mode normal - agrégation des résultats des 3 agents
+                state["workshop_data"] = state.get("workshop_results", {})
+                state["transcript_data"] = state.get("transcript_results", [])
+                state["web_search_data"] = state.get("web_search_results", {})
             
             # Initialisation des compteurs
             state["iteration_count"] = 0
