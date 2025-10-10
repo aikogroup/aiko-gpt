@@ -160,16 +160,14 @@ def start_workflow_dev_mode():
     st.session_state.transcript_results = mock_data['transcript_results']
     st.session_state.web_search_results = mock_data['web_search_results']
     
-    # Afficher un spinner pendant le traitement
-    with st.spinner("🔄 Analyse des besoins en cours (mode développement)..."):
-        try:
-            # Lancement du workflow d'analyse (sans les agents)
-            run_need_analysis_workflow()
-            
-        except Exception as e:
-            st.error(f"❌ Erreur lors du traitement: {str(e)}")
-            st.exception(e)
-            st.session_state.workflow_started = False
+    try:
+        # Lancement du workflow d'analyse (sans les agents)
+        run_need_analysis_workflow()
+        
+    except Exception as e:
+        st.error(f"❌ Erreur lors du traitement: {str(e)}")
+        st.exception(e)
+        st.session_state.workflow_started = False
 
 def main():
     """Fonction principale de l'application Streamlit"""
@@ -988,6 +986,9 @@ def run_need_analysis_workflow():
             
             st.success("✅ Analyse des besoins terminée !")
             
+            # Forcer l'affichage des résultats
+            st.rerun()
+            
         except Exception as e:
             st.error(f"❌ Erreur lors de l'analyse des besoins: {str(e)}")
             st.exception(e)
@@ -1014,18 +1015,21 @@ def display_need_analysis_results(results):
     
     st.markdown("---")
     
-    # Affichage des besoins identifiés
+    # Affichage des besoins identifiés avec la nouvelle structure simplifiée
     if final_needs:
         st.subheader("🎯 Besoins identifiés")
         for i, need in enumerate(final_needs, 1):
-            with st.expander(f"Besoin {i}: {need.get('title', 'Sans titre')}", expanded=False):
-                st.write(f"**Description:** {need.get('description', 'Non disponible')}")
-                st.write(f"**Priorité:** {need.get('priority', 'Non définie')}")
-                st.write(f"**Thème:** {need.get('theme', 'Non défini')}")
-                if need.get('citations'):
-                    st.write("**Citations:**")
-                    for citation in need.get('citations', []):
-                        st.write(f"- {citation}")
+            theme = need.get('theme', 'Thème non défini')
+            quotes = need.get('quotes', [])
+            
+            with st.expander(f"🔹 {theme}", expanded=False):
+                st.markdown(f"**Thème:** {theme}")
+                if quotes:
+                    st.markdown("**Citations:**")
+                    for j, quote in enumerate(quotes, 1):
+                        st.markdown(f"• {quote}")
+                else:
+                    st.info("Aucune citation disponible")
     else:
         st.warning("Aucun besoin identifié")
     

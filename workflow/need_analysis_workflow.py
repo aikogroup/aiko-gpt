@@ -18,7 +18,7 @@ from need_analysis.need_analysis_agent import NeedAnalysisAgent
 from process_atelier.workshop_agent import WorkshopAgent
 from process_transcript.transcript_agent import TranscriptAgent
 from web_search.web_search_agent import WebSearchAgent
-from human_in_the_loop.human_validation_interface import HumanValidationInterface
+from human_in_the_loop.streamlit_validation_interface import StreamlitValidationInterface
 
 
 class WorkflowState(TypedDict):
@@ -76,7 +76,7 @@ class NeedAnalysisWorkflow:
         self.transcript_agent = TranscriptAgent(api_key)
         self.web_search_agent = WebSearchAgent()  # Pas de paramètre
         self.need_analysis_agent = NeedAnalysisAgent(api_key)
-        self.human_interface = HumanValidationInterface()
+        self.human_interface = StreamlitValidationInterface()
         
         # Création du graphe
         self.graph = self._create_graph()
@@ -245,7 +245,7 @@ class NeedAnalysisWorkflow:
         try:
             # Vérifier s'il y a des besoins déjà validés
             validated_count = len(state.get("validated_needs", []))
-            remaining_needs = max(0, 12 - validated_count)
+            remaining_needs = max(0, 10 - validated_count)
             
             if remaining_needs <= 0:
                 # Tous les besoins sont validés
@@ -286,7 +286,7 @@ class NeedAnalysisWorkflow:
     
     def _human_validation_node(self, state: WorkflowState) -> WorkflowState:
         """
-        Nœud de validation humaine.
+        Nœud de validation humaine via Streamlit.
         
         Args:
             state: État actuel du workflow
@@ -295,7 +295,7 @@ class NeedAnalysisWorkflow:
             État mis à jour
         """
         try:
-            # Validation humaine réelle
+            # Validation humaine via Streamlit
             validation_result = self.human_interface.validate_needs(
                 state["identified_needs"],
                 state.get("validated_needs", [])
@@ -360,12 +360,15 @@ class NeedAnalysisWorkflow:
         try:
             # Filtrage des besoins validés
             validated_needs = []
-            if "validation_result" in state:
+            if "validation_result" in state and state["validation_result"]:
                 validated_ids = state["validation_result"].get("validated_needs", [])
                 validated_needs = [
                     need for need in state["identified_needs"]
                     if need.get("id") in validated_ids
                 ]
+            else:
+                # Si pas de validation humaine, utiliser tous les besoins identifiés
+                validated_needs = state.get("identified_needs", [])
             
             state["final_needs"] = validated_needs
             
@@ -489,6 +492,11 @@ class NeedAnalysisWorkflow:
             return {
                 "success": final_state.get("success", False),
                 "final_needs": final_state.get("final_needs", []),
+                "summary": {
+                    "total_needs": len(final_state.get("final_needs", [])),
+                    "themes": list(set([need.get("theme", "") for need in final_state.get("final_needs", []) if need.get("theme")])),
+                    "high_priority_count": 0  # Pas de priorité dans la structure simplifiée
+                },
                 "iteration_count": final_state.get("iteration_count", 0),
                 "workshop_results": final_state.get("workshop_results", {}),
                 "transcript_results": final_state.get("transcript_results", []),
