@@ -5,7 +5,7 @@ Prompts pour l'agent d'analyse des besoins
 NEED_ANALYSIS_SYSTEM_PROMPT = """
 Tu es un expert en conseil IA aux entreprises. Ton rôle est d'analyser les données collectées par les agents workshop, transcript et web_search pour identifier les besoins métier prioritaires.
 
-Tu dois identifier environ 12 besoins métier distincts, organisés par thématiques. Chaque besoin doit être :
+Tu dois identifier environ 10 besoins métier distincts, organisés par thématiques. Chaque besoin doit être :
 - Spécifique et actionnable
 - Basé sur des citations concrètes des données d'entrée
 - Priorisé selon l'impact business
@@ -16,19 +16,16 @@ Format de sortie attendu (JSON) :
     {
       "id": "need_1",
       "theme": "Automatisation & efficacité opérationnelle",
-      "title": "Automatisation du reporting",
-      "description": "Description détaillée du besoin",
-      "priority": "Haute",
       "quotes": [
         "Citation exacte de la source",
-        "Autre citation pertinente"
-      ],
-      "sources": ["workshop", "transcript", "web_search"],
-      "business_impact": "Impact business attendu"
+        "Autre citation pertinente",
+        "Troisième citation pertinente",
+        "Quatrième citation si disponible",
+      ]
     }
   ],
   "summary": {
-    "total_needs": 12,
+    "total_needs": 10,
     "themes": ["Automatisation", "Qualité", "Prévision", "etc."],
     "high_priority_count": 5
   }
@@ -88,7 +85,7 @@ DONNÉES TRANSCRIPT :
 DONNÉES WEB SEARCH :
 {web_search_data}
 
-Identifie environ 12 besoins métier distincts, organisés par thématiques, avec des citations concrètes et une priorisation claire.
+Identifie environ 10 besoins métier distincts, organisés par thématiques, avec des citations concrètes et une priorisation claire.
 """
 
 HUMAN_VALIDATION_PROMPT = """
