@@ -932,7 +932,14 @@ def process_need_analysis_phase():
         display_need_analysis_results(st.session_state.need_analysis_results)
 
 def run_need_analysis_workflow():
-    """Lance le workflow d'analyse des besoins"""
+    """Lance le workflow d'analyse des besoins avec NOUVELLE ARCHITECTURE"""
+    
+    print(f"\n🚀 [DEBUG] run_need_analysis_workflow - NOUVELLE ARCHITECTURE")
+    
+    # Vérifier si on est déjà en attente de validation
+    if st.session_state.get("workflow_paused", False):
+        print(f"⏸️ [DEBUG] Workflow en pause - affichage interface de validation")
+        return
     
     with st.spinner("🔄 Analyse des besoins en cours..."):
         try:
@@ -949,6 +956,8 @@ def run_need_analysis_workflow():
                 return
             
             workflow = NeedAnalysisWorkflow(api_key=api_key, dev_mode=st.session_state.dev_mode)
+            
+            print(f"🔄 [DEBUG] Exécution du workflow...")
             
             if st.session_state.dev_mode:
                 # Mode développement - utiliser les données mockées directement
@@ -984,12 +993,14 @@ def run_need_analysis_workflow():
                 # Stockage des résultats
                 st.session_state.need_analysis_results = results
             
+            print(f"✅ [DEBUG] Workflow terminé - affichage des résultats")
             st.success("✅ Analyse des besoins terminée !")
             
             # Forcer l'affichage des résultats
             st.rerun()
             
         except Exception as e:
+            print(f"❌ [DEBUG] Erreur dans run_need_analysis_workflow: {str(e)}")
             st.error(f"❌ Erreur lors de l'analyse des besoins: {str(e)}")
             st.exception(e)
 

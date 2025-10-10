@@ -41,10 +41,28 @@ class NeedAnalysisAgent:
             Dict contenant les besoins identifiés et le résumé
         """
         try:
-            # Formatage des données d'entrée
-            workshop_str = json.dumps(workshop_data, ensure_ascii=False, indent=2)
-            transcript_str = json.dumps(transcript_data, ensure_ascii=False, indent=2)
-            web_search_str = json.dumps(web_search_data, ensure_ascii=False, indent=2)
+            # Conversion sécurisée des données pour la sérialisation JSON
+            def safe_serialize(obj):
+                """Convertit les objets Pydantic en dictionnaires pour la sérialisation JSON"""
+                if hasattr(obj, 'model_dump'):
+                    return obj.model_dump()
+                elif hasattr(obj, 'dict'):
+                    return obj.dict()
+                elif isinstance(obj, dict):
+                    return {k: safe_serialize(v) for k, v in obj.items()}
+                elif isinstance(obj, list):
+                    return [safe_serialize(item) for item in obj]
+                else:
+                    return obj
+            
+            # Formatage des données d'entrée avec conversion sécurisée
+            workshop_safe = safe_serialize(workshop_data)
+            transcript_safe = safe_serialize(transcript_data)
+            web_search_safe = safe_serialize(web_search_data)
+            
+            workshop_str = json.dumps(workshop_safe, ensure_ascii=False, indent=2)
+            transcript_str = json.dumps(transcript_safe, ensure_ascii=False, indent=2)
+            web_search_str = json.dumps(web_search_safe, ensure_ascii=False, indent=2)
             
             # Construction du prompt utilisateur
             user_prompt = NEED_ANALYSIS_USER_PROMPT.format(

@@ -19,6 +19,7 @@ class StreamlitValidationInterface:
     def display_needs_for_validation(self, identified_needs: List[Dict[str, Any]], validated_count: int = 0) -> Dict[str, Any]:
         """
         Affiche les besoins identifiés pour validation dans Streamlit.
+        VERSION CORRIGÉE: Gère correctement l'état entre les recharges.
         
         Args:
             identified_needs: Liste des besoins identifiés
@@ -32,13 +33,17 @@ class StreamlitValidationInterface:
         if validated_count > 0:
             st.success(f"✅ Vous avez déjà validé {validated_count} besoins")
             remaining = max(0, 5 - validated_count)
-            st.info(f"🎯 Il vous faut valider au moins {remaining} besoins supplémentaires")
+            if remaining > 0:
+                st.info(f"🎯 Il vous faut valider {remaining} besoins supplémentaires pour terminer")
+            else:
+                st.success("🎉 Vous avez atteint le minimum requis (5 besoins) !")
         
         st.markdown("---")
         
-        # Afficher les besoins avec des checkboxes
-        selected_needs = []
+        # Ne pas nettoyer les clés ici pour éviter les conflits de timing
+        # Les clés seront nettoyées après validation
         
+        # Afficher les besoins avec des checkboxes
         for i, need in enumerate(identified_needs, 1):
             theme = need.get('theme', 'Thème non défini')
             quotes = need.get('quotes', [])
@@ -53,11 +58,26 @@ class StreamlitValidationInterface:
                 else:
                     st.info("Aucune citation disponible")
                 
-                # Checkbox pour valider ce besoin
-                if st.checkbox(f"✅ Valider ce besoin", key=f"validate_need_{i}"):
-                    selected_needs.append(i)
+                # Checkbox pour sélectionner ce besoin avec une clé unique
+                checkbox_key = f"validate_need_{i}_{len(identified_needs)}"
+                is_selected = st.checkbox(f"✅ Valider ce besoin", key=checkbox_key)
         
-        st.markdown("---")
+        # Calculer le nombre de sélections en temps réel
+        selected_count = 0
+        selected_needs_list = []
+        
+        for i in range(1, len(identified_needs) + 1):
+            checkbox_key = f"validate_need_{i}_{len(identified_needs)}"
+            is_selected = st.session_state.get(checkbox_key, False)
+            st.write(f"🔍 Debug checkbox {i}: key={checkbox_key}, value={is_selected}")
+            if is_selected:
+                selected_count += 1
+                selected_needs_list.append(i)
+        
+        # Afficher le nombre de besoins sélectionnés
+        st.info(f"🔍 Debug: selected_count = {selected_count}, selected_needs = {selected_needs_list}")
+        if selected_count > 0:
+            st.info(f"📊 {selected_count} besoin(s) sélectionné(s)")
         
         # Zone de commentaires
         st.subheader("💬 Commentaires (optionnel)")
@@ -67,19 +87,42 @@ class StreamlitValidationInterface:
             height=100
         )
         
-        # Boutons d'action
+        # Boutons d'action - TOUJOURS VISIBLES
+        st.markdown("---")
         col1, col2, col3 = st.columns([1, 1, 1])
         
         with col1:
-            if st.button("✅ Valider la sélection", type="primary"):
-                return self._process_validation(identified_needs, selected_needs, comments, validated_count)
+            if st.button("✅ Valider la sélection", type="primary", disabled=selected_count == 0):
+                if selected_count == 0:
+                    st.warning("⚠️ Veuillez sélectionner au moins un besoin")
+                else:
+                    # Lire l'état des checkboxes directement
+                    selected_needs = []
+                    for i in range(1, len(identified_needs) + 1):
+                        checkbox_key = f"validate_need_{i}_{len(identified_needs)}"
+                        if st.session_state.get(checkbox_key, False):
+                            selected_needs.append(i)
+                    
+                    # Traiter la validation
+                    result = self._process_validation(identified_needs, selected_needs, comments, validated_count)
+                    return result
         
         with col2:
             if st.button("🔄 Recommencer", type="secondary"):
+                # Réinitialiser les checkboxes et l'état
+                for i in range(1, len(identified_needs) + 1):
+                    if f"validate_need_{i}" in st.session_state:
+                        st.session_state[f"validate_need_{i}"] = False
+                st.session_state.selected_needs = set()
                 st.rerun()
         
         with col3:
             if st.button("❌ Annuler", type="secondary"):
+                # Réinitialiser les checkboxes et l'état
+                for i in range(1, len(identified_needs) + 1):
+                    if f"validate_need_{i}" in st.session_state:
+                        st.session_state[f"validate_need_{i}"] = False
+                st.session_state.selected_needs = set()
                 return {
                     "validated_needs": [],
                     "rejected_needs": [],
@@ -94,6 +137,7 @@ class StreamlitValidationInterface:
     def _process_validation(self, identified_needs: List[Dict[str, Any]], selected_numbers: List[int], comments: str, validated_count: int) -> Dict[str, Any]:
         """
         Traite la validation de l'utilisateur.
+        VERSION CORRIGÉE: Gère correctement l'état et les messages.
         
         Args:
             identified_needs: Liste des besoins identifiés
@@ -104,10 +148,9 @@ class StreamlitValidationInterface:
         Returns:
             Résultat de la validation
         """
-        remaining_needs = max(0, 5 - validated_count)
-        
-        if len(selected_numbers) < remaining_needs:
-            st.error(f"❌ Vous devez valider au moins {remaining_needs} besoins (vous en avez sélectionné {len(selected_numbers)})")
+        # Vérifier qu'au moins un besoin est sélectionné
+        if len(selected_numbers) == 0:
+            st.error("❌ Vous devez sélectionner au moins un besoin à valider")
             return None
         
         # Extraire les besoins validés et rejetés
@@ -117,21 +160,32 @@ class StreamlitValidationInterface:
         
         # Calculer le total
         total_validated = validated_count + len(validated_new)
+        success = total_validated >= 5
         
         result = {
             "validated_needs": validated_new,  # Seulement les nouveaux besoins validés
             "rejected_needs": rejected_new,
             "user_feedback": comments,
-            "success": total_validated >= 5,
+            "success": success,  # Succès seulement si on atteint 5 besoins au total
             "total_validated": total_validated,
             "newly_validated": validated_new,
             "newly_rejected": rejected_new
         }
         
+        # Sauvegarder le résultat dans session_state
+        st.session_state.validation_result = result
+        
+        # Nettoyer l'état des sélections et les clés de validation
+        st.session_state.selected_needs = set()
+        for key in list(st.session_state.keys()):
+            if key.startswith("validate_need_"):
+                del st.session_state[key]
+        
         if result["success"]:
             st.success(f"✅ Validation réussie ! {total_validated} besoins validés au total")
         else:
-            st.warning(f"⚠️ Validation partielle : {total_validated} besoins validés (minimum 5 requis)")
+            remaining = 5 - total_validated
+            st.warning(f"⚠️ Validation partielle : {total_validated} besoins validés (il reste {remaining} besoins à valider)")
         
         return result
     
@@ -168,7 +222,8 @@ class StreamlitValidationInterface:
     
     def validate_needs(self, identified_needs: List[Dict[str, Any]], validated_needs: List[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
-        Processus complet de validation humaine dans Streamlit.
+        Processus de validation humaine dans Streamlit.
+        VERSION SIMPLIFIÉE: Évite les conflits avec LangGraph.
         
         Args:
             identified_needs: Besoins identifiés à valider
@@ -181,16 +236,20 @@ class StreamlitValidationInterface:
         validated_count = len(validated_needs)
         
         # Afficher l'interface de validation
-        result = self.display_needs_for_validation(identified_needs, validated_count)
+        return self.display_needs_for_validation(identified_needs, validated_count)
+    
+    def display_workflow_resume_button(self) -> bool:
+        """
+        Affiche un bouton pour reprendre le workflow après validation.
         
-        if result is None:
-            # En attente de validation
-            return {
-                "validated_needs": [],
-                "rejected_needs": [],
-                "user_feedback": "",
-                "success": False,
-                "total_validated": validated_count
-            }
+        Returns:
+            True si le workflow doit être repris, False sinon
+        """
+        if st.session_state.get("workflow_paused", False) and st.session_state.get("validation_result"):
+            st.success("✅ Validation terminée !")
+            st.info("🔄 Cliquez sur le bouton ci-dessous pour reprendre le workflow")
+            
+            if st.button("▶️ Reprendre le workflow", type="primary"):
+                return True
         
-        return result
+        return False
