@@ -24,6 +24,11 @@ class UseCase(BaseModel):
     objective: str = Field(description="Objectif ou gain attendu")
     benefits: List[str] = Field(default_factory=list, description="Liste des bénéfices")
 
+class WorkshopAnalysisResponse(BaseModel):
+    """Modèle pour la réponse d'analyse d'un atelier"""
+    theme: str = Field(description="Thème principal de l'atelier")
+    use_cases: List[UseCase] = Field(description="Liste des cas d'usage consolidés")
+
 class WorkshopData(BaseModel):
     """Modèle pour les données d'un atelier"""
     workshop_id: str = Field(description="Identifiant unique de l'atelier")
@@ -41,6 +46,7 @@ class WorkshopAgent:
         if not api_key:
             raise ValueError("OPENAI_API_KEY doit être définie dans les variables d'environnement ou passée en paramètre")
         self.client = OpenAI(api_key=api_key)
+        self.model = "gpt-5-nano"
         
     def parse_excel(self, file_path: str) -> pd.DataFrame:
         """
@@ -135,74 +141,45 @@ class WorkshopAgent:
             Cas d'usage identifiés:
             {chr(10).join(use_cases_text)}
             
-            Veuillez retourner un JSON structuré avec:
-            - Un thème principal pour l'atelier
-            - Une liste de cas d'usage consolidés avec leurs objectifs et bénéfices
-            - Évitez les doublons et regroupez les cas similaires
-            
-            Format de réponse attendu:
-            {{
-                "theme": "Thème principal de l'atelier",
-                "use_cases": [
-                    {{
-                        "title": "Titre du cas d'usage",
-                        "objective": "Objectif principal",
-                        "benefits": ["bénéfice 1", "bénéfice 2"]
-                    }}
-                ]
-            }}
+            Consolidez les cas d'usage en:
+            - Identifiant le thème principal de l'atelier
+            - Regroupant les cas similaires
+            - Éliminant les doublons
+            - Listant les bénéfices pour chaque cas d'usage
             """
             
             try:
-                # Appel à l'API OpenAI Responses
-                response = self.client.responses.create(
-                    model="gpt-5-nano",
+                # Appel à l'API OpenAI Responses avec structured output
+                response = self.client.responses.parse(
+                    model=self.model,
                     input=[
                         {
                             "role": "user",
-                            "content": [
-                                {
-                                    "type": "input_text",
-                                    "text": f"Vous êtes un expert en analyse de cas d'usage IA. Structurez les données de manière claire et professionnelle.\n\n{prompt}"
-                                }
-                            ]
+                            "content": f"Vous êtes un expert en analyse de cas d'usage IA. Structurez les données de manière claire et professionnelle.\n\n{prompt}"
                         }
-                    ]
+                    ],
+                    text_format=WorkshopAnalysisResponse
                 )
                 
-                # Parse de la réponse JSON
-                llm_response = response.output_text
-                logger.info(f"Réponse LLM pour {atelier_name}:")
-                logger.info(llm_response)
+                # Extraction de la réponse structurée
+                parsed_response = response.output_parsed
                 
-                # Extraction du JSON de la réponse
-                json_start = llm_response.find('{')
-                json_end = llm_response.rfind('}') + 1
-                if json_start != -1 and json_end != 0:
-                    json_str = llm_response[json_start:json_end]
-                    workshop_data = json.loads(json_str)
-                    
-                    # Création de l'objet WorkshopData
-                    use_cases = [
-                        UseCase(
-                            title=uc.get('title', ''),
-                            objective=uc.get('objective', ''),
-                            benefits=uc.get('benefits', [])
-                        )
-                        for uc in workshop_data.get('use_cases', [])
-                    ]
-                    
-                    workshop_result = WorkshopData(
-                        workshop_id=f"W{len(workshop_results) + 1:03d}",
-                        theme=workshop_data.get('theme', atelier_name),
-                        use_cases=use_cases
-                    )
-                    
-                    workshop_results.append(workshop_result)
-                    logger.info(f"Atelier {atelier_name} traité avec succès: {len(use_cases)} cas d'usage")
+                logger.info(f"Réponse structurée pour {atelier_name}:")
+                logger.info(f"Thème: {parsed_response.theme}")
+                logger.info(f"Nombre de cas d'usage: {len(parsed_response.use_cases)}")
+                
+                # Création de l'objet WorkshopData
+                workshop_result = WorkshopData(
+                    workshop_id=f"W{len(workshop_results) + 1:03d}",
+                    theme=parsed_response.theme,
+                    use_cases=parsed_response.use_cases
+                )
+                
+                workshop_results.append(workshop_result)
+                logger.info(f"Atelier {atelier_name} traité avec succès avec structured output")
                 
             except Exception as e:
-                logger.error(f"Erreur lors du traitement LLM pour {atelier_name}: {e}")
+                logger.error(f"Erreur lors du traitement LLM pour {atelier_name}: {e}", exc_info=True)
                 # Fallback: création d'un atelier basique
                 workshop_result = WorkshopData(
                     workshop_id=f"W{len(workshop_results) + 1:03d}",

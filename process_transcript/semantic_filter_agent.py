@@ -3,7 +3,7 @@ Agent de filtrage sémantique utilisant GPT-5-nano
 """
 import logging
 from typing import List, Dict, Any
-import openai
+from openai import OpenAI
 import os
 from dotenv import load_dotenv
 from .interesting_parts_agent import InterestingPartsAgent
@@ -11,6 +11,7 @@ from prompts.transcript_agent_prompts import (
     SEMANTIC_ANALYSIS_PROMPT_V2,
     SEMANTIC_ANALYSIS_SYSTEM_PROMPT_V2
 )
+from models.transcript_models import SemanticAnalysisResponse
 
 # Charger les variables d'environnement
 load_dotenv()
@@ -24,13 +25,12 @@ class SemanticFilterAgent:
         self.interesting_parts_agent = InterestingPartsAgent()
         
         # Configuration OpenAI
-        if api_key:
-            openai.api_key = api_key
-        else:
-            openai.api_key = os.getenv("OPENAI_API_KEY")
-        
-        if not openai.api_key:
+        api_key = api_key or os.getenv("OPENAI_API_KEY")
+        if not api_key:
             logger.warning("Clé API OpenAI non configurée")
+        
+        self.client = OpenAI(api_key=api_key)
+        self.model = "gpt-5-nano"
     
     def analyze_transcript(self, pdf_path: str) -> Dict[str, Any]:
         """
@@ -82,52 +82,34 @@ class SemanticFilterAgent:
         prompt = SEMANTIC_ANALYSIS_PROMPT_V2.format(transcript_text=text)
         
         try:
-            response = openai.responses.create(
-                model="gpt-5-nano",
+            # Appel à l'API OpenAI Responses avec structured output
+            response = self.client.responses.parse(
+                model=self.model,
                 input=[
                     {
                         "role": "user",
-                        "content": [
-                            {
-                                "type": "input_text",
-                                "text": f"{SEMANTIC_ANALYSIS_SYSTEM_PROMPT_V2}\n\n{prompt}"
-                            }
-                        ]
+                        "content": f"{SEMANTIC_ANALYSIS_SYSTEM_PROMPT_V2}\n\n{prompt}"
                     }
-                ]
+                ],
+                text_format=SemanticAnalysisResponse
             )
             
-            # Parser la réponse JSON
-            import json
-            response_text = response.output_text.strip()
-            logger.info(f"Réponse LLM: {response_text[:200]}...")
+            # Extraction de la réponse structurée
+            parsed_response = response.output_parsed
             
-            try:
-                # Nettoyer la réponse si elle contient du markdown
-                if response_text.startswith("```json"):
-                    response_text = response_text.replace("```json", "").replace("```", "").strip()
-                elif response_text.startswith("```"):
-                    response_text = response_text.replace("```", "").strip()
-                
-                analysis = json.loads(response_text)
-                logger.info("Analyse sémantique réussie")
-                return analysis
-            except json.JSONDecodeError as e:
-                logger.error(f"Erreur de parsing JSON: {e}")
-                logger.error(f"Réponse reçue: {response_text[:500]}...")
-                # Retourner une structure par défaut
-                return {
-                    "besoins_exprimes": [],
-                    "frustrations_blocages": [],
-                    "attentes_implicites": [],
-                    "opportunites_amelioration": [],
-                    "opportunites_automatisation": [],
-                    "citations_cles": [],
-                    "erreur_parsing": str(e)
-                }
+            # Conversion en dictionnaire pour compatibilité avec le reste du code
+            analysis = parsed_response.model_dump()
+            
+            logger.info("Analyse sémantique réussie avec structured output")
+            logger.info(f"Besoins: {len(analysis.get('besoins_exprimes', []))}, "
+                       f"Frustrations: {len(analysis.get('frustrations_blocages', []))}, "
+                       f"Opportunités: {len(analysis.get('opportunites_automatisation', []))}")
+            
+            return analysis
             
         except Exception as e:
-            logger.error(f"Erreur lors de l'analyse sémantique: {e}")
+            logger.error(f"Erreur lors de l'analyse sémantique: {e}", exc_info=True)
+            # Retourner une structure par défaut en cas d'erreur
             return {
                 "besoins_exprimes": [],
                 "frustrations_blocages": [],
