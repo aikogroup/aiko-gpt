@@ -106,3 +106,43 @@ Format de réponse attendu :
 Si vous validez moins de 5 besoins, l'agent relancera l'analyse.
 """
 
+NEED_REGENERATION_PROMPT = """
+Les besoins précédents n'ont pas obtenu suffisamment de validations.
+
+BESOINS PROPOSÉS PRÉCÉDEMMENT :
+{previous_needs}
+
+BESOINS REJETÉS PAR L'UTILISATEUR :
+{rejected_needs}
+
+COMMENTAIRES DE L'UTILISATEUR :
+{user_feedback}
+
+RÉSUMÉ DE LA VALIDATION :
+- Besoins validés : {validated_needs_count} / 5 minimum requis
+- Besoins rejetés : {rejected_needs_count}
+
+DONNÉES SOURCES (rappel) :
+
+DONNÉES WORKSHOP :
+{workshop_data}
+
+DONNÉES TRANSCRIPT :
+{transcript_data}
+
+DONNÉES WEB SEARCH :
+{web_search_data}
+
+INSTRUCTIONS POUR LA NOUVELLE ITÉRATION :
+1. NE PAS reproposer les besoins qui ont été rejetés
+2. Analyser les besoins rejetés pour comprendre ce qui n'allait pas
+3. Prendre en compte les commentaires de l'utilisateur pour affiner les nouveaux besoins
+4. Explorer d'autres thématiques ou angles d'approche non couverts
+5. Proposer des besoins plus concrets, actionnables et mieux sourcés
+6. Générer {remaining_needs_count} nouveaux besoins pour atteindre l'objectif de 5 validations
+
+Itération actuelle : {current_iteration} / {max_iterations}
+
+Génère de nouveaux besoins au format JSON demandé, en évitant de reproduire les erreurs précédentes.
+"""
+

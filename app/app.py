@@ -395,16 +395,60 @@ def start_workflow():
             st.session_state.workflow_started = False
 
 def display_workflow_results():
-    """Affiche les résultats du workflow ou l'interface de validation"""
+    """Affiche les résultats du workflow ou l'interface de validation (besoins ou use cases)"""
     
     print(f"\n📊 [DEBUG] display_workflow_results - DÉBUT")
     print(f"🔍 [DEBUG] workflow_paused: {st.session_state.get('workflow_paused', False)}")
     print(f"🔍 [DEBUG] waiting_for_validation: {st.session_state.get('waiting_for_validation', False)}")
-    print(f"🔍 [DEBUG] validation_result present: {'validation_result' in st.session_state}")
+    print(f"🔍 [DEBUG] use_case_workflow_paused: {st.session_state.get('use_case_workflow_paused', False)}")
+    print(f"🔍 [DEBUG] waiting_for_use_case_validation: {st.session_state.get('waiting_for_use_case_validation', False)}")
     
-    # Vérifier si le workflow est en pause pour validation
+    # PHASE 2: Vérifier si on est en pause pour validation des use cases
+    if st.session_state.get("use_case_workflow_paused", False) and st.session_state.get("waiting_for_use_case_validation", False):
+        print(f"⏸️ [DEBUG] Workflow en pause - affichage de l'interface de validation des use cases")
+        
+        # Afficher l'interface de validation des use cases
+        st.warning("⏸️ Workflow en pause - Validation des cas d'usage requise")
+        
+        # Récupérer l'état du workflow
+        use_case_workflow_state = st.session_state.get("use_case_workflow_state", {})
+        proposed_qw = use_case_workflow_state.get("proposed_quick_wins", [])
+        proposed_sia = use_case_workflow_state.get("proposed_structuration_ia", [])
+        validated_qw_count = len(use_case_workflow_state.get("validated_quick_wins", []))
+        validated_sia_count = len(use_case_workflow_state.get("validated_structuration_ia", []))
+        
+        print(f"📊 [DEBUG] proposed_quick_wins: {len(proposed_qw)}")
+        print(f"📊 [DEBUG] proposed_structuration_ia: {len(proposed_sia)}")
+        print(f"📊 [DEBUG] validated_quick_wins: {validated_qw_count}")
+        print(f"📊 [DEBUG] validated_structuration_ia: {validated_sia_count}")
+        
+        # Vérifier si la validation est déjà terminée
+        if "use_case_validation_result" in st.session_state and st.session_state.use_case_validation_result:
+            print(f"✅ [DEBUG] Validation use cases terminée - bouton de reprise disponible")
+            st.markdown("---")
+            st.success("✅ Validation des use cases terminée !")
+            
+            # Bouton pour reprendre le workflow
+            if st.button("▶️ Reprendre le workflow", type="primary", key="resume_use_case_workflow_btn"):
+                print(f"▶️ [DEBUG] Bouton 'Reprendre le workflow use cases' cliqué")
+                resume_use_case_workflow_after_validation()
+        else:
+            # Afficher l'interface de validation seulement si pas encore validé
+            print(f"📋 [DEBUG] Affichage de l'interface de validation use cases")
+            from use_case_analysis.streamlit_use_case_validation import StreamlitUseCaseValidation
+            interface = StreamlitUseCaseValidation()
+            interface.display_use_cases_for_validation(
+                proposed_qw, 
+                proposed_sia, 
+                validated_qw_count, 
+                validated_sia_count
+            )
+        
+        return
+    
+    # PHASE 1: Vérifier si le workflow est en pause pour validation des besoins
     if st.session_state.get("workflow_paused", False) and st.session_state.get("waiting_for_validation", False):
-        print(f"⏸️ [DEBUG] Workflow en pause - affichage de l'interface de validation")
+        print(f"⏸️ [DEBUG] Workflow en pause - affichage de l'interface de validation des besoins")
         
         # Afficher l'interface de validation
         st.warning("⏸️ Workflow en pause - Validation des besoins requise")
@@ -419,17 +463,17 @@ def display_workflow_results():
         
         # CORRECTION: Ne pas réafficher l'interface si la validation est déjà terminée
         if "validation_result" in st.session_state and st.session_state.validation_result:
-            print(f"✅ [DEBUG] Validation terminée - bouton de reprise disponible")
+            print(f"✅ [DEBUG] Validation besoins terminée - bouton de reprise disponible")
             st.markdown("---")
-            st.success("✅ Validation terminée !")
+            st.success("✅ Validation des besoins terminée !")
             
             # Bouton pour reprendre le workflow
             if st.button("▶️ Reprendre le workflow", type="primary", key="resume_workflow_btn"):
-                print(f"▶️ [DEBUG] Bouton 'Reprendre le workflow' cliqué")
+                print(f"▶️ [DEBUG] Bouton 'Reprendre le workflow besoins' cliqué")
                 resume_workflow_after_validation()
         else:
             # Afficher l'interface de validation seulement si pas encore validé
-            print(f"📋 [DEBUG] Affichage de l'interface de validation")
+            print(f"📋 [DEBUG] Affichage de l'interface de validation besoins")
             from human_in_the_loop.streamlit_validation_interface import StreamlitValidationInterface
             interface = StreamlitValidationInterface()
             interface.display_needs_for_validation(identified_needs, len(validated_needs))
@@ -445,6 +489,10 @@ def display_workflow_results():
     if st.session_state.need_analysis_results:
         display_need_analysis_results(st.session_state.need_analysis_results)
     
+    # Affichage des résultats des use cases si disponibles
+    if st.session_state.get("use_case_analysis_results"):
+        display_use_case_analysis_results(st.session_state.use_case_analysis_results)
+    
     # Bouton pour recommencer
     if st.button("🔄 Nouvelle Analyse", type="secondary"):
         # Reset de l'état
@@ -456,12 +504,19 @@ def display_workflow_results():
         st.session_state.transcript_results = None
         st.session_state.web_search_results = None
         st.session_state.need_analysis_results = None
+        st.session_state.use_case_analysis_results = None
         st.session_state.workflow_paused = False
         st.session_state.waiting_for_validation = False
+        st.session_state.use_case_workflow_paused = False
+        st.session_state.waiting_for_use_case_validation = False
         if "validation_result" in st.session_state:
             del st.session_state.validation_result
         if "workflow_state" in st.session_state:
             del st.session_state.workflow_state
+        if "use_case_validation_result" in st.session_state:
+            del st.session_state.use_case_validation_result
+        if "use_case_workflow_state" in st.session_state:
+            del st.session_state.use_case_workflow_state
         st.rerun()
 
 def process_workshop_phase():
@@ -1102,6 +1157,114 @@ def run_need_analysis_workflow():
             print(f"❌ [DEBUG] Erreur dans run_need_analysis_workflow: {str(e)}")
             st.error(f"❌ Erreur lors de l'analyse des besoins: {str(e)}")
             st.exception(e)
+
+def resume_use_case_workflow_after_validation():
+    """Reprend le workflow après validation humaine des use cases"""
+    
+    print(f"\n🔄 [DEBUG] resume_use_case_workflow_after_validation - DÉBUT")
+    
+    with st.spinner("🔄 Reprise du workflow use cases..."):
+        try:
+            # Initialisation du workflow
+            import os
+            api_key = os.getenv('OPENAI_API_KEY')
+            if not api_key:
+                st.error("❌ Clé API OpenAI non trouvée. Vérifiez votre fichier .env")
+                return
+            
+            workflow = NeedAnalysisWorkflow(api_key=api_key, dev_mode=st.session_state.dev_mode)
+            
+            print(f"▶️ [DEBUG] Appel de resume_use_case_workflow()...")
+            
+            # Reprendre le workflow
+            results = workflow.resume_use_case_workflow()
+            
+            print(f"📊 [DEBUG] Résultats de resume_use_case_workflow(): {results.get('success', False)}")
+            
+            # Vérifier si une nouvelle validation est nécessaire
+            if results.get("error") == "Nouvelle validation use cases requise":
+                print(f"⏸️ [DEBUG] Nouvelle validation use cases requise - workflow en pause")
+                st.info("🔄 Nouvelle validation use cases requise - le workflow est en pause")
+                st.rerun()
+            elif results.get("success"):
+                print(f"✅ [DEBUG] Workflow use cases terminé avec succès")
+                # Workflow terminé avec succès
+                st.session_state.use_case_analysis_results = results
+                st.session_state.use_case_workflow_paused = False
+                st.session_state.waiting_for_use_case_validation = False
+                
+                # Nettoyer les états temporaires
+                if "use_case_validation_result" in st.session_state:
+                    del st.session_state.use_case_validation_result
+                
+                st.success("✅ Analyse des cas d'usage terminée !")
+                st.rerun()
+            else:
+                print(f"❌ [DEBUG] Workflow use cases terminé avec erreur: {results.get('error', 'Erreur inconnue')}")
+                st.error(f"❌ Erreur: {results.get('error', 'Erreur inconnue')}")
+                
+        except Exception as e:
+            print(f"❌ [DEBUG] Erreur dans resume_use_case_workflow_after_validation: {str(e)}")
+            st.error(f"❌ Erreur lors de la reprise du workflow use cases: {str(e)}")
+            st.exception(e)
+    
+    print(f"✅ [DEBUG] resume_use_case_workflow_after_validation - FIN")
+
+def display_use_case_analysis_results(results):
+    """Affiche les résultats de l'analyse des cas d'usage"""
+    
+    st.header("🚀 Résultats de l'analyse des cas d'usage IA")
+    st.markdown("---")
+    
+    # Métriques globales
+    final_qw = results.get("final_quick_wins", [])
+    final_sia = results.get("final_structuration_ia", [])
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Quick Wins", len(final_qw))
+    with col2:
+        st.metric("Structuration IA", len(final_sia))
+    with col3:
+        st.metric("Total cas d'usage", len(final_qw) + len(final_sia))
+    
+    st.markdown("---")
+    
+    # Affichage des Quick Wins
+    if final_qw:
+        st.subheader("⚡ Quick Wins - Automatisation & assistance intelligente")
+        for i, uc in enumerate(final_qw, 1):
+            with st.expander(f"🎯 {uc.get('titre', 'Titre non défini')}", expanded=False):
+                st.markdown(f"**💡 IA utilisée:** {uc.get('ia_utilisee', 'Non spécifié')}")
+                st.markdown(f"**📝 Description:**")
+                st.markdown(uc.get('description', 'Description non disponible'))
+    else:
+        st.info("Aucun Quick Win validé")
+    
+    st.markdown("---")
+    
+    # Affichage des Structuration IA
+    if final_sia:
+        st.subheader("🧠 Structuration IA à moyen et long terme")
+        for i, uc in enumerate(final_sia, 1):
+            with st.expander(f"🔬 {uc.get('titre', 'Titre non défini')}", expanded=False):
+                st.markdown(f"**💡 IA utilisée:** {uc.get('ia_utilisee', 'Non spécifié')}")
+                st.markdown(f"**📝 Description:**")
+                st.markdown(uc.get('description', 'Description non disponible'))
+    else:
+        st.info("Aucune Structuration IA validée")
+    
+    # Bouton de téléchargement
+    st.markdown("---")
+    st.subheader("💾 Télécharger les résultats")
+    
+    json_str = json.dumps(results, ensure_ascii=False, indent=2)
+    st.download_button(
+        label="📥 Télécharger l'analyse des cas d'usage (JSON)",
+        data=json_str,
+        file_name="use_case_analysis_results.json",
+        mime="application/json"
+    )
 
 def display_need_analysis_results(results):
     """Affiche les résultats de l'analyse des besoins"""
