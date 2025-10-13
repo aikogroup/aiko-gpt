@@ -92,35 +92,38 @@ def display_dev_mode_interface():
     st.info("🔧 **Mode Développement Activé** - Utilisation des données mockées")
     st.markdown("---")
     
-    # Zone 1: Fichiers Excel simulés
-    with st.container():
-        st.subheader("📊 Zone 1: Fichiers Excel des Ateliers")
-        
-        col1, col2 = st.columns([3, 1])
-        
-        with col1:
-            st.success("✅ Fichier simulé: workshop_results.json")
-            st.info("Données chargées depuis le fichier JSON")
-        
-        with col2:
-            st.markdown("**Confirmation:**")
-            st.success("✅ Fichiers Excel chargés")
+    # Zone 1 et Zone 2 côte à côte
+    zone1_col, zone2_col = st.columns(2)
     
-    st.markdown("---")
+    # Zone 1: Fichiers Excel simulés
+    with zone1_col:
+        with st.container():
+            st.subheader("📊 Zone 1: Fichiers Excel des Ateliers")
+            
+            col1, col2 = st.columns([3, 1])
+            
+            with col1:
+                st.success("✅ Fichier simulé: workshop_results.json")
+                st.info("Données chargées depuis le fichier JSON")
+            
+            with col2:
+                st.markdown("**Confirmation:**")
+                st.success("✅ Fichiers Excel chargés")
     
     # Zone 2: Fichiers PDF simulés
-    with st.container():
-        st.subheader("📄 Zone 2: Fichiers PDF des Transcriptions")
-        
-        col1, col2 = st.columns([3, 1])
-        
-        with col1:
-            st.success("✅ Fichiers simulés: transcript_results.json")
-            st.info("Données chargées depuis le fichier JSON")
-        
-        with col2:
-            st.markdown("**Confirmation:**")
-            st.success("✅ Fichiers PDF chargés")
+    with zone2_col:
+        with st.container():
+            st.subheader("📄 Zone 2: Fichiers PDF des Transcriptions")
+            
+            col1, col2 = st.columns([3, 1])
+            
+            with col1:
+                st.success("✅ Fichiers simulés: transcript_results.json")
+                st.info("Données chargées depuis le fichier JSON")
+            
+            with col2:
+                st.markdown("**Confirmation:**")
+                st.success("✅ Fichiers PDF chargés")
     
     st.markdown("---")
     
@@ -199,7 +202,7 @@ def main():
     init_session_state()
     
     # Titre principal
-    st.title("🤖 AIKO - Analyse des Besoins")
+    st.title("🤖 aiko – Rapports de besoins et use cases")
     st.markdown("---")
     
     # Interface avec 3 zones distinctes
@@ -218,80 +221,83 @@ def display_upload_interface():
         display_dev_mode_interface()
         return
     
-    # Zone 1: Upload des fichiers Excel
-    with st.container():
-        st.subheader("📊 Zone 1: Fichiers Excel des Ateliers")
-        
-        col1, col2 = st.columns([3, 1])
-        
-        with col1:
-            uploaded_excel = st.file_uploader(
-                "Choisissez un fichier Excel",
-                type=['xlsx', 'xls'],
-                help="Format attendu: Colonnes 'Atelier', 'Use_Case', 'Objective'",
-                key="excel_upload"
-            )
-            
-            if uploaded_excel is not None:
-                st.success(f"✅ Fichier sélectionné: {uploaded_excel.name}")
-                st.info(f"Taille: {uploaded_excel.size} bytes")
-                
-                # Sauvegarder le fichier temporairement
-                with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_file:
-                    tmp_file.write(uploaded_excel.getvalue())
-                    st.session_state.excel_file_path = tmp_file.name
-            else:
-                st.warning("⚠️ Veuillez sélectionner un fichier Excel")
-        
-        with col2:
-            st.markdown("**Confirmation:**")
-            excel_uploaded = st.checkbox(
-                "J'ai uploadé tous les fichiers Excel",
-                value=st.session_state.excel_files_uploaded,
-                key="excel_checkbox"
-            )
-            st.session_state.excel_files_uploaded = excel_uploaded
+    # Zone 1 et Zone 2 côte à côte
+    zone1_col, zone2_col = st.columns(2)
     
-    st.markdown("---")
+    # Zone 1: Upload des fichiers Excel
+    with zone1_col:
+        with st.container():
+            st.subheader("📊 Zone 1: Fichiers Excel des Ateliers")
+            
+            col1, col2 = st.columns([3, 1])
+            
+            with col1:
+                uploaded_excel = st.file_uploader(
+                    "Choisissez un fichier Excel",
+                    type=['xlsx', 'xls'],
+                    help="Format attendu: Colonnes 'Atelier', 'Use_Case', 'Objective'",
+                    key="excel_upload"
+                )
+                
+                if uploaded_excel is not None:
+                    st.success(f"✅ Fichier sélectionné: {uploaded_excel.name}")
+                    st.info(f"Taille: {uploaded_excel.size} bytes")
+                    
+                    # Sauvegarder le fichier temporairement
+                    with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_file:
+                        tmp_file.write(uploaded_excel.getvalue())
+                        st.session_state.excel_file_path = tmp_file.name
+                else:
+                    st.warning("⚠️ Veuillez sélectionner un fichier Excel")
+            
+            with col2:
+                st.markdown("**Confirmation:**")
+                excel_uploaded = st.checkbox(
+                    "J'ai uploadé tous les fichiers Excel",
+                    value=st.session_state.excel_files_uploaded,
+                    key="excel_checkbox"
+                )
+                st.session_state.excel_files_uploaded = excel_uploaded
     
     # Zone 2: Upload des fichiers PDF
-    with st.container():
-        st.subheader("📄 Zone 2: Fichiers PDF des Transcriptions")
-        
-        col1, col2 = st.columns([3, 1])
-        
-        with col1:
-            uploaded_pdfs = st.file_uploader(
-                "Choisissez un ou plusieurs fichiers PDF",
-                type=['pdf'],
-                accept_multiple_files=True,
-                help="Sélectionnez plusieurs fichiers PDF de transcriptions",
-                key="pdf_upload"
-            )
+    with zone2_col:
+        with st.container():
+            st.subheader("📄 Zone 2: Fichiers PDF des Transcriptions")
             
-            if uploaded_pdfs:
-                st.success(f"✅ {len(uploaded_pdfs)} fichier(s) sélectionné(s)")
-                for file in uploaded_pdfs:
-                    st.info(f"📄 {file.name} ({file.size} bytes)")
+            col1, col2 = st.columns([3, 1])
+            
+            with col1:
+                uploaded_pdfs = st.file_uploader(
+                    "Choisissez un ou plusieurs fichiers PDF",
+                    type=['pdf'],
+                    accept_multiple_files=True,
+                    help="Sélectionnez plusieurs fichiers PDF de transcriptions",
+                    key="pdf_upload"
+                )
                 
-                # Sauvegarder les fichiers temporairement
-                temp_files = []
-                for uploaded_file in uploaded_pdfs:
-                    with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
-                        tmp_file.write(uploaded_file.getvalue())
-                        temp_files.append(tmp_file.name)
-                st.session_state.pdf_files_paths = temp_files
-            else:
-                st.warning("⚠️ Veuillez sélectionner un ou plusieurs fichiers PDF")
-        
-        with col2:
-            st.markdown("**Confirmation:**")
-            pdf_uploaded = st.checkbox(
-                "J'ai uploadé tous les fichiers PDF",
-                value=st.session_state.pdf_files_uploaded,
-                key="pdf_checkbox"
-            )
-            st.session_state.pdf_files_uploaded = pdf_uploaded
+                if uploaded_pdfs:
+                    st.success(f"✅ {len(uploaded_pdfs)} fichier(s) sélectionné(s)")
+                    for file in uploaded_pdfs:
+                        st.info(f"📄 {file.name} ({file.size} bytes)")
+                    
+                    # Sauvegarder les fichiers temporairement
+                    temp_files = []
+                    for uploaded_file in uploaded_pdfs:
+                        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
+                            tmp_file.write(uploaded_file.getvalue())
+                            temp_files.append(tmp_file.name)
+                    st.session_state.pdf_files_paths = temp_files
+                else:
+                    st.warning("⚠️ Veuillez sélectionner un ou plusieurs fichiers PDF")
+            
+            with col2:
+                st.markdown("**Confirmation:**")
+                pdf_uploaded = st.checkbox(
+                    "J'ai uploadé tous les fichiers PDF",
+                    value=st.session_state.pdf_files_uploaded,
+                    key="pdf_checkbox"
+                )
+                st.session_state.pdf_files_uploaded = pdf_uploaded
     
     st.markdown("---")
     
