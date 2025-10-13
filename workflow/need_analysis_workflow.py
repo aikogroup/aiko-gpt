@@ -856,10 +856,16 @@ class NeedAnalysisWorkflow:
                 # 4. Continuer avec une nouvelle analyse (pas encore 5 besoins validés)
                 print(f"🔄 [DEBUG] Besoin de plus de besoins validés - génération d'une nouvelle itération")
                 print(f"📊 [DEBUG] Besoins actuellement validés: {len(workflow_state.get('validated_needs', []))}/5")
+                print(f"🔄 [DEBUG] Itération actuelle: {workflow_state.get('iteration_count', 0)}/{workflow_state.get('max_iterations', 3)}")
                 
-                # Incrémenter le compteur d'itérations
-                workflow_state["iteration_count"] = workflow_state.get("iteration_count", 0) + 1
-                print(f"🔄 [DEBUG] Itération: {workflow_state['iteration_count']}/{workflow_state.get('max_iterations', 3)}")
+                # NOTE: L'incrémentation est déjà faite dans _check_success_node
+                # Ne pas incrémenter ici pour éviter la double incrémentation !
+                
+                # CORRECTION: Nettoyer validation_result avant la nouvelle itération
+                print(f"🧹 [DEBUG] Nettoyage de validation_result pour la nouvelle itération")
+                if "validation_result" in st.session_state:
+                    del st.session_state.validation_result
+                print(f"✅ [DEBUG] validation_result nettoyé")
                 
                 # Analyser de nouveaux besoins
                 workflow_state = self._analyze_needs_node(workflow_state)
