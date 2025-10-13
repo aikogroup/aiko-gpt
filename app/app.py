@@ -22,6 +22,21 @@ from process_transcript.transcript_agent import TranscriptAgent
 from web_search.web_search_agent import WebSearchAgent
 from workflow.need_analysis_workflow import NeedAnalysisWorkflow
 
+def make_json_serializable(obj):
+    """
+    Convertit récursivement un objet en format JSON sérialisable.
+    Gère les objets Pydantic, les listes et les dictionnaires.
+    """
+    if hasattr(obj, 'model_dump'):
+        # Objet Pydantic
+        return obj.model_dump()
+    elif isinstance(obj, dict):
+        return {key: make_json_serializable(value) for key, value in obj.items()}
+    elif isinstance(obj, list):
+        return [make_json_serializable(item) for item in obj]
+    else:
+        return obj
+
 def init_session_state():
     """Initialise l'état de session Streamlit"""
     if 'workshop_results' not in st.session_state:
@@ -1074,9 +1089,17 @@ def resume_workflow_after_validation():
                 
                 st.success("✅ Analyse des besoins terminée !")
                 st.rerun()
+            elif any("Phase 1 terminée" in msg for msg in results.get("messages", [])):
+                # Phase 1 (besoins) terminée, passage à la Phase 2 (use cases)
+                print(f"🚀 [DEBUG] Phase 1 terminée - passage à la validation des use cases")
+                st.session_state.need_analysis_results = results
+                st.info("✅ Validation des besoins terminée ! Passage à l'analyse des cas d'usage...")
+                st.rerun()
             else:
-                print(f"❌ [DEBUG] Workflow terminé avec erreur: {results.get('error', 'Erreur inconnue')}")
-                st.error(f"❌ Erreur: {results.get('error', 'Erreur inconnue')}")
+                # Vraie erreur
+                error_msg = results.get('error', 'Erreur inconnue')
+                print(f"❌ [DEBUG] Workflow terminé avec erreur: {error_msg}")
+                st.error(f"❌ Erreur: {error_msg}")
                 
         except Exception as e:
             print(f"❌ [DEBUG] Erreur dans resume_workflow_after_validation: {str(e)}")
@@ -1098,9 +1121,30 @@ def run_need_analysis_workflow():
     with st.spinner("🔄 Analyse des besoins en cours..."):
         try:
             # Préparation des données pour le workflow
-            workshop_data = st.session_state.workshop_results
-            transcript_data = st.session_state.transcript_results
-            web_search_data = st.session_state.web_search_results
+            # Récupération des résultats bruts depuis session_state
+            workshop_data_raw = st.session_state.workshop_results
+            transcript_data_raw = st.session_state.transcript_results
+            web_search_data_raw = st.session_state.web_search_results
+            
+            # Formatage des données pour le workflow
+            # workshop_data_raw est une List[WorkshopData], on doit la convertir en dict avec clé "workshops"
+            if isinstance(workshop_data_raw, list):
+                workshop_data = {"workshops": workshop_data_raw}
+            elif isinstance(workshop_data_raw, dict):
+                workshop_data = workshop_data_raw
+            else:
+                workshop_data = {}
+            
+            # transcript_data_raw peut être déjà au bon format
+            transcript_data = transcript_data_raw if transcript_data_raw else []
+            
+            # web_search_data est déjà un dict normalement
+            web_search_data = web_search_data_raw if web_search_data_raw else {}
+            
+            print(f"📊 [DEBUG] Données formatées:")
+            print(f"  - workshop_data: {len(workshop_data.get('workshops', []))} workshops")
+            print(f"  - transcript_data: {len(transcript_data) if isinstance(transcript_data, list) else 'dict'}")
+            print(f"  - web_search_data: {type(web_search_data)}")
             
             # Initialisation du workflow
             import os
@@ -1113,39 +1157,21 @@ def run_need_analysis_workflow():
             
             print(f"🔄 [DEBUG] Exécution du workflow...")
             
-            if st.session_state.dev_mode:
-                # Mode développement - utiliser les données mockées directement
-                # Conversion des données pour le workflow
-                workshop_files = []  # Pas de fichiers en mode dev
-                transcript_files = []  # Pas de fichiers en mode dev
-                company_info = {"company_name": web_search_data.get("company_name", "")}
-                
-                # Exécution du workflow avec les données mockées
-                results = workflow.run(
-                    workshop_files=workshop_files,
-                    transcript_files=transcript_files,
-                    company_info=company_info
-                )
-                
-                # Stockage des résultats
-                st.session_state.need_analysis_results = results
-                
-            else:
-                # Mode normal - utiliser les données traitées par les agents
-                # Conversion des données pour le workflow
-                workshop_files = []  # Les fichiers ne sont plus nécessaires, on a déjà les résultats
-                transcript_files = []  # Idem
-                company_info = {"company_name": web_search_data.get("company_name", "")}
-                
-                # Exécution du workflow avec les données déjà traitées
-                results = workflow.run(
-                    workshop_files=workshop_files,
-                    transcript_files=transcript_files,
-                    company_info=company_info
-                )
-                
-                # Stockage des résultats
-                st.session_state.need_analysis_results = results
+            # Préparation des infos entreprise
+            company_info = {"company_name": web_search_data.get("company_name", "")} if web_search_data else {}
+            
+            # Exécution du workflow avec les RÉSULTATS pré-calculés (même logique pour dev et normal)
+            results = workflow.run(
+                workshop_files=[],  # Pas de fichiers (déjà traités)
+                transcript_files=[],  # Pas de fichiers (déjà traités)
+                company_info=company_info,
+                workshop_results=workshop_data,  # RÉSULTATS pré-calculés formatés
+                transcript_results=transcript_data,  # RÉSULTATS pré-calculés formatés
+                web_search_results=web_search_data  # RÉSULTATS pré-calculés formatés
+            )
+            
+            # Stockage des résultats
+            st.session_state.need_analysis_results = results
             
             print(f"✅ [DEBUG] Workflow terminé - affichage des résultats")
             st.success("✅ Analyse des besoins terminée !")
@@ -1325,7 +1351,9 @@ def display_need_analysis_results(results):
     st.markdown("---")
     st.subheader("💾 Télécharger les résultats")
     
-    json_str = json.dumps(results, ensure_ascii=False, indent=2)
+    # Convertir les objets Pydantic en dictionnaires avant la sérialisation JSON
+    serializable_results = make_json_serializable(results)
+    json_str = json.dumps(serializable_results, ensure_ascii=False, indent=2)
     st.download_button(
         label="📥 Télécharger l'analyse des besoins (JSON)",
         data=json_str,

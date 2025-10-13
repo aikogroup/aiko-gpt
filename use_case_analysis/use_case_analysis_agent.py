@@ -11,6 +11,7 @@ from prompts.use_case_analysis_prompts import (
     USE_CASE_ANALYSIS_USER_PROMPT,
     USE_CASE_REGENERATION_PROMPT
 )
+from models.use_case_analysis_models import UseCaseAnalysisResponse
 
 # Configuration du logger
 logger = logging.getLogger(__name__)
@@ -66,9 +67,31 @@ class UseCaseAnalysisAgent:
             logger.info(f"Début de l'analyse des cas d'usage - Itération {iteration}")
             logger.info(f"Nombre de besoins validés en entrée : {len(validated_needs)}")
             
+            # LOG DÉTAILLÉ : Afficher les besoins reçus
+            print(f"\n🔍 [DEBUG USE CASE] Besoins validés reçus par l'agent:")
+            print(f"  📊 Nombre total: {len(validated_needs)}")
+            print(f"  📝 Type de données: {type(validated_needs)}")
+            for i, need in enumerate(validated_needs, 1):
+                if isinstance(need, dict):
+                    theme = need.get('theme', 'N/A')
+                    quotes_count = len(need.get('quotes', []))
+                    print(f"  {i}. Theme: {theme} (Citations: {quotes_count})")
+                else:
+                    # Objet Pydantic
+                    theme = getattr(need, 'theme', 'N/A')
+                    quotes_count = len(getattr(need, 'quotes', []))
+                    print(f"  {i}. Theme: {theme} (Citations: {quotes_count})")
+            
             # Conversion sécurisée des données pour la sérialisation JSON
             validated_needs_safe = self._safe_serialize(validated_needs)
             validated_needs_str = json.dumps(validated_needs_safe, ensure_ascii=False, indent=2)
+            
+            # LOG DÉTAILLÉ : Afficher le JSON envoyé au LLM (premiers 1000 caractères)
+            print(f"\n📤 [DEBUG USE CASE] JSON envoyé au LLM (extrait):")
+            print(validated_needs_str[:1000])
+            if len(validated_needs_str) > 1000:
+                print(f"  ... (+ {len(validated_needs_str) - 1000} caractères)")
+            print()  # Ligne vide pour clarté
             
             # Choix du prompt selon l'itération
             if iteration == 1:
@@ -119,61 +142,34 @@ class UseCaseAnalysisAgent:
                     max_iterations=3
                 )
             
-            logger.info("Appel à l'API OpenAI Response...")
+            logger.info("Appel à l'API OpenAI Response avec structured output...")
             
-            # Appel à l'API OpenAI Responses
-            response = self.client.responses.create(
+            # Appel à l'API OpenAI Responses avec structured output
+            response = self.client.responses.parse(
                 model=self.model,
                 input=[
                     {
                         "role": "user",
-                        "content": [
-                            {
-                                "type": "input_text",
-                                "text": f"{USE_CASE_ANALYSIS_SYSTEM_PROMPT}\n\n{user_prompt}"
-                            }
-                        ]
+                        "content": f"{USE_CASE_ANALYSIS_SYSTEM_PROMPT}\n\n{user_prompt}"
                     }
-                ]
+                ],
+                text_format=UseCaseAnalysisResponse
             )
             
-            # Extraction et parsing de la réponse
-            content = response.output_text
-            logger.info("Réponse reçue de l'API")
+            logger.info("Réponse structurée reçue de l'API")
             
-            # Nettoyer les caractères de contrôle invalides et trailing commas
-            import re
-            content_cleaned = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', content)
-            # Supprimer les virgules avant les accolades/crochets fermants (trailing commas)
-            content_cleaned = re.sub(r',\s*([}\]])', r'\1', content_cleaned)
+            # Extraction de la réponse structurée
+            parsed_response = response.output_parsed
             
-            # Tentative de parsing JSON
-            try:
-                result = json.loads(content_cleaned)
-                logger.info("Parsing JSON réussi")
-            except json.JSONDecodeError as e:
-                logger.warning(f"Erreur de parsing JSON initial : {e}")
-                # Si le JSON n'est pas valide, on essaie d'extraire le JSON du contenu
-                json_match = re.search(r'\{.*\}', content_cleaned, re.DOTALL)
-                if json_match:
-                    try:
-                        result = json.loads(json_match.group())
-                        logger.info("Extraction JSON alternative réussie")
-                    except json.JSONDecodeError as e2:
-                        logger.error(f"Erreur de parsing JSON alternative : {e2}")
-                        logger.error(f"Contenu reçu (premiers 500 caractères) : {content_cleaned[:500]}")
-                        raise ValueError(f"Impossible de parser la réponse JSON: {e2}")
-                else:
-                    logger.error(f"Contenu reçu (premiers 500 caractères) : {content_cleaned[:500]}")
-                    raise ValueError("Impossible de parser la réponse JSON")
+            # Conversion en dictionnaire pour compatibilité avec le reste du code
+            result = {
+                "quick_wins": [qw.model_dump() for qw in parsed_response.quick_wins],
+                "structuration_ia": [sia.model_dump() for sia in parsed_response.structuration_ia],
+                "summary": parsed_response.summary.model_dump()
+            }
             
-            # Validation de la structure
-            if "quick_wins" not in result or "structuration_ia" not in result:
-                logger.error("Structure JSON invalide - clés manquantes")
-                raise ValueError("Structure JSON invalide : quick_wins ou structuration_ia manquant")
-            
-            logger.info(f"Cas d'usage générés : {len(result.get('quick_wins', []))} Quick Wins, "
-                       f"{len(result.get('structuration_ia', []))} Structuration IA")
+            logger.info(f"Cas d'usage générés : {len(result['quick_wins'])} Quick Wins, "
+                       f"{len(result['structuration_ia'])} Structuration IA")
             
             return result
             
