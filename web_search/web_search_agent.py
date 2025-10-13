@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 from tavily import TavilyClient
 from openai import OpenAI
 from prompts.web_search_agent_prompts import WEB_SEARCH_SYSTEM_PROMPT, WEB_SEARCH_USER_PROMPT_TEMPLATE
+from models.web_search_models import CompanyInfo
 
 # Charger les variables d'environnement
 load_dotenv()
@@ -31,6 +32,7 @@ class WebSearchAgent:
         
         self.tavily_client = TavilyClient(api_key=self.tavily_api_key)
         self.openai_client = OpenAI(api_key=self.openai_api_key)
+        self.model = "gpt-5-nano"
     
     def search_company_info(self, company_name: str) -> Dict[str, Any]:
         """
@@ -89,7 +91,7 @@ class WebSearchAgent:
         news_results: Dict
     ) -> Dict[str, Any]:
         """
-        Traite et structure les résultats de recherche
+        Traite et structure les résultats de recherche avec LLM structured output
         
         Args:
             company_name (str): Nom de l'entreprise
@@ -100,15 +102,93 @@ class WebSearchAgent:
         Returns:
             Dict[str, Any]: Informations structurées
         """
-        # Extraction des informations générales
+        try:
+            # Préparation des données pour le LLM
+            search_data = {
+                "company_name": company_name,
+                "general_results": general_results.get("results", []),
+                "financial_results": financial_results.get("results", []),
+                "news_results": news_results.get("results", [])
+            }
+            
+            # Formatage des résultats en texte pour le prompt
+            general_content = "\n".join([
+                f"- {r.get('title', '')}: {r.get('content', '')[:500]}"
+                for r in search_data["general_results"][:3]
+            ])
+            
+            financial_content = "\n".join([
+                f"- {r.get('title', '')}: {r.get('content', '')[:300]}"
+                for r in search_data["financial_results"][:2]
+            ])
+            
+            news_content = "\n".join([
+                f"- {r.get('title', r.get('content', ''))[:200]}"
+                for r in search_data["news_results"][:5]
+            ])
+            
+            prompt = f"""Analyse les résultats de recherche suivants pour l'entreprise "{company_name}" et extrait les informations structurées.
+
+INFORMATIONS GÉNÉRALES:
+{general_content}
+
+INFORMATIONS FINANCIÈRES:
+{financial_content}
+
+ACTUALITÉS RÉCENTES:
+{news_content}
+
+Extrait et structure les informations suivantes:
+- Secteur d'activité de l'entreprise
+- Taille de l'entreprise (nombre d'employés)
+- Chiffre d'affaires
+- Description concise de l'entreprise (2-3 phrases)
+- Liste des actualités récentes les plus pertinentes (jusqu'à 5)
+
+Si une information n'est pas disponible, utilise des valeurs par défaut appropriées."""
+
+            # Appel à l'API OpenAI avec structured output
+            response = self.openai_client.responses.parse(
+                model=self.model,
+                input=[
+                    {
+                        "role": "user",
+                        "content": f"Tu es un expert en analyse d'informations d'entreprises. Extrait et structure les informations de manière concise et précise.\n\n{prompt}"
+                    }
+                ],
+                text_format=CompanyInfo
+            )
+            
+            # Extraction de la réponse structurée
+            parsed_response = response.output_parsed
+            company_info = parsed_response.model_dump()
+            
+            print(f"✓ Informations structurées extraites pour {company_name}")
+            
+            return company_info
+            
+        except Exception as e:
+            print(f"Erreur lors du traitement LLM: {str(e)}")
+            # Fallback sur les méthodes manuelles
+            return self._fallback_extraction(
+                company_name, 
+                general_results, 
+                financial_results, 
+                news_results
+            )
+    
+    def _fallback_extraction(
+        self,
+        company_name: str,
+        general_results: Dict,
+        financial_results: Dict,
+        news_results: Dict
+    ) -> Dict[str, Any]:
+        """Méthode fallback en cas d'échec du structured output"""
         description = self._extract_description(general_results)
         sector = self._extract_sector(general_results)
-        
-        # Extraction des informations financières
         size = self._extract_company_size(financial_results)
         revenue = self._extract_revenue(financial_results)
-        
-        # Extraction des actualités
         recent_news = self._extract_news(news_results)
         
         return {
@@ -260,7 +340,7 @@ class WebSearchAgent:
 {content}"""
             
             response = self.openai_client.responses.create(
-                model="gpt-5-nano",
+                model=self.model,
                 input=[
                     {"role": "developer", "content": "Tu es un assistant spécialisé dans le résumé de contenu. Tu dois fournir des résumés concis et informatifs."},
                     {"role": "user", "content": prompt}

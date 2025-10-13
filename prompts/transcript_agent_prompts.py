@@ -2,25 +2,21 @@
 Prompts pour les agents de traitement des transcriptions
 """
 
-# Prompt pour l'analyse sémantique avec GPT-5-nano
+# Prompt pour l'analyse sémantique avec GPT-5-nano (version legacy - utiliser V2)
 SEMANTIC_ANALYSIS_PROMPT = """
 Analyse cette transcription et identifie :
 
-– Les besoins exprimés par le client
-– Les frustrations ou blocages
-– Les attentes implicites  
-– Les opportunités d'amélioration ou d'automatisation
+1. **Besoins exprimés** : Les besoins clairement formulés par le client
+2. **Frustrations et blocages** : Les points de friction, difficultés et obstacles mentionnés
+3. **Attentes implicites** : Les attentes non explicitement dites mais sous-entendues
+4. **Opportunités d'amélioration** : Les pistes d'optimisation des processus existants
+5. **Opportunités d'automatisation** : Les tâches ou processus qui pourraient être automatisés
+6. **Citations clés** : Les phrases importantes avec le nom du speaker qui les illustrent
 
 Transcription :
 {transcript_text}
 
-Réponds au format JSON avec les clés suivantes :
-- "besoins_exprimes": liste des besoins clairement exprimés
-- "frustrations_blocages": liste des frustrations et blocages identifiés
-- "attentes_implicites": liste des attentes non explicitement dites
-- "opportunites_amelioration": liste des opportunités d'amélioration
-- "opportunites_automatisation": liste des opportunités d'automatisation
-- "citations_cles": liste des citations importantes avec le nom du speaker
+Sois précis et factuel, base-toi uniquement sur le contenu de la transcription fournie.
 """
 
 # Prompt système pour l'analyse sémantique
@@ -107,21 +103,17 @@ Tu es un expert en analyse de besoins business. Tu identifies les parties pertin
 SEMANTIC_ANALYSIS_PROMPT_V2 = """
 Analyse cette transcription et identifie :
 
-– Les besoins exprimés par le client
-– Les frustrations ou blocages
-– Les attentes implicites  
-– Les opportunités d'amélioration ou d'automatisation
+1. **Besoins exprimés** : Les besoins clairement formulés par le client
+2. **Frustrations et blocages** : Les points de friction, difficultés et obstacles mentionnés
+3. **Attentes implicites** : Les attentes non explicitement dites mais sous-entendues
+4. **Opportunités d'amélioration** : Les pistes d'optimisation des processus existants
+5. **Opportunités d'automatisation** : Les tâches ou processus qui pourraient être automatisés
+6. **Citations clés** : Les phrases importantes avec le nom du speaker qui les illustrent
 
 Transcription :
 {transcript_text}
 
-Réponds au format JSON avec les clés suivantes :
-- "besoins_exprimes": liste des besoins clairement exprimés
-- "frustrations_blocages": liste des frustrations et blocages identifiés
-- "attentes_implicites": liste des attentes non explicitement dites
-- "opportunites_amelioration": liste des opportunités d'amélioration
-- "opportunites_automatisation": liste des opportunités d'automatisation
-- "citations_cles": liste des citations importantes avec le nom du speaker
+Sois précis et factuel, base-toi uniquement sur le contenu de la transcription fournie.
 """
 
 # Prompt système pour l'analyse sémantique (version améliorée)
