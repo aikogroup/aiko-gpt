@@ -8,7 +8,8 @@ from openai import OpenAI
 from prompts.need_analysis_agent_prompts import (
     NEED_ANALYSIS_SYSTEM_PROMPT,
     NEED_ANALYSIS_USER_PROMPT,
-    HUMAN_VALIDATION_PROMPT
+    HUMAN_VALIDATION_PROMPT,
+    NEED_REGENERATION_PROMPT
 )
 
 
@@ -28,7 +29,17 @@ class NeedAnalysisAgent:
         self.client = OpenAI(api_key=api_key)
         self.model = "gpt-5-nano"  # Utilisation de gpt-5-nano comme spécifié
         
-    def analyze_needs(self, workshop_data: Dict, transcript_data: List[Dict], web_search_data: Dict) -> Dict[str, Any]:
+    def analyze_needs(
+        self,
+        workshop_data: Dict,
+        transcript_data: List[Dict],
+        web_search_data: Dict,
+        iteration: int = 1,
+        previous_needs: Optional[List[Dict]] = None,
+        rejected_needs: Optional[List[Dict]] = None,
+        user_feedback: str = "",
+        validated_needs_count: int = 0
+    ) -> Dict[str, Any]:
         """
         Analyse les besoins métier à partir des données d'entrée.
         
@@ -36,6 +47,11 @@ class NeedAnalysisAgent:
             workshop_data: Données du workshop agent
             transcript_data: Données du transcript agent
             web_search_data: Données du web search agent
+            iteration: Numéro de l'itération actuelle
+            previous_needs: Besoins proposés lors de l'itération précédente
+            rejected_needs: Besoins rejetés par l'utilisateur
+            user_feedback: Commentaires de l'utilisateur
+            validated_needs_count: Nombre de besoins validés
             
         Returns:
             Dict contenant les besoins identifiés et le résumé
@@ -64,12 +80,34 @@ class NeedAnalysisAgent:
             transcript_str = json.dumps(transcript_safe, ensure_ascii=False, indent=2)
             web_search_str = json.dumps(web_search_safe, ensure_ascii=False, indent=2)
             
-            # Construction du prompt utilisateur
-            user_prompt = NEED_ANALYSIS_USER_PROMPT.format(
-                workshop_data=workshop_str,
-                transcript_data=transcript_str,
-                web_search_data=web_search_str
-            )
+            # Choix du prompt selon l'itération
+            if iteration == 1 or not previous_needs:
+                # Première itération - génération initiale
+                user_prompt = NEED_ANALYSIS_USER_PROMPT.format(
+                    workshop_data=workshop_str,
+                    transcript_data=transcript_str,
+                    web_search_data=web_search_str
+                )
+            else:
+                # Itération suivante - régénération avec feedback
+                previous_needs_str = json.dumps(safe_serialize(previous_needs), ensure_ascii=False, indent=2)
+                rejected_needs_str = json.dumps(safe_serialize(rejected_needs or []), ensure_ascii=False, indent=2)
+                remaining_needs_count = max(0, 10 - validated_needs_count)
+                rejected_needs_count = len(rejected_needs or [])
+                
+                user_prompt = NEED_REGENERATION_PROMPT.format(
+                    previous_needs=previous_needs_str,
+                    rejected_needs=rejected_needs_str,
+                    user_feedback=user_feedback if user_feedback else "Aucun commentaire spécifique",
+                    validated_needs_count=validated_needs_count,
+                    rejected_needs_count=rejected_needs_count,
+                    workshop_data=workshop_str,
+                    transcript_data=transcript_str,
+                    web_search_data=web_search_str,
+                    remaining_needs_count=remaining_needs_count,
+                    current_iteration=iteration,
+                    max_iterations=3
+                )
             
             # Appel à l'API OpenAI Responses
             response = self.client.responses.create(
