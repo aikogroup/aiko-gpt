@@ -395,8 +395,49 @@ def start_workflow():
             st.session_state.workflow_started = False
 
 def display_workflow_results():
-    """Affiche les résultats du workflow"""
+    """Affiche les résultats du workflow ou l'interface de validation"""
     
+    print(f"\n📊 [DEBUG] display_workflow_results - DÉBUT")
+    print(f"🔍 [DEBUG] workflow_paused: {st.session_state.get('workflow_paused', False)}")
+    print(f"🔍 [DEBUG] waiting_for_validation: {st.session_state.get('waiting_for_validation', False)}")
+    print(f"🔍 [DEBUG] validation_result present: {'validation_result' in st.session_state}")
+    
+    # Vérifier si le workflow est en pause pour validation
+    if st.session_state.get("workflow_paused", False) and st.session_state.get("waiting_for_validation", False):
+        print(f"⏸️ [DEBUG] Workflow en pause - affichage de l'interface de validation")
+        
+        # Afficher l'interface de validation
+        st.warning("⏸️ Workflow en pause - Validation des besoins requise")
+        
+        # Récupérer l'état du workflow
+        workflow_state = st.session_state.get("workflow_state", {})
+        identified_needs = workflow_state.get("identified_needs", [])
+        validated_needs = workflow_state.get("validated_needs", [])
+        
+        print(f"📊 [DEBUG] identified_needs: {len(identified_needs)}")
+        print(f"📊 [DEBUG] validated_needs: {len(validated_needs)}")
+        
+        # CORRECTION: Ne pas réafficher l'interface si la validation est déjà terminée
+        if "validation_result" in st.session_state and st.session_state.validation_result:
+            print(f"✅ [DEBUG] Validation terminée - bouton de reprise disponible")
+            st.markdown("---")
+            st.success("✅ Validation terminée !")
+            
+            # Bouton pour reprendre le workflow
+            if st.button("▶️ Reprendre le workflow", type="primary", key="resume_workflow_btn"):
+                print(f"▶️ [DEBUG] Bouton 'Reprendre le workflow' cliqué")
+                resume_workflow_after_validation()
+        else:
+            # Afficher l'interface de validation seulement si pas encore validé
+            print(f"📋 [DEBUG] Affichage de l'interface de validation")
+            from human_in_the_loop.streamlit_validation_interface import StreamlitValidationInterface
+            interface = StreamlitValidationInterface()
+            interface.display_needs_for_validation(identified_needs, len(validated_needs))
+        
+        return
+    
+    # Workflow terminé - afficher les résultats
+    print(f"✅ [DEBUG] Workflow terminé - affichage des résultats")
     st.success("✅ Workflow terminé !")
     st.markdown("---")
     
@@ -415,6 +456,12 @@ def display_workflow_results():
         st.session_state.transcript_results = None
         st.session_state.web_search_results = None
         st.session_state.need_analysis_results = None
+        st.session_state.workflow_paused = False
+        st.session_state.waiting_for_validation = False
+        if "validation_result" in st.session_state:
+            del st.session_state.validation_result
+        if "workflow_state" in st.session_state:
+            del st.session_state.workflow_state
         st.rerun()
 
 def process_workshop_phase():
@@ -930,6 +977,58 @@ def process_need_analysis_phase():
     # Affichage des résultats si disponibles
     if st.session_state.need_analysis_results:
         display_need_analysis_results(st.session_state.need_analysis_results)
+
+def resume_workflow_after_validation():
+    """Reprend le workflow après validation humaine"""
+    
+    print(f"\n🔄 [DEBUG] resume_workflow_after_validation - DÉBUT")
+    
+    with st.spinner("🔄 Reprise du workflow..."):
+        try:
+            # Initialisation du workflow
+            import os
+            api_key = os.getenv('OPENAI_API_KEY')
+            if not api_key:
+                st.error("❌ Clé API OpenAI non trouvée. Vérifiez votre fichier .env")
+                return
+            
+            workflow = NeedAnalysisWorkflow(api_key=api_key, dev_mode=st.session_state.dev_mode)
+            
+            print(f"▶️ [DEBUG] Appel de resume_workflow()...")
+            
+            # Reprendre le workflow
+            results = workflow.resume_workflow()
+            
+            print(f"📊 [DEBUG] Résultats de resume_workflow(): {results.get('success', False)}")
+            
+            # Vérifier si une nouvelle validation est nécessaire
+            if results.get("error") == "Nouvelle validation requise":
+                print(f"⏸️ [DEBUG] Nouvelle validation requise - workflow en pause")
+                st.info("🔄 Nouvelle validation requise - le workflow est en pause")
+                st.rerun()
+            elif results.get("success"):
+                print(f"✅ [DEBUG] Workflow terminé avec succès")
+                # Workflow terminé avec succès
+                st.session_state.need_analysis_results = results
+                st.session_state.workflow_paused = False
+                st.session_state.waiting_for_validation = False
+                
+                # Nettoyer les états temporaires
+                if "validation_result" in st.session_state:
+                    del st.session_state.validation_result
+                
+                st.success("✅ Analyse des besoins terminée !")
+                st.rerun()
+            else:
+                print(f"❌ [DEBUG] Workflow terminé avec erreur: {results.get('error', 'Erreur inconnue')}")
+                st.error(f"❌ Erreur: {results.get('error', 'Erreur inconnue')}")
+                
+        except Exception as e:
+            print(f"❌ [DEBUG] Erreur dans resume_workflow_after_validation: {str(e)}")
+            st.error(f"❌ Erreur lors de la reprise du workflow: {str(e)}")
+            st.exception(e)
+    
+    print(f"✅ [DEBUG] resume_workflow_after_validation - FIN")
 
 def run_need_analysis_workflow():
     """Lance le workflow d'analyse des besoins avec NOUVELLE ARCHITECTURE"""

@@ -148,8 +148,14 @@ class StreamlitValidationInterface:
         Returns:
             Résultat de la validation
         """
+        print(f"\n✅ [DEBUG] _process_validation - DÉBUT")
+        print(f"📊 [DEBUG] selected_numbers: {selected_numbers}")
+        print(f"📊 [DEBUG] validated_count: {validated_count}")
+        print(f"📊 [DEBUG] comments: {comments}")
+        
         # Vérifier qu'au moins un besoin est sélectionné
         if len(selected_numbers) == 0:
+            print(f"❌ [DEBUG] Aucun besoin sélectionné")
             st.error("❌ Vous devez sélectionner au moins un besoin à valider")
             return None
         
@@ -158,9 +164,15 @@ class StreamlitValidationInterface:
         rejected_numbers = [i for i in range(1, len(identified_needs) + 1) if i not in selected_numbers]
         rejected_new = [identified_needs[i-1] for i in rejected_numbers]
         
+        print(f"📊 [DEBUG] validated_new: {len(validated_new)} besoins")
+        print(f"📊 [DEBUG] rejected_new: {len(rejected_new)} besoins")
+        
         # Calculer le total
         total_validated = validated_count + len(validated_new)
         success = total_validated >= 5
+        
+        print(f"📊 [DEBUG] total_validated: {total_validated}")
+        print(f"📊 [DEBUG] success: {success}")
         
         result = {
             "validated_needs": validated_new,  # Seulement les nouveaux besoins validés
@@ -172,21 +184,28 @@ class StreamlitValidationInterface:
             "newly_rejected": rejected_new
         }
         
+        print(f"💾 [DEBUG] Sauvegarde du résultat dans session_state.validation_result")
         # Sauvegarder le résultat dans session_state
         st.session_state.validation_result = result
+        print(f"✅ [DEBUG] Résultat sauvegardé")
         
         # Nettoyer l'état des sélections et les clés de validation
+        print(f"🧹 [DEBUG] Nettoyage des clés de validation")
         st.session_state.selected_needs = set()
         for key in list(st.session_state.keys()):
             if key.startswith("validate_need_"):
                 del st.session_state[key]
+        print(f"✅ [DEBUG] Nettoyage terminé")
         
         if result["success"]:
             st.success(f"✅ Validation réussie ! {total_validated} besoins validés au total")
+            print(f"🎉 [DEBUG] Validation réussie - {total_validated} besoins validés")
         else:
             remaining = 5 - total_validated
             st.warning(f"⚠️ Validation partielle : {total_validated} besoins validés (il reste {remaining} besoins à valider)")
+            print(f"⚠️ [DEBUG] Validation partielle - il reste {remaining} besoins à valider")
         
+        print(f"✅ [DEBUG] _process_validation - FIN")
         return result
     
     def save_workflow_state(self, state: Dict[str, Any]) -> None:

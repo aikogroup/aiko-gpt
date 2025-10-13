@@ -1,0 +1,85 @@
+{
+  "identified_needs": [
+    {
+      "theme": "Optimisation du recrutement et sélection des candidats par IA",
+      "quotes": [
+        "Le tri des CV prend énormément de temps et on rate parfois de bons profils",
+        "On aimerait automatiser le screening initial pour se concentrer sur les entretiens",
+        "Il faudrait un système qui analyse les compétences techniques dans les CV"
+      ]
+    },
+    {
+      "theme": "Automatisation de la génération de documents et rapports",
+      "quotes": [
+        "La génération des rapports hebdomadaires est très chronophage",
+        "On passe trop de temps sur les documents Word et Excel répétitifs",
+        "Il faut standardiser nos livrables et réduire les erreurs manuelles"
+      ]
+    },
+    {
+      "theme": "Veille marché et intelligence concurrentielle automatisée",
+      "quotes": [
+        "On doit surveiller nos concurrents et l'actualité du marché en permanence",
+        "Il faudrait un système qui nous alerte sur les opportunités et risques",
+        "La veille manuelle prend trop de temps à l'équipe commerciale"
+      ]
+    },
+    {
+      "theme": "Analyse prédictive des ventes et prévision de la demande",
+      "quotes": [
+        "On a besoin de mieux prévoir nos ventes pour planifier la production",
+        "Les ruptures de stock nous coûtent cher, il faut anticiper la demande",
+        "L'analyse des tendances clients aiderait à optimiser nos stocks"
+      ]
+    },
+    {
+      "theme": "Contrôle qualité par vision par ordinateur",
+      "quotes": [
+        "Le contrôle visuel des produits est fastidieux et parfois imprécis",
+        "On voudrait détecter les défauts automatiquement sur la ligne de production",
+        "La vision par ordinateur pourrait accélérer nos contrôles qualité"
+      ]
+    },
+    {
+      "theme": "Chatbot interne pour support technique et knowledge base",
+      "quotes": [
+        "Les équipes posent souvent les mêmes questions techniques",
+        "On aimerait un assistant IA qui répond aux questions sur nos procédures",
+        "L'accès à la documentation technique doit être plus rapide et intuitif"
+      ]
+    },
+    {
+      "theme": "Analyse des retours clients et sentiment analysis",
+      "quotes": [
+        "On reçoit beaucoup de feedback clients qu'on ne traite pas efficacement",
+        "Il faudrait analyser automatiquement les réclamations pour identifier les tendances",
+        "Le NPS et la satisfaction client doivent être mieux suivis"
+      ]
+    },
+    {
+      "theme": "Optimisation des tournées commerciales et planning",
+      "quotes": [
+        "Les commerciaux perdent du temps en déplacements inefficaces",
+        "On pourrait optimiser les tournées en fonction des secteurs géographiques",
+        "Un système intelligent de planification réduirait nos coûts de déplacement"
+      ]
+    },
+    {
+      "theme": "Traduction automatique multilingue des supports",
+      "quotes": [
+        "On doit traduire beaucoup de documents pour nos marchés internationaux",
+        "La traduction manuelle est coûteuse et lente",
+        "Il faut des supports multilingues pour nos commerciaux à l'étranger"
+      ]
+    },
+    {
+      "theme": "Maintenance prédictive des équipements de production",
+      "quotes": [
+        "Les pannes imprévues perturbent notre production",
+        "On aimerait anticiper les maintenances avant que les machines ne tombent en panne",
+        "Le suivi de l'état des équipements devrait être automatisé"
+      ]
+    }
+  ]
+}
+
