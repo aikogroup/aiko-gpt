@@ -203,7 +203,8 @@ class NeedAnalysisWorkflow:
     
     def _start_agents_node(self, state: WorkflowState) -> WorkflowState:
         """
-        Nœud de démarrage qui lance les 3 agents en parallèle.
+        Nœud de démarrage qui utilise les résultats pré-calculés ou lance les agents si nécessaire.
+        NOUVELLE APPROCHE: Les résultats sont calculés dans Streamlit et passés directement.
         
         Args:
             state: État actuel du workflow
@@ -212,10 +213,23 @@ class NeedAnalysisWorkflow:
             État mis à jour
         """
         print(f"\n🚀 [DEBUG] _start_agents_node - DÉBUT")
-        print(f"📊 État d'entrée: {len(state.get('workshop_files', []))} fichiers workshop, {len(state.get('transcript_files', []))} fichiers transcript")
+        print(f"📊 État d'entrée: workshop_results={len(state.get('workshop_results', {}).get('workshops', []))}, transcript_results={len(state.get('transcript_results', []))}, web_search_results présent={bool(state.get('web_search_results', {}))}")
         
         try:
-            # Exécution des 3 agents en parallèle
+            # VÉRIFIER SI LES RÉSULTATS SONT DÉJÀ PRÉSENTS (calculés dans Streamlit)
+            if state.get("workshop_results") or state.get("transcript_results") or state.get("web_search_results"):
+                print(f"✅ [DEBUG] Résultats pré-calculés détectés - utilisation directe")
+                print(f"📊 workshop_results: {len(state.get('workshop_results', {}).get('workshops', []))} workshops")
+                print(f"📊 transcript_results: {len(state.get('transcript_results', []))} transcripts")
+                print(f"📊 web_search_results: {len(state.get('web_search_results', {}))} recherches")
+                
+                # Les résultats sont déjà dans l'état, on les utilise directement
+                # Pas besoin de relancer les agents
+                print(f"✅ [DEBUG] _start_agents_node - FIN (résultats pré-calculés utilisés)")
+                return state
+            
+            # SINON, lancer les agents (mode legacy / fichiers fournis)
+            print(f"⚠️ [DEBUG] Aucun résultat pré-calculé - lancement des agents")
             workshop_files = state.get("workshop_files", [])
             transcript_files = state.get("transcript_files", [])
             company_info = state.get("company_info", {})
@@ -737,35 +751,40 @@ class NeedAnalysisWorkflow:
         except Exception as e:
             print(f"Erreur génération graph: {str(e)}")
     
-    def run(self, workshop_files: List[str] = None, transcript_files: List[str] = None, company_info: Dict[str, Any] = None) -> Dict[str, Any]:
+    def run(self, workshop_files: List[str] = None, transcript_files: List[str] = None, company_info: Dict[str, Any] = None, 
+            workshop_results: Dict[str, Any] = None, transcript_results: List[Dict[str, Any]] = None, web_search_results: Dict[str, Any] = None) -> Dict[str, Any]:
         """
         Exécute le workflow complet.
         NOUVELLE ARCHITECTURE: Exécution MANUELLE des nœuds jusqu'à human_validation.
         MODE DEV: Charge les besoins depuis need_analysis_results.json et passe directement aux use cases.
         
         Args:
-            workshop_files: Liste des fichiers Excel des ateliers
-            transcript_files: Liste des fichiers PDF des transcriptions
+            workshop_files: Liste des fichiers Excel des ateliers (legacy)
+            transcript_files: Liste des fichiers PDF des transcriptions (legacy)
             company_info: Informations sur l'entreprise pour la recherche web
+            workshop_results: Résultats pré-calculés du workshop agent (NOUVEAU)
+            transcript_results: Résultats pré-calculés du transcript agent (NOUVEAU)
+            web_search_results: Résultats pré-calculés du web search agent (NOUVEAU)
             
         Returns:
             Résultats du workflow
         """
         print(f"\n🚀 [DEBUG] run() appelé - NOUVELLE ARCHITECTURE")
         print(f"🔧 [DEBUG] Mode dev: {self.dev_mode}")
+        print(f"📊 [DEBUG] Résultats pré-calculés: workshop={bool(workshop_results)}, transcript={bool(transcript_results)}, web_search={bool(web_search_results)}")
         
         try:
-            # État initial avec les fichiers d'entrée
+            # État initial avec les fichiers d'entrée ET les résultats pré-calculés
             state = WorkflowState(
                 messages=[],
-                # Fichiers d'entrée
+                # Fichiers d'entrée (legacy)
                 workshop_files=workshop_files or [],
                 transcript_files=transcript_files or [],
                 company_info=company_info or {},
-                # Résultats des agents (vides au début)
-                workshop_results={},
-                transcript_results=[],
-                web_search_results={},
+                # Résultats des agents (pré-calculés OU vides)
+                workshop_results=workshop_results or {},
+                transcript_results=transcript_results or [],
+                web_search_results=web_search_results or {},
                 # Données agrégées (vides au début)
                 workshop_data={},
                 transcript_data=[],
@@ -986,12 +1005,35 @@ class NeedAnalysisWorkflow:
                 workflow_state = self._finalize_results_node(workflow_state)
                 print(f"✅ [DEBUG] _finalize_results_node - FIN")
                 
-                print(f"✅ [DEBUG] Workflow terminé avec succès")
+                print(f"✅ [DEBUG] Phase 1 (besoins) terminée avec succès")
                 print(f"📊 [DEBUG] Success: {workflow_state.get('success', False)}")
                 print(f"📊 [DEBUG] Final needs: {len(workflow_state.get('final_needs', []))}")
                 
+                # NETTOYAGE DES FLAGS DE LA PHASE 1 ← NOUVEAU
+                print(f"🧹 [DEBUG] Nettoyage des flags de la Phase 1")
+                workflow_state["workflow_paused"] = False
+                st.session_state.workflow_paused = False
+                st.session_state.waiting_for_validation = False
+                if "validation_result" in st.session_state:
+                    del st.session_state.validation_result
+                if "workflow_state" in st.session_state:
+                    del st.session_state.workflow_state
+                print(f"✅ [DEBUG] Flags de Phase 1 nettoyés")
+                
+                # CORRECTION: Continuer vers l'analyse des use cases au lieu de retourner
+                print(f"🚀 [DEBUG] Passage à la Phase 2 : Analyse des use cases")
+                
+                # 4. Analyser les use cases
+                workflow_state = self._analyze_use_cases_node(workflow_state)
+                
+                # 5. Afficher l'interface de validation des use cases
+                workflow_state = self._validate_use_cases_node(workflow_state)
+                
+                print(f"⏸️ [DEBUG] Workflow en pause - en attente de validation des use cases")
+                
+                # Retourner un état "en pause" pour les use cases
                 return {
-                    "success": workflow_state.get("success", False),
+                    "success": False,  # Pas encore terminé, on attend la validation use cases
                     "final_needs": workflow_state.get("final_needs", []),
                     "summary": {
                         "total_needs": len(workflow_state.get("final_needs", [])),
@@ -1002,7 +1044,7 @@ class NeedAnalysisWorkflow:
                     "workshop_results": workflow_state.get("workshop_results", {}),
                     "transcript_results": workflow_state.get("transcript_results", []),
                     "web_search_results": workflow_state.get("web_search_results", {}),
-                    "messages": [msg.content for msg in workflow_state.get("messages", [])]
+                    "messages": ["Phase 1 terminée - en attente de validation des use cases"]
                 }
             elif should_continue == "continue":
                 # 4. Continuer avec une nouvelle analyse (pas encore 5 besoins validés)

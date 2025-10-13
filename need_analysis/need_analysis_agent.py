@@ -11,6 +11,7 @@ from prompts.need_analysis_agent_prompts import (
     HUMAN_VALIDATION_PROMPT,
     NEED_REGENERATION_PROMPT
 )
+from models.need_analysis_models import NeedAnalysisResponse
 
 
 class NeedAnalysisAgent:
@@ -109,36 +110,26 @@ class NeedAnalysisAgent:
                     max_iterations=3
                 )
             
-            # Appel à l'API OpenAI Responses
-            response = self.client.responses.create(
+            # Appel à l'API OpenAI Responses avec structured output
+            response = self.client.responses.parse(
                 model=self.model,
                 input=[
                     {
                         "role": "user",
-                        "content": [
-                            {
-                                "type": "input_text",
-                                "text": f"{NEED_ANALYSIS_SYSTEM_PROMPT}\n\n{user_prompt}"
-                            }
-                        ]
+                        "content": f"{NEED_ANALYSIS_SYSTEM_PROMPT}\n\n{user_prompt}"
                     }
-                ]
+                ],
+                text_format=NeedAnalysisResponse
             )
             
-            # Extraction et parsing de la réponse
-            content = response.output_text
+            # Extraction de la réponse structurée
+            parsed_response = response.output_parsed
             
-            # Tentative de parsing JSON
-            try:
-                result = json.loads(content)
-            except json.JSONDecodeError:
-                # Si le JSON n'est pas valide, on essaie d'extraire le JSON du contenu
-                import re
-                json_match = re.search(r'\{.*\}', content, re.DOTALL)
-                if json_match:
-                    result = json.loads(json_match.group())
-                else:
-                    raise ValueError("Impossible de parser la réponse JSON")
+            # Conversion en dictionnaire pour compatibilité avec le reste du code
+            result = {
+                "identified_needs": [need.model_dump() for need in parsed_response.identified_needs],
+                "summary": parsed_response.summary.model_dump()
+            }
             
             return result
             

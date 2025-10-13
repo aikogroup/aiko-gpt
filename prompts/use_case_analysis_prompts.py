@@ -26,31 +26,10 @@ IMPORTANT :
 - Utilise des technologies IA concrètes et pertinentes
 - La description doit être actionnable et technique
 
-Format de sortie attendu (JSON) :
-{
-  "quick_wins": [
-    {
-      "id": "qw_1",
-      "titre": "Nom du cas d'usage",
-      "ia_utilisee": "Technologies IA (ex: LLM + RAG, OCR + NLP, etc.)",
-      "description": "Description détaillée du cas d'usage, ce qu'il fait concrètement, comment il répond au besoin"
-    }
-  ],
-  "structuration_ia": [
-    {
-      "id": "sia_1",
-      "titre": "Nom du cas d'usage",
-      "ia_utilisee": "Technologies IA (ex: XGBoost + NLP, Séries temporelles, etc.)",
-      "description": "Description détaillée du cas d'usage, ce qu'il fait concrètement, comment il répond au besoin"
-    }
-  ],
-  "summary": {
-    "total_quick_wins": 8,
-    "total_structuration_ia": 10,
-    "total_use_cases": 18,
-    "main_themes": ["Automatisation", "Qualité", "Prédiction", "etc."]
-  }
-}
+Structure attendue :
+- quick_wins : Liste de 6 à 10 cas d'usage, chacun avec id, titre, ia_utilisee et description
+- structuration_ia : Liste de 8 à 12 cas d'usage, chacun avec id, titre, ia_utilisee et description
+- summary : Résumé avec total_quick_wins, total_structuration_ia, total_use_cases et main_themes (liste)
 
 EXEMPLES DE QUICK WINS :
 - Agent de productivité conversationnel (LLM + RAG sur docs internes)
@@ -87,7 +66,7 @@ INSTRUCTIONS :
 4. Utilise des technologies IA concrètes et appropriées
 5. Sois spécifique au contexte de Cousin Surgery
 
-Génère les cas d'usage au format JSON demandé.
+Génère les cas d'usage en respectant la structure attendue.
 """
 
 USE_CASE_REGENERATION_PROMPT = """
@@ -122,6 +101,6 @@ INSTRUCTIONS POUR LA NOUVELLE ITÉRATION :
 
 Itération actuelle : {current_iteration} / {max_iterations}
 
-Génère de nouveaux cas d'usage au format JSON demandé, en évitant de reproduire les erreurs précédentes.
+Génère de nouveaux cas d'usage en respectant la structure attendue, en évitant de reproduire les erreurs précédentes.
 """
 
