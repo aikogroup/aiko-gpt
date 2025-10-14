@@ -49,22 +49,27 @@ Analyse les besoins validés et propose des cas d'usage pertinents, concrets et 
 """
 
 USE_CASE_ANALYSIS_USER_PROMPT = """
-À partir des besoins métier validés suivants, identifie des cas d'usage IA concrets :
+À partir des besoins métier validés et du contexte entreprise, identifie des cas d'usage IA concrets :
 
-BESOINS VALIDÉS :
+🎯 BESOINS VALIDÉS :
 {validated_needs}
 
-CONTEXTE :
-- Entreprise : Cousin Surgery (dispositifs médicaux implantables)
-- Secteur : MedTech / Chirurgie orthopédique
-- Enjeux : Qualité, conformité réglementaire, efficacité opérationnelle, relation chirurgiens
+📊 DONNÉES WORKSHOP (Contexte des ateliers métier) :
+{workshop_data}
+
+🎤 DONNÉES TRANSCRIPT (Contexte des entretiens collaborateurs) :
+{transcript_data}
+
+🌐 DONNÉES WEB SEARCH (Contexte marché et entreprise) :
+{web_search_data}
 
 INSTRUCTIONS :
 1. Propose 8 cas d'usage QUICK WINS (automatisation rapide, ROI immédiat)
 2. Propose 10 cas d'usage STRUCTURATION IA (solutions avancées, ROI moyen/long terme)
 3. Chaque cas d'usage doit répondre à un ou plusieurs besoins validés
-4. Utilise des technologies IA concrètes et appropriées
-5. Sois spécifique au contexte de Cousin Surgery
+4. Utilise les données workshops et transcripts pour contextualiser les cas d'usage avec des détails techniques/métier concrets
+5. Utilise des technologies IA concrètes et appropriées
+6. Sois spécifique au contexte de l'entreprise (processus, outils, contraintes mentionnés dans les workshops/transcripts)
 
 Génère les cas d'usage en respectant la structure attendue.
 """
@@ -87,8 +92,17 @@ RÉSUMÉ DE LA VALIDATION :
 - Quick Wins rejetés : {rejected_quick_wins_count}
 - Structuration IA rejetés : {rejected_structuration_ia_count}
 
-BESOINS VALIDÉS (rappel) :
+🎯 BESOINS VALIDÉS (rappel) :
 {validated_needs}
+
+📊 DONNÉES WORKSHOP (Contexte des ateliers métier - pour t'inspirer) :
+{workshop_data}
+
+🎤 DONNÉES TRANSCRIPT (Contexte des entretiens collaborateurs - pour t'inspirer) :
+{transcript_data}
+
+🌐 DONNÉES WEB SEARCH (Contexte marché et entreprise - pour t'inspirer) :
+{web_search_data}
 
 INSTRUCTIONS POUR LA NOUVELLE ITÉRATION :
 1. NE PAS reproposer les cas d'usage qui ont été rejetés
@@ -98,6 +112,7 @@ INSTRUCTIONS POUR LA NOUVELLE ITÉRATION :
 5. Améliorer la pertinence en te basant sur les besoins non encore couverts
 6. Varier les thématiques et les approches techniques
 7. Rester aligné avec le contexte et les contraintes de l'entreprise
+8. Utilise les données workshops et transcripts pour contextualiser avec des détails techniques/métier concrets
 
 Itération actuelle : {current_iteration} / {max_iterations}
 

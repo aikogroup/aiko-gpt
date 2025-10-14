@@ -319,13 +319,36 @@ class NeedAnalysisWorkflow:
                     # Agrégation des données mockées
                     # Les données JSON sont déjà des dictionnaires, pas besoin de conversion
                     state["workshop_data"] = {"workshops": workshop_data}
-                    state["transcript_data"] = transcript_data.get("results", [])
+                    
+                    # OPTIMISATION: Ne garder que semantic_analysis dans transcript_data
+                    # pour éviter le doublon avec interesting_parts
+                    
+                    # Extraire la liste "results" du dictionnaire transcript_data
+                    transcript_results = transcript_data.get("results", [])
+                    
+                    filtered_transcripts = []
+                    for transcript in transcript_results:
+                        # Vérifier que transcript est bien un dictionnaire
+                        if not isinstance(transcript, dict):
+                            print(f"⚠️ [DEBUG] Transcript ignoré (type incorrect): {type(transcript)}")
+                            continue
+                        
+                        filtered_transcript = {
+                            "pdf_path": transcript.get("pdf_path"),
+                            "status": transcript.get("status"),
+                            "semantic_analysis": transcript.get("semantic_analysis", {})
+                        }
+                        filtered_transcripts.append(filtered_transcript)
+                    
+                    state["transcript_data"] = filtered_transcripts
                     state["web_search_data"] = web_search_data
                     
                     # AUSSI sauvegarder dans les champs de résultats pour la cohérence
                     state["workshop_results"] = {"workshops": workshop_data}
-                    state["transcript_results"] = transcript_data.get("results", [])
+                    state["transcript_results"] = transcript_data  # Garder la structure complète
                     state["web_search_results"] = web_search_data
+                    
+                    print(f"🔍 [DEBUG] Transcripts filtrés: {len(filtered_transcripts)} transcripts (semantic_analysis uniquement)")
                     
                 except Exception as e:
                     state["messages"] = state.get("messages", []) + [HumanMessage(content=f"Erreur chargement données mockées: {str(e)}")]
@@ -333,8 +356,43 @@ class NeedAnalysisWorkflow:
             else:
                 # Mode normal - agrégation des résultats des 3 agents
                 state["workshop_data"] = state.get("workshop_results", {})
-                state["transcript_data"] = state.get("transcript_results", [])
+                
+                # OPTIMISATION: Ne garder que semantic_analysis dans transcript_data
+                transcript_results_raw = state.get("transcript_results", {})
+                
+                print(f"🔍 [DEBUG] Type de transcript_results_raw: {type(transcript_results_raw)}")
+                if isinstance(transcript_results_raw, dict):
+                    print(f"🔍 [DEBUG] Clés du dictionnaire: {list(transcript_results_raw.keys())}")
+                
+                # Extraire la liste "results" si c'est un dictionnaire avec cette clé
+                if isinstance(transcript_results_raw, dict) and "results" in transcript_results_raw:
+                    transcript_results = transcript_results_raw.get("results", [])
+                    print(f"✅ [DEBUG] Extraction de la clé 'results': {len(transcript_results)} transcripts")
+                elif isinstance(transcript_results_raw, list):
+                    transcript_results = transcript_results_raw
+                    print(f"✅ [DEBUG] transcript_results est déjà une liste: {len(transcript_results)} éléments")
+                else:
+                    transcript_results = []
+                    print(f"⚠️ [DEBUG] Format inattendu, utilisation d'une liste vide")
+                
+                filtered_transcripts = []
+                for transcript in transcript_results:
+                    # Vérifier que transcript est bien un dictionnaire
+                    if not isinstance(transcript, dict):
+                        print(f"⚠️ [DEBUG] Transcript ignoré (type incorrect): {type(transcript)}")
+                        continue
+                    
+                    filtered_transcript = {
+                        "pdf_path": transcript.get("pdf_path"),
+                        "status": transcript.get("status"),
+                        "semantic_analysis": transcript.get("semantic_analysis", {})
+                    }
+                    filtered_transcripts.append(filtered_transcript)
+                
+                state["transcript_data"] = filtered_transcripts
                 state["web_search_data"] = state.get("web_search_results", {})
+                
+                print(f"🔍 [DEBUG] Transcripts filtrés: {len(filtered_transcripts)} transcripts (semantic_analysis uniquement)")
             
             # Initialisation des compteurs
             state["iteration_count"] = 0
@@ -1165,10 +1223,21 @@ class NeedAnalysisWorkflow:
                 if rejected_structuration_ia:
                     print(f"🚫 [DEBUG] Structuration IA rejetés à éviter : {len(rejected_structuration_ia)}")
             
-            # Appeler l'agent d'analyse des use cases
+            # Récupérer les données sources pour enrichir le contexte
+            workshop_data = state.get("workshop_data", {})
+            transcript_data = state.get("transcript_data", [])
+            web_search_data = state.get("web_search_data", {})
+            
+            print(f"🔍 [DEBUG] Données de contexte: {len(workshop_data.get('workshops', []))} workshops, "
+                  f"{len(transcript_data)} transcripts, web_search présent={bool(web_search_data)}")
+            
+            # Appeler l'agent d'analyse des use cases avec les données de contexte
             print(f"🤖 [DEBUG] Appel à l'agent d'analyse des use cases")
             result = self.use_case_analysis_agent.analyze_use_cases(
                 validated_needs=validated_needs,
+                workshop_data=workshop_data,
+                transcript_data=transcript_data,
+                web_search_data=web_search_data,
                 iteration=iteration,
                 previous_use_cases=previous_use_cases,
                 rejected_quick_wins=rejected_quick_wins if iteration > 1 else None,
