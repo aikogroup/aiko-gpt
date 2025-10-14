@@ -23,6 +23,7 @@ from web_search.web_search_agent import WebSearchAgent
 from human_in_the_loop.streamlit_validation_interface import StreamlitValidationInterface
 from use_case_analysis.use_case_analysis_agent import UseCaseAnalysisAgent
 from use_case_analysis.streamlit_use_case_validation import StreamlitUseCaseValidation
+from utils.token_tracker import TokenTracker
 
 
 class WorkflowState(TypedDict):
@@ -95,14 +96,18 @@ class NeedAnalysisWorkflow:
             api_key=api_key
         )
         
-        # Initialisation des agents
+        # Initialisation du tracker de tokens et coûts
+        self.tracker = TokenTracker(output_dir="outputs/token_tracking")
+        print("📊 Token Tracker initialisé - Suivi des coûts activé\n")
+        
+        # Initialisation des agents AVEC le tracker pour ceux qui le supportent
         self.workshop_agent = WorkshopAgent(api_key)
         self.transcript_agent = TranscriptAgent(api_key)
         self.web_search_agent = WebSearchAgent()  # Pas de paramètre
-        self.need_analysis_agent = NeedAnalysisAgent(api_key)
+        self.need_analysis_agent = NeedAnalysisAgent(api_key, tracker=self.tracker)
         self.human_interface = StreamlitValidationInterface()
         # Nouveaux agents pour l'analyse des use cases
-        self.use_case_analysis_agent = UseCaseAnalysisAgent(api_key)
+        self.use_case_analysis_agent = UseCaseAnalysisAgent(api_key, tracker=self.tracker)
         self.use_case_validation_interface = StreamlitUseCaseValidation()
         
         # Configuration du checkpointer pour le debugging
@@ -110,6 +115,40 @@ class NeedAnalysisWorkflow:
         
         # Création du graphe
         self.graph = self._create_graph()
+    
+    def _print_tracker_stats(self, agent_name: str = None):
+        """
+        Affiche les statistiques de coûts du tracker.
+        
+        Args:
+            agent_name: Nom de l'agent qui vient de s'exécuter (optionnel)
+        """
+        if not self.tracker:
+            return
+        
+        summary = self.tracker.get_session_summary()
+        
+        print("\n" + "─"*70)
+        if agent_name:
+            print(f"💰 COÛTS APRÈS {agent_name.upper()}")
+        else:
+            print("💰 COÛTS CUMULÉS")
+        print("─"*70)
+        
+        # Coût total cumulé
+        total_cost = summary['total_cost_usd']
+        total_tokens = summary['total_tokens']
+        
+        print(f"🔤 Tokens cumulés: {total_tokens:,}")
+        print(f"💵 Coût cumulé: ${total_cost:.4f}")
+        
+        # Détails par agent
+        if summary['calls_by_agent']:
+            print(f"\n📊 Détails par agent:")
+            for name, stats in summary['calls_by_agent'].items():
+                print(f"   • {name}: {stats['total_tokens']:,} tokens → ${stats['total_cost']:.4f}")
+        
+        print("─"*70 + "\n")
     
     def _setup_checkpointer(self):
         """
@@ -501,6 +540,9 @@ class NeedAnalysisWorkflow:
             print(f"✅ [DEBUG] _analyze_needs_node - FIN")
             print(f"📊 Besoins identifiés: {len(identified_needs)}")
             print(f"🎯 Besoins validés total: {len(state.get('validated_needs', []))}")
+            
+            # Affichage des coûts après l'analyse des besoins
+            self._print_tracker_stats(agent_name="need_analysis")
             
             return state
             
@@ -1260,6 +1302,9 @@ class NeedAnalysisWorkflow:
             print(f"📊 Quick Wins proposés: {len(state['proposed_quick_wins'])}")
             print(f"📊 Structuration IA proposés: {len(state['proposed_structuration_ia'])}")
             
+            # Affichage des coûts après l'analyse des cas d'usage
+            self._print_tracker_stats(agent_name="use_case_analysis")
+            
             return state
             
         except Exception as e:
@@ -1462,6 +1507,17 @@ class NeedAnalysisWorkflow:
             self._save_use_case_results(state)
             
             print(f"✅ [DEBUG] _finalize_use_cases_node - FIN")
+            
+            # Affichage du rapport final des coûts
+            print("\n" + "="*70)
+            print("📊 RAPPORT FINAL DES COÛTS")
+            print("="*70)
+            self.tracker.print_summary()
+            
+            # Sauvegarde du rapport de tracking
+            report_path = self.tracker.save_report()
+            print(f"📄 Rapport de coûts sauvegardé: {report_path}\n")
+            
             return state
             
         except Exception as e:

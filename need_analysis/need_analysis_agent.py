@@ -15,21 +15,28 @@ from models.need_analysis_models import NeedAnalysisResponse
 import os
 from dotenv import load_dotenv
 
+# Import du tracker
+import sys
+sys.path.append('/home/addeche/aiko/aikoGPT')
+from utils.token_tracker import TokenTracker
+
 class NeedAnalysisAgent:
     """
     Agent responsable de l'analyse des besoins métier à partir des données
     collectées par les agents workshop, transcript et web_search.
     """
     
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str, tracker: Optional[TokenTracker] = None):
         """
         Initialise l'agent avec la clé API OpenAI.
         
         Args:
             api_key: Clé API OpenAI
+            tracker: TokenTracker optionnel pour le suivi des tokens et coûts
         """
         self.client = OpenAI(api_key=api_key)
         self.model = os.getenv('OPENAI_MODEL', 'gpt-5-nano')  # Modèle configurable via .env
+        self.tracker = tracker  # Tracker pour le suivi des tokens
         
     def analyze_needs(
         self,
@@ -122,6 +129,16 @@ class NeedAnalysisAgent:
                 ],
                 text_format=NeedAnalysisResponse
             )
+            
+            # Tracking des tokens et coûts
+            if self.tracker:
+                operation = f"analyze_needs_iteration_{iteration}"
+                self.tracker.track_response(
+                    response,
+                    agent_name="need_analysis",
+                    operation=operation,
+                    model=self.model
+                )
             
             # Extraction de la réponse structurée
             parsed_response = response.output_parsed
