@@ -13,6 +13,11 @@ from prompts.use_case_analysis_prompts import (
 )
 from models.use_case_analysis_models import UseCaseAnalysisResponse
 
+# Import du tracker
+import sys
+sys.path.append('/home/addeche/aiko/aikoGPT')
+from utils.token_tracker import TokenTracker
+
 # Configuration du logger
 logger = logging.getLogger(__name__)
 
@@ -25,16 +30,18 @@ class UseCaseAnalysisAgent:
     - Structuration IA (10) : solutions avancées, ROI moyen/long terme
     """
     
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str, tracker: Optional[TokenTracker] = None):
         """
         Initialise l'agent avec la clé API OpenAI.
         
         Args:
             api_key: Clé API OpenAI
+            tracker: TokenTracker optionnel pour le suivi des tokens et coûts
         """
         import os
         self.client = OpenAI(api_key=api_key)
         self.model = os.getenv('OPENAI_MODEL', 'gpt-5-nano')
+        self.tracker = tracker  # Tracker pour le suivi des tokens
         logger.info(f"UseCaseAnalysisAgent initialisé avec le modèle {self.model}")
         
     def analyze_use_cases(
@@ -181,6 +188,16 @@ class UseCaseAnalysisAgent:
             )
             
             logger.info("Réponse structurée reçue de l'API")
+            
+            # Tracking des tokens et coûts
+            if self.tracker:
+                operation = f"analyze_use_cases_iteration_{iteration}"
+                self.tracker.track_response(
+                    response,
+                    agent_name="use_case_analysis",
+                    operation=operation,
+                    model=self.model
+                )
             
             # Extraction de la réponse structurée
             parsed_response = response.output_parsed
