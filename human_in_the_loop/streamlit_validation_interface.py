@@ -43,24 +43,52 @@ class StreamlitValidationInterface:
         # Ne pas nettoyer les clés ici pour éviter les conflits de timing
         # Les clés seront nettoyées après validation
         
-        # Afficher les besoins avec des checkboxes
-        for i, need in enumerate(identified_needs, 1):
-            theme = need.get('theme', 'Thème non défini')
-            quotes = need.get('quotes', [])
+        # Afficher les besoins avec des checkboxes - 2 par ligne
+        for i in range(0, len(identified_needs), 2):
+            col1, col2 = st.columns(2)
             
-            with st.expander(f"🔹 {theme}", expanded=False):
-                st.markdown(f"**Thème:** {theme}")
+            # Premier besoin de la ligne
+            with col1:
+                need = identified_needs[i]
+                theme = need.get('theme', 'Thème non défini')
+                quotes = need.get('quotes', [])
                 
-                if quotes:
-                    st.markdown("**Citations:**")
-                    for j, quote in enumerate(quotes, 1):
-                        st.markdown(f"• {quote}")
-                else:
-                    st.info("Aucune citation disponible")
-                
-                # Checkbox pour sélectionner ce besoin avec une clé unique
-                checkbox_key = f"validate_need_{i}_{len(identified_needs)}"
-                is_selected = st.checkbox(f"✅ Valider ce besoin", key=checkbox_key)
+                with st.container():
+                    st.markdown(f"### 🔹 {theme}")
+                    
+                    if quotes:
+                        st.markdown("**Citations:**")
+                        for j, quote in enumerate(quotes, 1):
+                            st.markdown(f"• {quote}")
+                    else:
+                        st.info("Aucune citation disponible")
+                    
+                    # Checkbox pour sélectionner ce besoin avec une clé unique
+                    checkbox_key = f"validate_need_{i+1}_{len(identified_needs)}"
+                    is_selected = st.checkbox(f"✅ Valider ce besoin", key=checkbox_key)
+            
+            # Deuxième besoin de la ligne (si existant)
+            if i + 1 < len(identified_needs):
+                with col2:
+                    need = identified_needs[i + 1]
+                    theme = need.get('theme', 'Thème non défini')
+                    quotes = need.get('quotes', [])
+                    
+                    with st.container():
+                        st.markdown(f"### 🔹 {theme}")
+                        
+                        if quotes:
+                            st.markdown("**Citations:**")
+                            for j, quote in enumerate(quotes, 1):
+                                st.markdown(f"• {quote}")
+                        else:
+                            st.info("Aucune citation disponible")
+                        
+                        # Checkbox pour sélectionner ce besoin avec une clé unique
+                        checkbox_key = f"validate_need_{i+2}_{len(identified_needs)}"
+                        is_selected = st.checkbox(f"✅ Valider ce besoin", key=checkbox_key)
+            
+            st.markdown("---")
         
         # Calculer le nombre de sélections en temps réel
         selected_count = 0
@@ -69,13 +97,11 @@ class StreamlitValidationInterface:
         for i in range(1, len(identified_needs) + 1):
             checkbox_key = f"validate_need_{i}_{len(identified_needs)}"
             is_selected = st.session_state.get(checkbox_key, False)
-            st.write(f"🔍 Debug checkbox {i}: key={checkbox_key}, value={is_selected}")
             if is_selected:
                 selected_count += 1
                 selected_needs_list.append(i)
         
         # Afficher le nombre de besoins sélectionnés
-        st.info(f"🔍 Debug: selected_count = {selected_count}, selected_needs = {selected_needs_list}")
         if selected_count > 0:
             st.info(f"📊 {selected_count} besoin(s) sélectionné(s)")
         

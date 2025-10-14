@@ -21,6 +21,7 @@ from process_atelier.workshop_agent import WorkshopAgent
 from process_transcript.transcript_agent import TranscriptAgent
 from web_search.web_search_agent import WebSearchAgent
 from workflow.need_analysis_workflow import NeedAnalysisWorkflow
+from utils.report_generator import ReportGenerator
 
 def make_json_serializable(obj):
     """
@@ -1242,6 +1243,83 @@ def resume_use_case_workflow_after_validation():
     
     print(f"✅ [DEBUG] resume_use_case_workflow_after_validation - FIN")
 
+def generate_word_report(results):
+    """
+    Génère un rapport Word à partir des résultats d'analyse.
+    
+    Args:
+        results: Dictionnaire contenant les résultats (besoins et cas d'usage)
+    """
+    with st.spinner("📝 Génération du rapport Word en cours..."):
+        try:
+            # Récupérer le nom de l'entreprise depuis plusieurs sources possibles
+            company_name = "Entreprise"  # Valeur par défaut
+            
+            # Essayer depuis session_state.company_name (saisie directe)
+            if st.session_state.get('company_name'):
+                company_name = st.session_state.company_name
+                print(f"🏢 [REPORT] Nom d'entreprise trouvé dans session_state.company_name: {company_name}")
+            # Essayer depuis web_search_results
+            elif st.session_state.get('web_search_results'):
+                web_search = st.session_state.web_search_results
+                company_name = web_search.get('company_name', 'Entreprise')
+                print(f"🏢 [REPORT] Nom d'entreprise trouvé dans web_search_results: {company_name}")
+            # Essayer depuis company_info dans le workflow
+            elif st.session_state.get('company_info'):
+                company_info = st.session_state.company_info
+                company_name = company_info.get('company_name', 'Entreprise')
+                print(f"🏢 [REPORT] Nom d'entreprise trouvé dans company_info: {company_name}")
+            
+            # Formater le nom de l'entreprise (première lettre en majuscule pour chaque mot)
+            if company_name and company_name != "Entreprise":
+                # Convertir en Title Case (première lettre de chaque mot en majuscule)
+                company_name = company_name.title()
+                print(f"✨ [REPORT] Nom formaté: {company_name}")
+            
+            print(f"🏢 [REPORT] Nom final de l'entreprise: {company_name}")
+            
+            # Récupérer les besoins depuis need_analysis_results
+            final_needs = []
+            if st.session_state.get('need_analysis_results'):
+                final_needs = st.session_state.need_analysis_results.get('final_needs', [])
+            
+            # Récupérer les cas d'usage
+            final_quick_wins = results.get('final_quick_wins', [])
+            final_structuration_ia = results.get('final_structuration_ia', [])
+            
+            # Vérifier qu'on a au moins des données à exporter
+            if not final_needs and not final_quick_wins and not final_structuration_ia:
+                st.warning("⚠️ Aucune donnée à exporter. Veuillez d'abord valider des besoins et des cas d'usage.")
+                return
+            
+            # Initialiser le générateur de rapport
+            report_generator = ReportGenerator()
+            
+            # Générer le rapport
+            output_path = report_generator.generate_report(
+                company_name=company_name,
+                final_needs=final_needs,
+                final_quick_wins=final_quick_wins,
+                final_structuration_ia=final_structuration_ia
+            )
+            
+            st.success(f"✅ Rapport généré avec succès !")
+            st.info(f"📁 Fichier sauvegardé : `{output_path}`")
+            
+            # Proposer le téléchargement du fichier
+            with open(output_path, 'rb') as f:
+                st.download_button(
+                    label="📥 Télécharger le rapport Word",
+                    data=f,
+                    file_name=os.path.basename(output_path),
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    use_container_width=True
+                )
+            
+        except Exception as e:
+            st.error(f"❌ Erreur lors de la génération du rapport : {str(e)}")
+            st.exception(e)
+
 def display_use_case_analysis_results(results):
     """Affiche les résultats de l'analyse des cas d'usage"""
     
@@ -1265,11 +1343,31 @@ def display_use_case_analysis_results(results):
     # Affichage des Quick Wins
     if final_qw:
         st.subheader("⚡ Quick Wins - Automatisation & assistance intelligente")
-        for i, uc in enumerate(final_qw, 1):
-            with st.expander(f"🎯 {uc.get('titre', 'Titre non défini')}", expanded=False):
-                st.markdown(f"**💡 IA utilisée:** {uc.get('ia_utilisee', 'Non spécifié')}")
-                st.markdown(f"**📝 Description:**")
-                st.markdown(uc.get('description', 'Description non disponible'))
+        
+        # Afficher les Quick Wins - 2 par ligne
+        for i in range(0, len(final_qw), 2):
+            col1, col2 = st.columns(2)
+            
+            # Premier Quick Win de la ligne
+            with col1:
+                uc = final_qw[i]
+                with st.container():
+                    st.markdown(f"### 🎯 {uc.get('titre', 'Titre non défini')}")
+                    st.markdown(f"**💡 IA utilisée:** {uc.get('ia_utilisee', 'Non spécifié')}")
+                    st.markdown(f"**📝 Description:**")
+                    st.markdown(uc.get('description', 'Description non disponible'))
+            
+            # Deuxième Quick Win de la ligne (si existant)
+            if i + 1 < len(final_qw):
+                with col2:
+                    uc = final_qw[i + 1]
+                    with st.container():
+                        st.markdown(f"### 🎯 {uc.get('titre', 'Titre non défini')}")
+                        st.markdown(f"**💡 IA utilisée:** {uc.get('ia_utilisee', 'Non spécifié')}")
+                        st.markdown(f"**📝 Description:**")
+                        st.markdown(uc.get('description', 'Description non disponible'))
+            
+            st.markdown("---")
     else:
         st.info("Aucun Quick Win validé")
     
@@ -1278,11 +1376,31 @@ def display_use_case_analysis_results(results):
     # Affichage des Structuration IA
     if final_sia:
         st.subheader("🧠 Structuration IA à moyen et long terme")
-        for i, uc in enumerate(final_sia, 1):
-            with st.expander(f"🔬 {uc.get('titre', 'Titre non défini')}", expanded=False):
-                st.markdown(f"**💡 IA utilisée:** {uc.get('ia_utilisee', 'Non spécifié')}")
-                st.markdown(f"**📝 Description:**")
-                st.markdown(uc.get('description', 'Description non disponible'))
+        
+        # Afficher les Structuration IA - 2 par ligne
+        for i in range(0, len(final_sia), 2):
+            col1, col2 = st.columns(2)
+            
+            # Premier Structuration IA de la ligne
+            with col1:
+                uc = final_sia[i]
+                with st.container():
+                    st.markdown(f"### 🔬 {uc.get('titre', 'Titre non défini')}")
+                    st.markdown(f"**💡 IA utilisée:** {uc.get('ia_utilisee', 'Non spécifié')}")
+                    st.markdown(f"**📝 Description:**")
+                    st.markdown(uc.get('description', 'Description non disponible'))
+            
+            # Deuxième Structuration IA de la ligne (si existant)
+            if i + 1 < len(final_sia):
+                with col2:
+                    uc = final_sia[i + 1]
+                    with st.container():
+                        st.markdown(f"### 🔬 {uc.get('titre', 'Titre non défini')}")
+                        st.markdown(f"**💡 IA utilisée:** {uc.get('ia_utilisee', 'Non spécifié')}")
+                        st.markdown(f"**📝 Description:**")
+                        st.markdown(uc.get('description', 'Description non disponible'))
+            
+            st.markdown("---")
     else:
         st.info("Aucune Structuration IA validée")
     
@@ -1290,13 +1408,22 @@ def display_use_case_analysis_results(results):
     st.markdown("---")
     st.subheader("💾 Télécharger les résultats")
     
-    json_str = json.dumps(results, ensure_ascii=False, indent=2)
-    st.download_button(
-        label="📥 Télécharger l'analyse des cas d'usage (JSON)",
-        data=json_str,
-        file_name="use_case_analysis_results.json",
-        mime="application/json"
-    )
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        json_str = json.dumps(results, ensure_ascii=False, indent=2)
+        st.download_button(
+            label="📥 Télécharger l'analyse (JSON)",
+            data=json_str,
+            file_name="use_case_analysis_results.json",
+            mime="application/json",
+            use_container_width=True
+        )
+    
+    with col2:
+        # Bouton de génération de rapport Word
+        if st.button("📄 Générer le rapport Word", type="primary", use_container_width=True):
+            generate_word_report(results)
 
 def display_need_analysis_results(results):
     """Affiche les résultats de l'analyse des besoins"""
@@ -1308,14 +1435,12 @@ def display_need_analysis_results(results):
     final_needs = results.get("final_needs", [])
     summary = results.get("summary", {})
     
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3 = st.columns(3)
     with col1:
         st.metric("Besoins identifiés", len(final_needs))
     with col2:
         st.metric("Thèmes", len(summary.get("themes", [])))
     with col3:
-        st.metric("Priorité élevée", summary.get("high_priority_count", 0))
-    with col4:
         st.metric("Total besoins", summary.get("total_needs", 0))
     
     st.markdown("---")
@@ -1323,18 +1448,43 @@ def display_need_analysis_results(results):
     # Affichage des besoins identifiés avec la nouvelle structure simplifiée
     if final_needs:
         st.subheader("🎯 Besoins identifiés")
-        for i, need in enumerate(final_needs, 1):
-            theme = need.get('theme', 'Thème non défini')
-            quotes = need.get('quotes', [])
+        
+        # Afficher les besoins - 2 par ligne
+        for i in range(0, len(final_needs), 2):
+            col1, col2 = st.columns(2)
             
-            with st.expander(f"🔹 {theme}", expanded=False):
-                st.markdown(f"**Thème:** {theme}")
-                if quotes:
-                    st.markdown("**Citations:**")
-                    for j, quote in enumerate(quotes, 1):
-                        st.markdown(f"• {quote}")
-                else:
-                    st.info("Aucune citation disponible")
+            # Premier besoin de la ligne
+            with col1:
+                need = final_needs[i]
+                theme = need.get('theme', 'Thème non défini')
+                quotes = need.get('quotes', [])
+                
+                with st.container():
+                    st.markdown(f"### 🔹 {theme}")
+                    if quotes:
+                        st.markdown("**Citations:**")
+                        for j, quote in enumerate(quotes, 1):
+                            st.markdown(f"• {quote}")
+                    else:
+                        st.info("Aucune citation disponible")
+            
+            # Deuxième besoin de la ligne (si existant)
+            if i + 1 < len(final_needs):
+                with col2:
+                    need = final_needs[i + 1]
+                    theme = need.get('theme', 'Thème non défini')
+                    quotes = need.get('quotes', [])
+                    
+                    with st.container():
+                        st.markdown(f"### 🔹 {theme}")
+                        if quotes:
+                            st.markdown("**Citations:**")
+                            for j, quote in enumerate(quotes, 1):
+                                st.markdown(f"• {quote}")
+                        else:
+                            st.info("Aucune citation disponible")
+            
+            st.markdown("---")
     else:
         st.warning("Aucun besoin identifié")
     
