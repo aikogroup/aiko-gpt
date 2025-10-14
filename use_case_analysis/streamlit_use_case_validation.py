@@ -68,39 +68,75 @@ class StreamlitUseCaseValidation:
         st.header("⚡ Quick Wins - Automatisation & assistance intelligente")
         st.caption("Solutions à faible complexité technique, mise en œuvre rapide (< 3 mois), ROI immédiat")
         
-        selected_qw = []
-        for i, use_case in enumerate(quick_wins, 1):
-            with st.expander(f"🎯 {use_case.get('titre', 'Titre non défini')}", expanded=False):
-                st.markdown(f"**💡 IA utilisée :** {use_case.get('ia_utilisee', 'Non spécifié')}")
-                st.markdown(f"**📝 Description :**")
-                st.markdown(use_case.get('description', 'Description non disponible'))
-                
-                # Checkbox pour sélectionner ce Quick Win
-                checkbox_key = f"validate_qw_{i}_{len(quick_wins)}"
-                is_selected = st.checkbox(f"✅ Valider ce Quick Win", key=checkbox_key)
-                
-                if is_selected:
-                    selected_qw.append(i)
-        
-        st.markdown("---")
+        # Afficher les Quick Wins - 2 par ligne
+        for i in range(0, len(quick_wins), 2):
+            col1, col2 = st.columns(2)
+            
+            # Premier Quick Win de la ligne
+            with col1:
+                use_case = quick_wins[i]
+                with st.container():
+                    st.markdown(f"### 🎯 {use_case.get('titre', 'Titre non défini')}")
+                    st.markdown(f"**💡 IA utilisée :** {use_case.get('ia_utilisee', 'Non spécifié')}")
+                    st.markdown(f"**📝 Description :**")
+                    st.markdown(use_case.get('description', 'Description non disponible'))
+                    
+                    # Checkbox pour sélectionner ce Quick Win
+                    checkbox_key = f"validate_qw_{i+1}_{len(quick_wins)}"
+                    is_selected = st.checkbox(f"✅ Valider ce Quick Win", key=checkbox_key)
+            
+            # Deuxième Quick Win de la ligne (si existant)
+            if i + 1 < len(quick_wins):
+                with col2:
+                    use_case = quick_wins[i + 1]
+                    with st.container():
+                        st.markdown(f"### 🎯 {use_case.get('titre', 'Titre non défini')}")
+                        st.markdown(f"**💡 IA utilisée :** {use_case.get('ia_utilisee', 'Non spécifié')}")
+                        st.markdown(f"**📝 Description :**")
+                        st.markdown(use_case.get('description', 'Description non disponible'))
+                        
+                        # Checkbox pour sélectionner ce Quick Win
+                        checkbox_key = f"validate_qw_{i+2}_{len(quick_wins)}"
+                        is_selected = st.checkbox(f"✅ Valider ce Quick Win", key=checkbox_key)
+            
+            st.markdown("---")
         
         # Section Structuration IA
         st.header("🧠 Structuration IA à moyen et long terme - Scalabilité & qualité prédictive")
         st.caption("Solutions à complexité moyenne/élevée, mise en œuvre progressive (3-12 mois), ROI moyen/long terme")
         
-        selected_sia = []
-        for i, use_case in enumerate(structuration_ia, 1):
-            with st.expander(f"🔬 {use_case.get('titre', 'Titre non défini')}", expanded=False):
-                st.markdown(f"**💡 IA utilisée :** {use_case.get('ia_utilisee', 'Non spécifié')}")
-                st.markdown(f"**📝 Description :**")
-                st.markdown(use_case.get('description', 'Description non disponible'))
-                
-                # Checkbox pour sélectionner cette Structuration IA
-                checkbox_key = f"validate_sia_{i}_{len(structuration_ia)}"
-                is_selected = st.checkbox(f"✅ Valider ce cas d'usage", key=checkbox_key)
-                
-                if is_selected:
-                    selected_sia.append(i)
+        # Afficher les Structuration IA - 2 par ligne
+        for i in range(0, len(structuration_ia), 2):
+            col1, col2 = st.columns(2)
+            
+            # Premier Structuration IA de la ligne
+            with col1:
+                use_case = structuration_ia[i]
+                with st.container():
+                    st.markdown(f"### 🔬 {use_case.get('titre', 'Titre non défini')}")
+                    st.markdown(f"**💡 IA utilisée :** {use_case.get('ia_utilisee', 'Non spécifié')}")
+                    st.markdown(f"**📝 Description :**")
+                    st.markdown(use_case.get('description', 'Description non disponible'))
+                    
+                    # Checkbox pour sélectionner cette Structuration IA
+                    checkbox_key = f"validate_sia_{i+1}_{len(structuration_ia)}"
+                    is_selected = st.checkbox(f"✅ Valider ce cas d'usage", key=checkbox_key)
+            
+            # Deuxième Structuration IA de la ligne (si existant)
+            if i + 1 < len(structuration_ia):
+                with col2:
+                    use_case = structuration_ia[i + 1]
+                    with st.container():
+                        st.markdown(f"### 🔬 {use_case.get('titre', 'Titre non défini')}")
+                        st.markdown(f"**💡 IA utilisée :** {use_case.get('ia_utilisee', 'Non spécifié')}")
+                        st.markdown(f"**📝 Description :**")
+                        st.markdown(use_case.get('description', 'Description non disponible'))
+                        
+                        # Checkbox pour sélectionner cette Structuration IA
+                        checkbox_key = f"validate_sia_{i+2}_{len(structuration_ia)}"
+                        is_selected = st.checkbox(f"✅ Valider ce cas d'usage", key=checkbox_key)
+            
+            st.markdown("---")
         
         # Calculer le nombre de sélections en temps réel
         selected_qw_count = len([i for i in range(1, len(quick_wins) + 1) 
