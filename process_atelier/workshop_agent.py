@@ -46,7 +46,7 @@ class WorkshopAgent:
         if not api_key:
             raise ValueError("OPENAI_API_KEY doit être définie dans les variables d'environnement ou passée en paramètre")
         self.client = OpenAI(api_key=api_key)
-        self.model = "gpt-5-nano"
+        self.model = os.getenv('OPENAI_MODEL', 'gpt-5-nano')
         
     def parse_excel(self, file_path: str) -> pd.DataFrame:
         """

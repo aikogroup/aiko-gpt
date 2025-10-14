@@ -32,7 +32,7 @@ class WebSearchAgent:
         
         self.tavily_client = TavilyClient(api_key=self.tavily_api_key)
         self.openai_client = OpenAI(api_key=self.openai_api_key)
-        self.model = "gpt-5-nano"
+        self.model = os.getenv('OPENAI_MODEL', 'gpt-5-nano')
     
     def search_company_info(self, company_name: str) -> Dict[str, Any]:
         """

@@ -89,8 +89,9 @@ class NeedAnalysisWorkflow:
         self.api_key = api_key
         self.dev_mode = dev_mode
         self.debug_mode = debug_mode
+        model = os.getenv('OPENAI_MODEL', 'gpt-5-nano')
         self.llm = ChatOpenAI(
-            model="gpt-5-nano",
+            model=model,
             api_key=api_key
         )
         

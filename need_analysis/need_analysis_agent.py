@@ -12,7 +12,8 @@ from prompts.need_analysis_agent_prompts import (
     NEED_REGENERATION_PROMPT
 )
 from models.need_analysis_models import NeedAnalysisResponse
-
+import os
+from dotenv import load_dotenv
 
 class NeedAnalysisAgent:
     """
@@ -28,7 +29,7 @@ class NeedAnalysisAgent:
             api_key: Clé API OpenAI
         """
         self.client = OpenAI(api_key=api_key)
-        self.model = "gpt-5-nano"  # Utilisation de gpt-5-nano comme spécifié
+        self.model = os.getenv('OPENAI_MODEL', 'gpt-5-nano')  # Modèle configurable via .env
         
     def analyze_needs(
         self,

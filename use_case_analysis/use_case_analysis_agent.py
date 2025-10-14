@@ -32,8 +32,9 @@ class UseCaseAnalysisAgent:
         Args:
             api_key: Clé API OpenAI
         """
+        import os
         self.client = OpenAI(api_key=api_key)
-        self.model = "gpt-5-nano"
+        self.model = os.getenv('OPENAI_MODEL', 'gpt-5-nano')
         logger.info(f"UseCaseAnalysisAgent initialisé avec le modèle {self.model}")
         
     def analyze_use_cases(

@@ -95,8 +95,9 @@ class InterestingPartsAgent:
         prompt = INTERESTING_PARTS_FILTER_PROMPT.format(transcript_text=text)
         
         try:
+            model = os.getenv('OPENAI_MODEL', 'gpt-5-nano')
             response = openai.responses.create(
-                model="gpt-5-nano",
+                model=model,
                 input=[
                     {
                         "role": "user",
