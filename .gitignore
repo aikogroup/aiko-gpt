@@ -5,7 +5,7 @@ outputs/
 __pycache__/
 *.py[codz]
 *$py.class
-
+*.pckl
 # C extensions
 *.so
 

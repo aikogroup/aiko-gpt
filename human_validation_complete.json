@@ -1,0 +1,52 @@
+{
+  "validated_needs": [
+    {
+      "id": "need_1",
+      "theme": "Automatisation de la gestion documentaire",
+      "quotes": [
+        "Gagner du temps dans la création de documents (flow charts, plaquettes marketing)",
+        "Réduction des erreurs manuelles",
+        "Automatiser la mise à jour des documents techniques lorsque des modifications sont apportées"
+      ]
+    },
+    {
+      "id": "need_2",
+      "theme": "Amélioration de la productivité opérationnelle",
+      "quotes": [
+        "Gain de temps significatif sur le contrôle de conformité des produits",
+        "Pour moi, c'est vraiment le point qui pourrait nous faire gagner énormément de temps.",
+        "Ça nous fait gagner 50 % de performance en plus..."
+      ]
+    },
+    {
+      "id": "need_3",
+      "theme": "Optimisation de la gestion des approvisionnements",
+      "quotes": [
+        "Commande automatique de composants",
+        "Analyse des stocks pour anticiper les besoins",
+        "Réduction du temps consacré à la gestion des commandes"
+      ]
+    },
+    {
+      "id": "need_4",
+      "theme": "Sécurisation des données et systèmes",
+      "quotes": [
+        "Pas de cartographie existante des données et systèmes",
+        "Absence d'outil de concentration des données",
+        "On n'a pas d'outil qui vient récupérer tout ça et organiser tout ça."
+      ]
+    },
+    {
+      "id": "need_5",
+      "theme": "Collaboration inter-départementale",
+      "quotes": [
+        "Collaborer efficacement avec différents départements pour la création des dossiers de conformité",
+        "Besoin d'améliorer la collaboration entre les départements",
+        "On veut cartographier ça."
+      ]
+    }
+  ],
+  "rejected_needs": [],
+  "user_feedback": "Tous les besoins identifiés sont validés et correspondent bien aux enjeux de l'entreprise. Nous pouvons passer à l'analyse des cas d'usage."
+}
+
