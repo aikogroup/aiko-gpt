@@ -197,7 +197,6 @@ def send_use_case_validation_feedback_api_call(validated_qw: List[Dict], validat
 
 def main():
     st.title("🤖 AIKO - Analyse des Besoins IA")
-    st.markdown("### Architecture Propre : Streamlit = Interface, API LangGraph = Logique")
     
     init_session_state()
     
@@ -213,10 +212,10 @@ def main():
         st.info("💡 Lancez l'API avec : `uv run python api/start_api.py`")
         return
     
-    st.success(f"✅ API connectée : {API_URL}")
-    
     # Si le workflow n'est pas démarré, afficher l'interface d'upload
     if not st.session_state.thread_id or st.session_state.workflow_status is None:
+        # Afficher le statut de l'API uniquement sur la première page
+        st.success("✅ API connectée")
         display_upload_interface()
     else:
         # Workflow en cours, afficher le statut
@@ -227,26 +226,31 @@ def display_upload_interface():
     
     st.markdown("---")
     
-    # Zone 1 : Upload fichiers Excel
-    st.header("📝 Zone 1 : Ateliers (Fichiers Excel)")
-    excel_files = st.file_uploader(
-        "Uploadez vos fichiers d'ateliers",
-        type=["xlsx"],
-        accept_multiple_files=True,
-        key="excel_uploader"
-    )
+    # Upload des fichiers en deux colonnes côte à côte
+    col1, col2 = st.columns(2)
     
-    # Zone 2 : Upload fichiers de transcription (PDF ou JSON)
-    st.header("📄 Zone 2 : Transcriptions (Fichiers PDF ou JSON)")
-    pdf_files = st.file_uploader(
-        "Uploadez vos transcriptions",
-        type=["pdf", "json"],
-        accept_multiple_files=True,
-        key="pdf_uploader"
-    )
+    with col1:
+        # Zone 1 : Upload fichiers Excel
+        st.header("📝 Ateliers (Fichiers Excel)")
+        excel_files = st.file_uploader(
+            "Uploadez vos fichiers d'ateliers",
+            type=["xlsx"],
+            accept_multiple_files=True,
+            key="excel_uploader"
+        )
+    
+    with col2:
+        # Zone 2 : Upload fichiers de transcription (PDF ou JSON)
+        st.header("📄 Transcriptions (Fichiers PDF ou JSON)")
+        pdf_files = st.file_uploader(
+            "Uploadez vos transcriptions",
+            type=["pdf", "json"],
+            accept_multiple_files=True,
+            key="pdf_uploader"
+        )
     
     # Zone 3 : Nom de l'entreprise
-    st.header("🏢 Zone 3 : Informations Entreprise")
+    st.header("🏢 Informations Entreprise")
     company_name = st.text_input(
         "Nom de l'entreprise",
         placeholder="Ex: Cousin Surgery"
@@ -376,21 +380,7 @@ def display_needs_validation_interface():
     
     st.markdown("---")
     
-    # CSS pour améliorer la séparation visuelle
-    st.markdown("""
-        <style>
-        .need-container {
-            border: 2px solid #e0e0e0;
-            border-radius: 8px;
-            padding: 20px;
-            margin-bottom: 5px;
-            background-color: #fafafa;
-            min-height: 200px;
-        }
-        </style>
-    """, unsafe_allow_html=True)
-    
-    # Afficher chaque besoin avec un checkbox (SANS expander, 2 colonnes)
+    # Afficher chaque besoin avec un checkbox (2 colonnes avec lignes de séparation)
     validated_needs = []
     rejected_needs = []
     
@@ -402,7 +392,6 @@ def display_needs_validation_interface():
         with col1:
             if i < len(identified_needs):
                 need = identified_needs[i]
-                st.markdown('<div class="need-container">', unsafe_allow_html=True)
                 st.markdown(f"#### {need.get('theme', 'N/A')}")
                 
                 quotes = need.get('quotes', [])
@@ -418,7 +407,6 @@ def display_needs_validation_interface():
                     key=f"validate_need_{i}_{iteration_count}",  # Clé unique par itération
                     value=False
                 )
-                st.markdown('</div>', unsafe_allow_html=True)
                 
                 if validated:
                     validated_needs.append(need)
@@ -429,7 +417,6 @@ def display_needs_validation_interface():
         with col2:
             if i + 1 < len(identified_needs):
                 need = identified_needs[i + 1]
-                st.markdown('<div class="need-container">', unsafe_allow_html=True)
                 st.markdown(f"#### {need.get('theme', 'N/A')}")
                 
                 quotes = need.get('quotes', [])
@@ -445,12 +432,14 @@ def display_needs_validation_interface():
                     key=f"validate_need_{i+1}_{iteration_count}",  # Clé unique par itération
                     value=False
                 )
-                st.markdown('</div>', unsafe_allow_html=True)
                 
                 if validated:
                     validated_needs.append(need)
                 else:
                     rejected_needs.append(need)
+        
+        # Ligne de séparation fine après chaque paire de besoins
+        st.markdown("---")
     
     # Zone de feedback
     user_feedback = st.text_area(
@@ -465,8 +454,7 @@ def display_needs_validation_interface():
         # Messages d'attente pour la validation
         validation_messages = [
             "📤 Envoi de votre validation...",
-            "🤖 L'IA analyse vos retours...",
-            "🔄 Génération de nouveaux besoins...",
+            "🤖 Analyse vos retours...",
             "⚙️ Traitement en cours..."
         ]
         
@@ -535,20 +523,6 @@ def display_use_cases_validation_interface():
     
     st.markdown("---")
     
-    # CSS pour améliorer la séparation visuelle
-    st.markdown("""
-        <style>
-        .usecase-container {
-            border: 2px solid #e0e0e0;
-            border-radius: 8px;
-            padding: 20px;
-            margin-bottom: 5px;
-            background-color: #fafafa;
-            min-height: 250px;
-        }
-        </style>
-    """, unsafe_allow_html=True)
-    
     # Quick Wins - 2 colonnes côte à côte
     st.subheader("Quick Wins - Automatisation & assistance intelligente")
     st.caption("Solutions à faible complexité technique, mise en œuvre rapide (< 3 mois), ROI immédiat")
@@ -562,7 +536,6 @@ def display_use_cases_validation_interface():
         with col1:
             if i < len(proposed_qw):
                 uc = proposed_qw[i]
-                st.markdown('<div class="usecase-container">', unsafe_allow_html=True)
                 st.markdown(f"#### {uc.get('titre', 'N/A')}")
                 st.markdown(f"**IA utilisée :** {uc.get('ia_utilisee', 'N/A')}")
                 st.markdown(f"**Description :** {uc.get('description', 'N/A')}")
@@ -572,7 +545,6 @@ def display_use_cases_validation_interface():
                     key=f"validate_qw_{i}_{use_case_iteration}",
                     value=False
                 )
-                st.markdown('</div>', unsafe_allow_html=True)
                 
                 if validated:
                     validated_qw.append(uc)
@@ -583,7 +555,6 @@ def display_use_cases_validation_interface():
         with col2:
             if i + 1 < len(proposed_qw):
                 uc = proposed_qw[i + 1]
-                st.markdown('<div class="usecase-container">', unsafe_allow_html=True)
                 st.markdown(f"#### {uc.get('titre', 'N/A')}")
                 st.markdown(f"**IA utilisée :** {uc.get('ia_utilisee', 'N/A')}")
                 st.markdown(f"**Description :** {uc.get('description', 'N/A')}")
@@ -593,15 +564,17 @@ def display_use_cases_validation_interface():
                     key=f"validate_qw_{i+1}_{use_case_iteration}",
                     value=False
                 )
-                st.markdown('</div>', unsafe_allow_html=True)
                 
                 if validated:
                     validated_qw.append(uc)
                 else:
                     rejected_qw.append(uc)
-    
+        
+        # Ligne de séparation fine après chaque paire de Quick Wins
+        st.markdown("---")
+        st.markdown("##")
     # Structuration IA - 2 colonnes côte à côte
-    st.subheader("Structuration IA à moyen et long terme - Scalabilité & qualité prédictive")
+    st.subheader("🔬 Structuration IA à moyen et long terme")
     st.caption("Solutions à complexité moyenne/élevée, mise en œuvre progressive (3-12 mois), ROI moyen/long terme")
     validated_sia = []
     rejected_sia = []
@@ -613,7 +586,6 @@ def display_use_cases_validation_interface():
         with col1:
             if i < len(proposed_sia):
                 uc = proposed_sia[i]
-                st.markdown('<div class="usecase-container">', unsafe_allow_html=True)
                 st.markdown(f"#### {uc.get('titre', 'N/A')}")
                 st.markdown(f"**IA utilisée :** {uc.get('ia_utilisee', 'N/A')}")
                 st.markdown(f"**Description :** {uc.get('description', 'N/A')}")
@@ -623,7 +595,6 @@ def display_use_cases_validation_interface():
                     key=f"validate_sia_{i}_{use_case_iteration}",
                     value=False
                 )
-                st.markdown('</div>', unsafe_allow_html=True)
                 
                 if validated:
                     validated_sia.append(uc)
@@ -634,7 +605,6 @@ def display_use_cases_validation_interface():
         with col2:
             if i + 1 < len(proposed_sia):
                 uc = proposed_sia[i + 1]
-                st.markdown('<div class="usecase-container">', unsafe_allow_html=True)
                 st.markdown(f"#### {uc.get('titre', 'N/A')}")
                 st.markdown(f"**IA utilisée :** {uc.get('ia_utilisee', 'N/A')}")
                 st.markdown(f"**Description :** {uc.get('description', 'N/A')}")
@@ -644,12 +614,14 @@ def display_use_cases_validation_interface():
                     key=f"validate_sia_{i+1}_{use_case_iteration}",
                     value=False
                 )
-                st.markdown('</div>', unsafe_allow_html=True)
                 
                 if validated:
                     validated_sia.append(uc)
                 else:
                     rejected_sia.append(uc)
+        
+        # Ligne de séparation fine après chaque paire de Structuration IA
+        st.markdown("---")
     
     # Zone de feedback
     user_feedback = st.text_area(

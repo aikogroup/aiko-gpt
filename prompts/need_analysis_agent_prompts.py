@@ -24,6 +24,13 @@ Structure attendue :
 - identified_needs : Liste de 8 à 12 besoins, chacun avec un id, un theme UNIQUE et 3 à 5 quotes (citations exactes)
 - summary : Résumé avec total_needs et themes (liste SANS DOUBLONS)
 
+⚠️ FORMAT STRICT DES CITATIONS :
+- Ne jamais inclure de source à la fin des citations (pas de "- Transcript", "- Atelier Workshop", ni de nom de personne)
+- Les citations doivent contenir UNIQUEMENT le texte brut sans aucune indication de source
+- Exemple CORRECT : "Gagner du temps sur la gestion des stocks"
+- Exemple INCORRECT : "Gagner du temps sur la gestion des stocks - Franck PELLETIER"
+- Exemple INCORRECT : "Gagner du temps sur la gestion des stocks - Transcript"
+
 Exemple de structure de sortie basé sur les données de Cousin Surgery :
 
 LES BESOINS IDENTIFIÉS DE COUSIN SURGERY
@@ -88,8 +95,9 @@ INSTRUCTIONS D'ANALYSE :
 4. Chaque besoin DOIT avoir des citations textuelles provenant des workshops ou transcripts
 5. Privilégie les verbatims et citations directes des collaborateurs
 6. ⚠️ VÉRIFIE L'UNICITÉ DES THÈMES : Chaque thème ne doit apparaître QU'UNE SEULE FOIS dans ta liste de besoins
+7. ⚠️ FORMAT STRICT : Les citations doivent contenir UNIQUEMENT le texte, SANS mention de source (pas de "- Transcript", "- Nom de personne", etc.)
 
-Identifie environ 10 besoins métier distincts, organisés par thématiques UNIQUES (sans doublons de thèmes), avec 3 à 5 citations CONCRÈTES issues des ATELIERS et ENTRETIENS pour chaque besoin.
+Identifie environ 10 besoins métier distincts, organisés par thématiques UNIQUES (sans doublons de thèmes), avec 3 à 5 citations CONCRÈTES issues des ATELIERS et ENTRETIENS pour chaque besoin. Les citations doivent être du texte pur, sans indication de source.
 """
 
 HUMAN_VALIDATION_PROMPT = """
@@ -142,9 +150,10 @@ INSTRUCTIONS POUR LA NOUVELLE ITÉRATION :
 7. TOUTES les citations doivent venir des workshops (use_cases, objectives) ou transcripts (citations_cles, besoins_exprimes)
 8. IGNORER les informations génériques du web (acquisitions, stratégie, conformité)
 9. ⚠️ VÉRIFIE L'UNICITÉ DES THÈMES : Assure-toi qu'aucun thème n'est utilisé deux fois dans ta proposition
+10. ⚠️ FORMAT STRICT : Les citations doivent contenir UNIQUEMENT le texte, SANS mention de source (pas de "- Transcript", "- Nom de personne", etc.)
 
 Itération actuelle : {current_iteration} / {max_iterations}
 
-Génère de nouveaux besoins avec 3 à 5 citations CONCRÈTES issues des WORKSHOPS et TRANSCRIPTS uniquement pour chaque besoin identifié. VÉRIFIE que chaque thème est UNIQUE.
+Génère de nouveaux besoins avec 3 à 5 citations CONCRÈTES issues des WORKSHOPS et TRANSCRIPTS uniquement pour chaque besoin identifié. VÉRIFIE que chaque thème est UNIQUE. Les citations doivent être du texte pur, sans indication de source.
 """
 

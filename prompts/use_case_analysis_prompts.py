@@ -117,8 +117,12 @@ INSTRUCTIONS POUR LA NOUVELLE ITÉRATION :
 8. Utilise les données workshops et transcripts pour contextualiser avec des détails techniques/métier concrets
 9. ⚠️ VÉRIFIE L'UNICITÉ DES THÈMES : Assure-toi qu'aucun titre/thème de cas d'usage n'est utilisé deux fois
 
+⚠️ RÈGLE CRITIQUE - GÉNÉRATION INTELLIGENTE :
+- Si Quick Wins validés >= 5 : NE GÉNÈRE AUCUN nouveau Quick Win (retourne une liste vide [])
+- Si Structuration IA validés >= 5 : NE GÉNÈRE AUCUNE nouvelle Structuration IA (retourne une liste vide [])
+
 Itération actuelle : {current_iteration} / {max_iterations}
 
-Génère de nouveaux cas d'usage en respectant la structure attendue, en évitant de reproduire les erreurs précédentes. VÉRIFIE que tous les titres/thèmes sont UNIQUES.
+Génère UNIQUEMENT les cas d'usage manquants pour atteindre 5 dans chaque catégorie. VÉRIFIE que tous les titres/thèmes sont UNIQUES.
 """
 
