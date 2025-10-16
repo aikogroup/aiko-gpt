@@ -10,6 +10,8 @@ import os
 from pathlib import Path
 import sys
 from dotenv import load_dotenv
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 
 # Charger les variables d'environnement
 load_dotenv()
@@ -260,41 +262,44 @@ def display_upload_interface():
                 )
                 st.session_state.excel_files_uploaded = excel_uploaded
     
-    # Zone 2: Upload des fichiers PDF
+    # Zone 2: Upload des fichiers de transcriptions (PDF ou JSON)
     with zone2_col:
         with st.container():
-            st.subheader("📄 Zone 2: Fichiers PDF des Transcriptions")
+            st.subheader("📄 Zone 2: Fichiers des Transcriptions")
             
             col1, col2 = st.columns([3, 1])
             
             with col1:
                 uploaded_pdfs = st.file_uploader(
-                    "Choisissez un ou plusieurs fichiers PDF",
-                    type=['pdf'],
+                    "Choisissez un ou plusieurs fichiers de transcription",
+                    type=['pdf', 'json'],
                     accept_multiple_files=True,
-                    help="Sélectionnez plusieurs fichiers PDF de transcriptions",
+                    help="Sélectionnez plusieurs fichiers de transcriptions (PDF ou JSON)",
                     key="pdf_upload"
                 )
                 
                 if uploaded_pdfs:
                     st.success(f"✅ {len(uploaded_pdfs)} fichier(s) sélectionné(s)")
                     for file in uploaded_pdfs:
-                        st.info(f"📄 {file.name} ({file.size} bytes)")
+                        file_icon = "📄" if file.name.endswith('.pdf') else "📋"
+                        st.info(f"{file_icon} {file.name} ({file.size} bytes)")
                     
                     # Sauvegarder les fichiers temporairement
                     temp_files = []
                     for uploaded_file in uploaded_pdfs:
-                        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
+                        # Déterminer l'extension du fichier
+                        file_suffix = '.pdf' if uploaded_file.name.endswith('.pdf') else '.json'
+                        with tempfile.NamedTemporaryFile(delete=False, suffix=file_suffix) as tmp_file:
                             tmp_file.write(uploaded_file.getvalue())
                             temp_files.append(tmp_file.name)
                     st.session_state.pdf_files_paths = temp_files
                 else:
-                    st.warning("⚠️ Veuillez sélectionner un ou plusieurs fichiers PDF")
+                    st.warning("⚠️ Veuillez sélectionner un ou plusieurs fichiers de transcription")
             
             with col2:
                 st.markdown("**Confirmation:**")
                 pdf_uploaded = st.checkbox(
-                    "J'ai uploadé tous les fichiers PDF",
+                    "J'ai uploadé tous les fichiers",
                     value=st.session_state.pdf_files_uploaded,
                     key="pdf_checkbox"
                 )
@@ -375,38 +380,131 @@ def display_start_button():
     else:
         st.info("👆 Veuillez compléter toutes les zones ci-dessus pour débloquer le bouton de démarrage")
 
+async def run_agents_in_parallel():
+    """
+    Exécute les 3 agents EN PARALLÈLE pour gagner du temps.
+    Gain attendu : ~50% plus rapide
+    """
+    import time
+    start_time = time.time()
+    
+    async def run_workshop_agent():
+        """Workshop Agent en parallèle"""
+        if hasattr(st.session_state, 'excel_file_path'):
+            print(f"📝 [PARALLÈLE-1/3] Workshop Agent - DÉBUT")
+            agent = WorkshopAgent()
+            workshop_results = agent.process_workshop_file(st.session_state.excel_file_path)
+            print(f"✅ [PARALLÈLE-1/3] Workshop Agent - FIN")
+            
+            # Nettoyer le fichier temporaire
+            os.unlink(st.session_state.excel_file_path)
+            return workshop_results
+        return None
+    
+    async def run_transcript_agent():
+        """Transcript Agent en parallèle"""
+        if hasattr(st.session_state, 'pdf_files_paths'):
+            print(f"📄 [PARALLÈLE-2/3] Transcript Agent - DÉBUT")
+            agent = TranscriptAgent()
+            transcript_results = agent.process_multiple_pdfs(st.session_state.pdf_files_paths)
+            print(f"✅ [PARALLÈLE-2/3] Transcript Agent - FIN")
+            
+            # Nettoyer les fichiers temporaires
+            for temp_file in st.session_state.pdf_files_paths:
+                os.unlink(temp_file)
+            return transcript_results
+        return None
+    
+    async def run_web_search_agent():
+        """Web Search Agent en parallèle"""
+        if st.session_state.company_name:
+            print(f"🌐 [PARALLÈLE-3/3] Web Search Agent - DÉBUT")
+            agent = WebSearchAgent()
+            web_search_results = agent.search_company_info(st.session_state.company_name)
+            print(f"✅ [PARALLÈLE-3/3] Web Search Agent - FIN")
+            return web_search_results
+        return None
+    
+    # Exécuter les 3 agents EN PARALLÈLE avec asyncio.gather
+    print(f"🚀 [PARALLÉLISATION] Démarrage des 3 agents en parallèle...")
+    workshop_results, transcript_results, web_search_results = await asyncio.gather(
+        asyncio.to_thread(lambda: run_workshop_agent().__await__().__next__()),
+        asyncio.to_thread(lambda: run_transcript_agent().__await__().__next__()),
+        asyncio.to_thread(lambda: run_web_search_agent().__await__().__next__())
+    )
+    
+    duration = time.time() - start_time
+    print(f"⚡ [PARALLÉLISATION] Les 3 agents ont terminé en {duration:.2f}s")
+    
+    return workshop_results, transcript_results, web_search_results
+
 def start_workflow():
-    """Démarre le workflow d'analyse des besoins"""
+    """Démarre le workflow d'analyse des besoins avec PARALLÉLISATION"""
     
     st.session_state.workflow_started = True
     
     # Afficher un spinner pendant le traitement
-    with st.spinner("🔄 Analyse des besoins en cours..."):
+    with st.spinner("🔄 Analyse des besoins en cours... (agents en parallèle)"):
         try:
-            # Traitement des fichiers Excel
-            if hasattr(st.session_state, 'excel_file_path'):
-                agent = WorkshopAgent()
-                workshop_results = agent.process_workshop_file(st.session_state.excel_file_path)
-                st.session_state.workshop_results = workshop_results
-                
-                # Nettoyer le fichier temporaire
-                os.unlink(st.session_state.excel_file_path)
+            # NOUVEAU: Exécuter les 3 agents EN PARALLÈLE
+            print(f"\n🚀 [PARALLÉLISATION] Lancement des agents en parallèle...")
             
-            # Traitement des fichiers PDF
-            if hasattr(st.session_state, 'pdf_files_paths'):
-                agent = TranscriptAgent()
-                transcript_results = agent.process_multiple_pdfs(st.session_state.pdf_files_paths)
-                st.session_state.transcript_results = transcript_results
-                
-                # Nettoyer les fichiers temporaires
-                for temp_file in st.session_state.pdf_files_paths:
-                    os.unlink(temp_file)
+            # Créer et exécuter les tâches parallèles
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
             
-            # Recherche web
-            if st.session_state.company_name:
-                agent = WebSearchAgent()
-                web_search_results = agent.search_company_info(st.session_state.company_name)
-                st.session_state.web_search_results = web_search_results
+            try:
+                # Exécution parallèle simplifiée avec ThreadPoolExecutor
+                with ThreadPoolExecutor(max_workers=3) as executor:
+                    futures = []
+                    
+                    # Workshop Agent
+                    if hasattr(st.session_state, 'excel_file_path'):
+                        def process_workshop():
+                            print(f"📝 [PARALLÈLE-1/3] Workshop Agent - DÉBUT")
+                            agent = WorkshopAgent()
+                            results = agent.process_workshop_file(st.session_state.excel_file_path)
+                            os.unlink(st.session_state.excel_file_path)
+                            print(f"✅ [PARALLÈLE-1/3] Workshop Agent - FIN")
+                            return ('workshop', results)
+                        futures.append(executor.submit(process_workshop))
+                    
+                    # Transcript Agent
+                    if hasattr(st.session_state, 'pdf_files_paths'):
+                        def process_transcripts():
+                            print(f"📄 [PARALLÈLE-2/3] Transcript Agent - DÉBUT")
+                            agent = TranscriptAgent()
+                            results = agent.process_multiple_pdfs(st.session_state.pdf_files_paths)
+                            for temp_file in st.session_state.pdf_files_paths:
+                                os.unlink(temp_file)
+                            print(f"✅ [PARALLÈLE-2/3] Transcript Agent - FIN")
+                            return ('transcript', results)
+                        futures.append(executor.submit(process_transcripts))
+                    
+                    # Web Search Agent
+                    if st.session_state.company_name:
+                        def process_web_search():
+                            print(f"🌐 [PARALLÈLE-3/3] Web Search Agent - DÉBUT")
+                            agent = WebSearchAgent()
+                            results = agent.search_company_info(st.session_state.company_name)
+                            print(f"✅ [PARALLÈLE-3/3] Web Search Agent - FIN")
+                            return ('web_search', results)
+                        futures.append(executor.submit(process_web_search))
+                    
+                    # Attendre que tous les agents aient terminé
+                    print(f"⏳ [CONVERGENCE] Attente de la fin des {len(futures)} agents...")
+                    for future in futures:
+                        agent_type, results = future.result()
+                        if agent_type == 'workshop':
+                            st.session_state.workshop_results = results
+                        elif agent_type == 'transcript':
+                            st.session_state.transcript_results = results
+                        elif agent_type == 'web_search':
+                            st.session_state.web_search_results = results
+                    
+                    print(f"🎯 [CONVERGENCE] Tous les agents ont terminé avec succès!")
+            finally:
+                loop.close()
             
             # Lancement du workflow d'analyse
             run_need_analysis_workflow()
@@ -590,36 +688,37 @@ def process_workshop_phase():
         st.dataframe(example_df, width='stretch')
 
 def process_transcript_phase():
-    """Phase 2: Traitement des transcriptions PDF"""
+    """Phase 2: Traitement des transcriptions (PDF ou JSON)"""
     
     # Sidebar pour l'upload multiple
     with st.sidebar:
-        st.header("📁 Upload de fichiers PDF")
+        st.header("📁 Upload de fichiers de transcription")
         uploaded_files = st.file_uploader(
-            "Choisissez un ou plusieurs fichiers PDF",
-            type=['pdf'],
+            "Choisissez un ou plusieurs fichiers de transcription",
+            type=['pdf', 'json'],
             accept_multiple_files=True,
-            help="Sélectionnez plusieurs fichiers PDF de transcriptions",
+            help="Sélectionnez plusieurs fichiers de transcriptions (PDF ou JSON)",
             key="transcript_upload"
         )
         
         if uploaded_files:
             st.success(f"✅ {len(uploaded_files)} fichier(s) sélectionné(s)")
             for file in uploaded_files:
-                st.info(f"📄 {file.name} ({file.size} bytes)")
+                file_icon = "📄" if file.name.endswith('.pdf') else "📋"
+                st.info(f"{file_icon} {file.name} ({file.size} bytes)")
         else:
-            st.warning("⚠️ Veuillez sélectionner un ou plusieurs fichiers PDF")
+            st.warning("⚠️ Veuillez sélectionner un ou plusieurs fichiers de transcription")
     
     # Zone principale
     if uploaded_files:
         # Bouton de traitement
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
-            if st.button("🚀 Traiter les PDFs", type="primary", width='stretch', key="transcript_process"):
+            if st.button("🚀 Traiter les fichiers", type="primary", width='stretch', key="transcript_process"):
                 process_transcript_files(uploaded_files)
     else:
         # Instructions d'utilisation
-        st.info("👆 Veuillez sélectionner un ou plusieurs fichiers PDF dans la sidebar pour commencer")
+        st.info("👆 Veuillez sélectionner un ou plusieurs fichiers de transcription dans la sidebar pour commencer")
         
         # Description du traitement
         st.subheader("📋 Traitement des transcriptions PDF")
@@ -665,15 +764,17 @@ def process_workshop_file(uploaded_file):
             st.exception(e)
 
 def process_transcript_files(uploaded_files):
-    """Traite les fichiers PDF uploadés avec TranscriptAgent"""
+    """Traite les fichiers de transcription uploadés (PDF ou JSON) avec TranscriptAgent"""
     
     # Afficher un spinner pendant le traitement
-    with st.spinner("🔄 Traitement des PDFs en cours..."):
+    with st.spinner("🔄 Traitement des fichiers en cours..."):
         try:
             # Sauvegarder les fichiers temporairement
             temp_files = []
             for uploaded_file in uploaded_files:
-                with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
+                # Déterminer l'extension du fichier
+                file_suffix = '.pdf' if uploaded_file.name.endswith('.pdf') else '.json'
+                with tempfile.NamedTemporaryFile(delete=False, suffix=file_suffix) as tmp_file:
                     tmp_file.write(uploaded_file.getvalue())
                     temp_files.append(tmp_file.name)
             
@@ -1501,7 +1602,6 @@ def display_need_analysis_results(results):
         with col2:
             st.write("**Statistiques:**")
             st.write(f"- Total besoins: {summary.get('total_needs', 0)}")
-            st.write(f"- Priorité élevée: {summary.get('high_priority_count', 0)}")
     
     # Bouton de téléchargement
     st.markdown("---")
