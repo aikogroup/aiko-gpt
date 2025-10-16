@@ -1,13 +1,18 @@
 """
-Web Search Agent - Collecte d'informations sur les entreprises via Tavily
+Web Search Agent - Collecte d'informations sur les entreprises via Perplexity Sonar
 """
 
 import os
+import sys
 import json
 from typing import Dict, Any
 from dotenv import load_dotenv
-from tavily import TavilyClient
+from perplexity import Perplexity
 from openai import OpenAI
+
+# Ajouter le répertoire parent au PYTHONPATH pour les imports
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from models.web_search_models import CompanyInfo
 
 # Charger les variables d'environnement
@@ -20,16 +25,17 @@ class WebSearchAgent:
     """
     
     def __init__(self):
-        """Initialise l'agent avec les clés API Tavily et OpenAI"""
-        self.tavily_api_key = os.getenv("TAVILY_API_KEY")
+        """Initialise l'agent avec les clés API Perplexity et OpenAI"""
+        self.perplexity_api_key = os.getenv("PERPLEXITY_API_KEY")
         self.openai_api_key = os.getenv("OPENAI_API_KEY")
         
-        if not self.tavily_api_key:
-            raise ValueError("TAVILY_API_KEY non trouvée dans les variables d'environnement")
+        if not self.perplexity_api_key:
+            raise ValueError("PERPLEXITY_API_KEY non trouvée dans les variables d'environnement")
         if not self.openai_api_key:
             raise ValueError("OPENAI_API_KEY non trouvée dans les variables d'environnement")
         
-        self.tavily_client = TavilyClient(api_key=self.tavily_api_key)
+        # Initialiser le client Perplexity
+        self.perplexity_client = Perplexity(api_key=self.perplexity_api_key)
         self.openai_client = OpenAI(api_key=self.openai_api_key)
         self.model = os.getenv('OPENAI_MODEL', 'gpt-5-nano')
     
@@ -44,74 +50,64 @@ class WebSearchAgent:
             Dict[str, Any]: Informations structurées sur l'entreprise
         """
         try:
-            # Recherche générale
-            general_query = f"Informations sur l'entreprise {company_name}"
-            general_results = self.tavily_client.search(
-                query=general_query,
-                search_depth="advanced",
-                max_results=5
+            # Recherche avec Perplexity Sonar - une seule requête complète
+            search_query = f"""Recherche des informations détaillées sur l'entreprise {company_name}:
+- Nom complet officiel de l'entreprise
+- Secteur d'activité principal
+- Nombre d'employés (approximatif)
+- Chiffre d'affaires (le plus récent disponible)
+- Description de l'activité de l'entreprise
+
+Fournis des informations précises et vérifiables."""
+            
+            print(f"🔍 Recherche pour: {company_name}")
+            
+            perplexity_response = self.perplexity_client.chat.completions.create(
+                model="sonar",
+                messages=[
+                    {"role": "system", "content": "Tu es un assistant de recherche spécialisé dans l'analyse d'entreprises. Tu fournis des informations précises, factuelles et vérifiables."},
+                    {"role": "user", "content": search_query}
+                ]
             )
             
-            # Recherche spécifique
-            search_query = f"Informations sur l'entreprise {company_name} : secteur, chiffre d'affaires, nombre d'employés"
-            specific_results = self.tavily_client.search(
-                query=search_query,
-                search_depth="advanced", 
-                max_results=5
-            )
-
-            print(f"Résultats recherche générale: {general_results}")
-            print(f"Résultats recherche spécifique: {specific_results}")
+            search_results = perplexity_response.choices[0].message.content
+            
+            print(f"📊 Résultats Perplexity:\n{search_results}")
             
             # Traitement et structuration des résultats avec LLM
             company_info = self._process_search_results(
                 company_name, 
-                general_results, 
-                specific_results
+                search_results
             )
             
             return company_info
             
         except Exception as e:
             print(f"Erreur lors de la recherche pour {company_name}: {str(e)}")
+            import traceback
+            traceback.print_exc()
             return self._get_default_info(company_name)
     
     def _process_search_results(
         self, 
         company_name: str, 
-        general_results: Dict, 
-        specific_results: Dict
+        search_results: str
     ) -> Dict[str, Any]:
         """
         Traite et structure les résultats de recherche avec LLM structured output
         
         Args:
             company_name (str): Nom de l'entreprise
-            general_results (Dict): Résultats de recherche générale
-            specific_results (Dict): Résultats de recherche spécifique (secteur, CA, employés)
+            search_results (str): Résultats de recherche de Perplexity Sonar
             
         Returns:
             Dict[str, Any]: Informations structurées
         """
         try:
-            # Formatage des résultats en texte pour le prompt
-            general_content = "\n".join([
-                f"- {r.get('title', '')}: {r.get('content', '')}"
-                for r in general_results.get("results", [])
-            ])
-            
-            specific_content = "\n".join([
-                f"- {r.get('title', '')}: {r.get('content', '')}"
-                for r in specific_results.get("results", [])
-            ])
-            
             prompt = f"""Analyse les résultats de recherche suivants pour l'entreprise "{company_name}" et extrait les informations structurées.
 
-INFORMATIONS GÉNÉRALES:
-{general_content}
-
-INFORMATIONS SPÉCIFIQUES (SECTEUR, CHIFFRE D'AFFAIRES, EMPLOYÉS):
-{specific_content}
+RÉSULTATS DE RECHERCHE PERPLEXITY:
+{search_results}
 
 Extrait et structure les informations suivantes:
 - Nom complet de l'entreprise

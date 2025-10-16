@@ -23,12 +23,12 @@ dependencies = [
     { name = "openpyxl" },
     { name = "pandas" },
     { name = "pdfplumber" },
+    { name = "perplexityai" },
     { name = "pydantic" },
     { name = "python-docx" },
     { name = "python-dotenv" },
     { name = "python-multipart" },
     { name = "streamlit" },
-    { name = "tavily-python" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
@@ -52,12 +52,12 @@ requires-dist = [
     { name = "openpyxl", specifier = ">=3.1.0" },
     { name = "pandas", specifier = ">=2.0.0" },
     { name = "pdfplumber", specifier = ">=0.10.0" },
+    { name = "perplexityai", specifier = ">=0.16.0" },
     { name = "pydantic", specifier = ">=2.0.0" },
     { name = "python-docx", specifier = ">=1.0.0" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "python-multipart", specifier = ">=0.0.6" },
     { name = "streamlit", specifier = ">=1.28.0" },
-    { name = "tavily-python", specifier = ">=0.7.12" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.27.0" },
 ]
 
@@ -2241,6 +2241,23 @@ wheels = [
 ]
 
 [[package]]
+name = "perplexityai"
+version = "0.16.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "anyio" },
+    { name = "distro" },
+    { name = "httpx" },
+    { name = "pydantic" },
+    { name = "sniffio" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/81/38/6ad733ba10936ef8840b94fc0604a2ffcdbe7176a544661f67582a37a40d/perplexityai-0.16.1.tar.gz", hash = "sha256:385bc23cd00a4f8f86ff0c7957113f53eaa6f5a8945d25dc7763afe7b0fc1ffa", size = 111268, upload-time = "2025-10-15T15:23:49.226Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/63/52/77750ab1564ee8b0445a8787d0a01e4b4c9654dd9387de5c413ebac59791/perplexityai-0.16.1-py3-none-any.whl", hash = "sha256:a0412feeb97ae263e5c2e37656faf9b79c7e2abf7a77011e398799874d0727a2", size = 97215, upload-time = "2025-10-15T15:23:48.118Z" },
+]
+
+[[package]]
 name = "pillow"
 version = "11.3.0"
 source = { registry = "https://pypi.org/simple" }
@@ -3299,20 +3316,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/79/b9/6e672db4fec07349e7a8a8172c1a6ae235c58679ca29c3f86a61b5e59ff3/structlog-25.4.0.tar.gz", hash = "sha256:186cd1b0a8ae762e29417095664adf1d6a31702160a46dacb7796ea82f7409e4", size = 1369138, upload-time = "2025-06-02T08:21:12.971Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a0/4a/97ee6973e3a73c74c8120d59829c3861ea52210667ec3e7a16045c62b64d/structlog-25.4.0-py3-none-any.whl", hash = "sha256:fe809ff5c27e557d14e613f45ca441aabda051d119ee5a0102aaba6ce40eed2c", size = 68720, upload-time = "2025-06-02T08:21:11.43Z" },
-]
-
-[[package]]
-name = "tavily-python"
-version = "0.7.12"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "httpx" },
-    { name = "requests" },
-    { name = "tiktoken" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/3e/42/ce2329635b844dda548110a5dfa0ab5631cdc1085e15c2d68b1850a2d112/tavily_python-0.7.12.tar.gz", hash = "sha256:661945bbc9284cdfbe70fb50de3951fd656bfd72e38e352481d333a36ae91f5a", size = 17282, upload-time = "2025-09-10T17:02:01.281Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/9a/e2/dbc246d9fb24433f77b17d9ee4e750a1e2718432ebde2756589c9154cbad/tavily_python-0.7.12-py3-none-any.whl", hash = "sha256:00d09b9de3ca02ef9a994cf4e7ae43d4ec9d199f0566ba6e52cbfcbd07349bd1", size = 15473, upload-time = "2025-09-10T17:01:59.859Z" },
 ]
 
 [[package]]

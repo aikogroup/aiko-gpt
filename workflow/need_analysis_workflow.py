@@ -706,13 +706,32 @@ class NeedAnalysisWorkflow:
                 if rejected_needs:
                     print(f"🚫 Besoins rejetés à éviter: {len(rejected_needs)}")
             
+            # 💰 OPTIMISATION: Filtrer les quotes des previous_needs et rejected_needs pour économiser les tokens
+            # Les quotes sont déjà dans workshop/transcript, pas besoin de les dupliquer au LLM
+            previous_needs_light = None
+            rejected_needs_light = None
+            
+            if iteration > 1 and previous_needs:
+                previous_needs_light = [
+                    {"id": need.get("id"), "theme": need.get("theme")}
+                    for need in previous_needs
+                ]
+                print(f"💰 [OPTIMISATION] Previous needs allégés: {len(previous_needs)} besoins sans quotes")
+            
+            if iteration > 1 and rejected_needs:
+                rejected_needs_light = [
+                    {"id": need.get("id"), "theme": need.get("theme")}
+                    for need in rejected_needs
+                ]
+                print(f"💰 [OPTIMISATION] Rejected needs allégés: {len(rejected_needs)} besoins sans quotes")
+            
             analysis_result = self.need_analysis_agent.analyze_needs(
                 workshop_data=state["workshop_results"],  # SIMPLIFICATION: utiliser directement workshop_results
                 transcript_data=state["transcript_data"],
                 web_search_data=state["web_search_results"],  # SIMPLIFICATION: utiliser directement web_search_results
                 iteration=iteration,
-                previous_needs=previous_needs if iteration > 1 else None,
-                rejected_needs=rejected_needs if iteration > 1 else None,
+                previous_needs=previous_needs_light,
+                rejected_needs=rejected_needs_light,
                 user_feedback=user_feedback,
                 validated_needs_count=validated_count
             )
@@ -1436,10 +1455,18 @@ class NeedAnalysisWorkflow:
             print(f"🔍 [DEBUG] Données de contexte: {len(workshop_results.get('workshops', []))} workshops, "
                   f"{len(transcript_data)} transcripts, web_search présent={bool(web_search_results)}")
             
+            # 💰 OPTIMISATION: Filtrer les quotes des validated_needs pour économiser les tokens
+            # Les quotes sont déjà dans workshop/transcript, pas besoin de les dupliquer au LLM
+            validated_needs_light = [
+                {"id": need.get("id"), "theme": need.get("theme"), "description": need.get("description", "")}
+                for need in validated_needs
+            ]
+            print(f"💰 [OPTIMISATION] Validated needs allégés: {len(validated_needs)} besoins sans quotes")
+            
             # Appeler l'agent d'analyse des use cases avec les données de contexte
             print(f"🤖 [DEBUG] Appel à l'agent d'analyse des use cases")
             result = self.use_case_analysis_agent.analyze_use_cases(
-                validated_needs=validated_needs,
+                validated_needs=validated_needs_light,
                 workshop_data=workshop_results,
                 transcript_data=transcript_data,
                 web_search_data=web_search_results,
