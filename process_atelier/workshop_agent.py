@@ -10,6 +10,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 from openai import OpenAI
 from dotenv import load_dotenv
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Configuration du logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -109,9 +110,86 @@ class WorkshopAgent:
         
         return workshops
     
+    def _process_single_workshop(self, atelier_name: str, workshop_df: pd.DataFrame, workshop_id: str) -> WorkshopData:
+        """
+        Traite un seul atelier avec le LLM (fonction helper pour la parallélisation)
+        
+        Args:
+            atelier_name: Nom de l'atelier
+            workshop_df: DataFrame des cas d'usage de cet atelier
+            workshop_id: Identifiant unique de l'atelier
+            
+        Returns:
+            WorkshopData structuré
+        """
+        logger.info(f"Traitement de l'atelier: {atelier_name}")
+        
+        # Préparation des données pour le LLM
+        use_cases_text = []
+        for _, row in workshop_df.iterrows():
+            use_case = row['Use_Case']
+            objective = row['Objective']
+            if use_case and use_case.strip():
+                use_cases_text.append(f"- {use_case}: {objective}")
+        
+        # Prompt pour le LLM
+        prompt = f"""
+        Analysez les cas d'usage suivants pour l'atelier "{atelier_name}" et structurez-les de manière cohérente.
+        
+        Cas d'usage identifiés:
+        {chr(10).join(use_cases_text)}
+        
+        Consolidez les cas d'usage en:
+        - Identifiant le thème principal de l'atelier
+        - Regroupant les cas similaires
+        - Éliminant les doublons
+        - Listant les bénéfices pour chaque cas d'usage
+        """
+        
+        try:
+            # Appel à l'API OpenAI Responses avec structured output
+            response = self.client.responses.parse(
+                model=self.model,
+                input=[
+                    {
+                        "role": "user",
+                        "content": f"Vous êtes un expert en analyse de cas d'usage IA. Structurez les données de manière claire et professionnelle.\n\n{prompt}"
+                    }
+                ],
+                text_format=WorkshopAnalysisResponse
+            )
+            
+            # Extraction de la réponse structurée
+            parsed_response = response.output_parsed
+            
+            logger.info(f"Réponse structurée pour {atelier_name}:")
+            logger.info(f"Thème: {parsed_response.theme}")
+            logger.info(f"Nombre de cas d'usage: {len(parsed_response.use_cases)}")
+            
+            # Création de l'objet WorkshopData
+            workshop_result = WorkshopData(
+                workshop_id=workshop_id,
+                theme=parsed_response.theme,
+                use_cases=parsed_response.use_cases
+            )
+            
+            logger.info(f"Atelier {atelier_name} traité avec succès avec structured output")
+            return workshop_result
+            
+        except Exception as e:
+            logger.error(f"Erreur lors du traitement LLM pour {atelier_name}: {e}", exc_info=True)
+            # Fallback: création d'un atelier basique
+            workshop_result = WorkshopData(
+                workshop_id=workshop_id,
+                theme=atelier_name,
+                use_cases=[]
+            )
+            return workshop_result
+    
     def aggregate_use_cases_with_llm(self, workshops: Dict[str, pd.DataFrame]) -> List[WorkshopData]:
         """
         Utilise un LLM pour rassembler et structurer les cas d'usage par atelier
+        PARALLÉLISÉ : Traite tous les ateliers en parallèle pour gagner du temps
         
         Args:
             workshops: Dictionnaire des ateliers groupés
@@ -119,75 +197,36 @@ class WorkshopAgent:
         Returns:
             Liste des données d'ateliers structurées
         """
-        logger.info("Agrégation des cas d'usage avec LLM")
+        logger.info(f"Agrégation des cas d'usage avec LLM (PARALLÉLISÉE pour {len(workshops)} ateliers)")
         
         workshop_results = []
         
-        for atelier_name, workshop_df in workshops.items():
-            logger.info(f"Traitement de l'atelier: {atelier_name}")
+        # 🚀 PARALLÉLISATION : Traiter tous les ateliers en même temps
+        with ThreadPoolExecutor(max_workers=len(workshops)) as executor:
+            # Soumettre tous les ateliers pour traitement parallèle
+            future_to_atelier = {}
+            for idx, (atelier_name, workshop_df) in enumerate(workshops.items(), 1):
+                workshop_id = f"W{idx:03d}"
+                future = executor.submit(self._process_single_workshop, atelier_name, workshop_df, workshop_id)
+                future_to_atelier[future] = atelier_name
             
-            # Préparation des données pour le LLM
-            use_cases_text = []
-            for _, row in workshop_df.iterrows():
-                use_case = row['Use_Case']
-                objective = row['Objective']
-                if use_case and use_case.strip():
-                    use_cases_text.append(f"- {use_case}: {objective}")
-            
-            # Prompt pour le LLM
-            prompt = f"""
-            Analysez les cas d'usage suivants pour l'atelier "{atelier_name}" et structurez-les de manière cohérente.
-            
-            Cas d'usage identifiés:
-            {chr(10).join(use_cases_text)}
-            
-            Consolidez les cas d'usage en:
-            - Identifiant le thème principal de l'atelier
-            - Regroupant les cas similaires
-            - Éliminant les doublons
-            - Listant les bénéfices pour chaque cas d'usage
-            """
-            
-            try:
-                # Appel à l'API OpenAI Responses avec structured output
-                response = self.client.responses.parse(
-                    model=self.model,
-                    input=[
-                        {
-                            "role": "user",
-                            "content": f"Vous êtes un expert en analyse de cas d'usage IA. Structurez les données de manière claire et professionnelle.\n\n{prompt}"
-                        }
-                    ],
-                    text_format=WorkshopAnalysisResponse
-                )
-                
-                # Extraction de la réponse structurée
-                parsed_response = response.output_parsed
-                
-                logger.info(f"Réponse structurée pour {atelier_name}:")
-                logger.info(f"Thème: {parsed_response.theme}")
-                logger.info(f"Nombre de cas d'usage: {len(parsed_response.use_cases)}")
-                
-                # Création de l'objet WorkshopData
-                workshop_result = WorkshopData(
-                    workshop_id=f"W{len(workshop_results) + 1:03d}",
-                    theme=parsed_response.theme,
-                    use_cases=parsed_response.use_cases
-                )
-                
-                workshop_results.append(workshop_result)
-                logger.info(f"Atelier {atelier_name} traité avec succès avec structured output")
-                
-            except Exception as e:
-                logger.error(f"Erreur lors du traitement LLM pour {atelier_name}: {e}", exc_info=True)
-                # Fallback: création d'un atelier basique
-                workshop_result = WorkshopData(
-                    workshop_id=f"W{len(workshop_results) + 1:03d}",
-                    theme=atelier_name,
-                    use_cases=[]
-                )
-                workshop_results.append(workshop_result)
+            # Récupérer les résultats au fur et à mesure
+            for future in as_completed(future_to_atelier):
+                atelier_name = future_to_atelier[future]
+                try:
+                    workshop_result = future.result()
+                    workshop_results.append(workshop_result)
+                    logger.info(f"✓ Atelier '{atelier_name}' terminé")
+                except Exception as e:
+                    logger.error(f"❌ Erreur lors du traitement de '{atelier_name}': {e}")
+                    # Créer un résultat fallback
+                    workshop_results.append(WorkshopData(
+                        workshop_id=f"W{len(workshop_results) + 1:03d}",
+                        theme=atelier_name,
+                        use_cases=[]
+                    ))
         
+        logger.info(f"✅ Traitement parallèle terminé: {len(workshop_results)} ateliers traités")
         return workshop_results
     
     def process_workshop_file(self, file_path: str) -> List[WorkshopData]:

@@ -17,9 +17,12 @@ Tu dois identifier environ 10 besoins métier distincts, organisés par thémati
 - Basé sur des citations concrètes des ATELIERS et ENTRETIENS
 - Priorisé selon l'impact business
 
+⚠️ RÈGLE CRITIQUE : CHAQUE THEME DOIT ÊTRE UNIQUE - NE JAMAIS UTILISER LE MÊME THEME DEUX FOIS
+Si plusieurs besoins partagent un thème, regroupe-les sous CE SEUL thème avec toutes les citations pertinentes.
+
 Structure attendue :
-- identified_needs : Liste de 8 à 12 besoins, chacun avec un id, un theme et 3 à 5 quotes (citations exactes)
-- summary : Résumé avec total_needs et themes (liste)
+- identified_needs : Liste de 8 à 12 besoins, chacun avec un id, un theme UNIQUE et 3 à 5 quotes (citations exactes)
+- summary : Résumé avec total_needs et themes (liste SANS DOUBLONS)
 
 Exemple de structure de sortie basé sur les données de Cousin Surgery :
 
@@ -84,8 +87,9 @@ INSTRUCTIONS D'ANALYSE :
 3. Ignore les informations génériques du WEB_SEARCH (acquisitions, stratégie, marketing)
 4. Chaque besoin DOIT avoir des citations textuelles provenant des workshops ou transcripts
 5. Privilégie les verbatims et citations directes des collaborateurs
+6. ⚠️ VÉRIFIE L'UNICITÉ DES THÈMES : Chaque thème ne doit apparaître QU'UNE SEULE FOIS dans ta liste de besoins
 
-Identifie environ 10 besoins métier distincts, organisés par thématiques, avec 3 à 5 citations CONCRÈTES issues des ATELIERS et ENTRETIENS pour chaque besoin.
+Identifie environ 10 besoins métier distincts, organisés par thématiques UNIQUES (sans doublons de thèmes), avec 3 à 5 citations CONCRÈTES issues des ATELIERS et ENTRETIENS pour chaque besoin.
 """
 
 HUMAN_VALIDATION_PROMPT = """
@@ -137,9 +141,10 @@ INSTRUCTIONS POUR LA NOUVELLE ITÉRATION :
 6. Générer {remaining_needs_count} nouveaux besoins pour atteindre l'objectif de 5 validations
 7. TOUTES les citations doivent venir des workshops (use_cases, objectives) ou transcripts (citations_cles, besoins_exprimes)
 8. IGNORER les informations génériques du web (acquisitions, stratégie, conformité)
+9. ⚠️ VÉRIFIE L'UNICITÉ DES THÈMES : Assure-toi qu'aucun thème n'est utilisé deux fois dans ta proposition
 
 Itération actuelle : {current_iteration} / {max_iterations}
 
-Génère de nouveaux besoins avec 3 à 5 citations CONCRÈTES issues des WORKSHOPS et TRANSCRIPTS uniquement pour chaque besoin identifié.
+Génère de nouveaux besoins avec 3 à 5 citations CONCRÈTES issues des WORKSHOPS et TRANSCRIPTS uniquement pour chaque besoin identifié. VÉRIFIE que chaque thème est UNIQUE.
 """
 
