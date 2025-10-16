@@ -1,20 +1,22 @@
 """
-Agent principal pour le traitement des transcriptions PDF
+Agent principal pour le traitement des transcriptions (PDF ou JSON)
 """
 import logging
 from typing import List, Dict, Any, Optional
 from pathlib import Path
 from .pdf_parser import PDFParser
+from .json_parser import JSONParser
 from .interesting_parts_agent import InterestingPartsAgent
 from .semantic_filter_agent import SemanticFilterAgent
 
 logger = logging.getLogger(__name__)
 
 class TranscriptAgent:
-    """Agent principal pour traiter les transcriptions PDF"""
+    """Agent principal pour traiter les transcriptions (PDF ou JSON)"""
     
     def __init__(self, openai_api_key: str = None):
         self.pdf_parser = PDFParser()
+        self.json_parser = JSONParser()
         self.interesting_parts_agent = InterestingPartsAgent(openai_api_key)
         self.semantic_filter_agent = SemanticFilterAgent(openai_api_key)
         
@@ -24,16 +26,34 @@ class TranscriptAgent:
             format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
         )
     
-    def process_single_pdf(self, pdf_path: str) -> Dict[str, Any]:
+    def process_single_file(self, file_path: str) -> Dict[str, Any]:
         """
-        Traite un seul PDF de transcription de manière optimisée
+        Traite un seul fichier de transcription (PDF ou JSON) de manière optimisée
+        
+        Args:
+            file_path: Chemin vers le fichier (PDF ou JSON)
+            
+        Returns:
+            Dictionnaire contenant les résultats de l'analyse
         """
-        logger.info(f"=== Début du traitement du PDF: {pdf_path} ===")
+        logger.info(f"=== Début du traitement du fichier: {file_path} ===")
         
         try:
-            # Étape 1: Parsing du PDF (UNE SEULE FOIS)
-            logger.info("Étape 1: Parsing du PDF")
-            interventions = self.pdf_parser.parse_transcript(pdf_path)
+            # Détecter le type de fichier et parser en conséquence
+            file_extension = Path(file_path).suffix.lower()
+            
+            # Étape 1: Parsing du fichier (UNE SEULE FOIS)
+            if file_extension == '.json':
+                logger.info("Étape 1: Parsing du fichier JSON")
+                interventions = self.json_parser.parse_transcript(file_path)
+                parser_used = self.json_parser
+            elif file_extension == '.pdf':
+                logger.info("Étape 1: Parsing du fichier PDF")
+                interventions = self.pdf_parser.parse_transcript(file_path)
+                parser_used = self.pdf_parser
+            else:
+                raise ValueError(f"Format de fichier non supporté: {file_extension}. Utilisez .pdf ou .json")
+            
             logger.info(f"✓ {len(interventions)} interventions extraites")
             
             # Étape 2: Filtrage des parties intéressantes (sur les données déjà parsées)
@@ -50,11 +70,12 @@ class TranscriptAgent:
             
             # Résultat final
             result = {
-                "pdf_path": pdf_path,
+                "file_path": file_path,
+                "file_type": file_extension,
                 "status": "success",
                 "parsing": {
                     "total_interventions": len(interventions),
-                    "speakers": self.pdf_parser.get_speakers(interventions),
+                    "speakers": parser_used.get_speakers(interventions),
                     "interventions": interventions  # Garder les interventions originales
                 },
                 "interesting_parts": {
@@ -69,25 +90,35 @@ class TranscriptAgent:
             return result
             
         except Exception as e:
-            logger.error(f"Erreur lors du traitement du PDF {pdf_path}: {e}")
+            logger.error(f"Erreur lors du traitement du fichier {file_path}: {e}")
             return {
-                "pdf_path": pdf_path,
+                "file_path": file_path,
                 "status": "error",
                 "error": str(e)
             }
     
-    def process_multiple_pdfs(self, pdf_paths: List[str]) -> Dict[str, Any]:
+    def process_single_pdf(self, pdf_path: str) -> Dict[str, Any]:
         """
-        Traite plusieurs PDFs de transcriptions
+        Traite un seul PDF de transcription de manière optimisée
+        
+        [DEPRECATED] Utilisez process_single_file() à la place
+        Cette méthode est conservée pour la rétrocompatibilité
         """
-        logger.info(f"=== Début du traitement de {len(pdf_paths)} PDFs ===")
+        logger.warning("process_single_pdf() est déprécié, utilisez process_single_file() à la place")
+        return self.process_single_file(pdf_path)
+    
+    def process_multiple_files(self, file_paths: List[str]) -> Dict[str, Any]:
+        """
+        Traite plusieurs fichiers de transcriptions (PDF ou JSON)
+        """
+        logger.info(f"=== Début du traitement de {len(file_paths)} fichiers ===")
         
         results = []
         successful = 0
         failed = 0
         
-        for pdf_path in pdf_paths:
-            result = self.process_single_pdf(pdf_path)
+        for file_path in file_paths:
+            result = self.process_single_file(file_path)
             results.append(result)
             
             if result["status"] == "success":
@@ -97,7 +128,7 @@ class TranscriptAgent:
         
         # Résumé global
         summary = {
-            "total_pdfs": len(pdf_paths),
+            "total_files": len(file_paths),
             "successful": successful,
             "failed": failed,
             "results": results
@@ -106,25 +137,48 @@ class TranscriptAgent:
         logger.info(f"=== Traitement terminé: {successful} succès, {failed} échecs ===")
         return summary
     
-    def process_directory(self, directory_path: str) -> Dict[str, Any]:
+    def process_multiple_pdfs(self, pdf_paths: List[str]) -> Dict[str, Any]:
         """
-        Traite tous les PDFs d'un répertoire
-        """
-        directory = Path(directory_path)
-        pdf_files = list(directory.glob("*.pdf"))
+        Traite plusieurs PDFs de transcriptions
         
-        if not pdf_files:
-            logger.warning(f"Aucun fichier PDF trouvé dans {directory_path}")
+        [DEPRECATED] Utilisez process_multiple_files() à la place
+        Cette méthode est conservée pour la rétrocompatibilité
+        """
+        logger.warning("process_multiple_pdfs() est déprécié, utilisez process_multiple_files() à la place")
+        return self.process_multiple_files(pdf_paths)
+    
+    def process_directory(self, directory_path: str, file_types: List[str] = None) -> Dict[str, Any]:
+        """
+        Traite tous les fichiers de transcription d'un répertoire
+        
+        Args:
+            directory_path: Chemin du répertoire
+            file_types: Liste des extensions à traiter (ex: ['.pdf', '.json'])
+                       Par défaut: ['.pdf', '.json']
+        """
+        if file_types is None:
+            file_types = ['.pdf', '.json']
+        
+        directory = Path(directory_path)
+        
+        # Collecter tous les fichiers des types spécifiés
+        all_files = []
+        for file_type in file_types:
+            files = list(directory.glob(f"*{file_type}"))
+            all_files.extend(files)
+        
+        if not all_files:
+            logger.warning(f"Aucun fichier de transcription trouvé dans {directory_path}")
             return {
                 "status": "no_files",
                 "directory": directory_path,
-                "pdf_files": []
+                "files": []
             }
         
-        pdf_paths = [str(pdf_file) for pdf_file in pdf_files]
-        logger.info(f"Traitement de {len(pdf_paths)} PDFs du répertoire {directory_path}")
+        file_paths = [str(file) for file in all_files]
+        logger.info(f"Traitement de {len(file_paths)} fichiers du répertoire {directory_path}")
         
-        return self.process_multiple_pdfs(pdf_paths)
+        return self.process_multiple_files(file_paths)
     
     def get_consolidated_analysis(self, results: List[Dict[str, Any]]) -> Dict[str, Any]:
         """

@@ -157,8 +157,7 @@ class NeedAnalysisAgent:
                 "identified_needs": [],
                 "summary": {
                     "total_needs": 0,
-                    "themes": [],
-                    "high_priority_count": 0
+                    "themes": []
                 }
             }
     

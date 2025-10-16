@@ -1,0 +1,7 @@
+---
+description: Documentation Rule
+globs:
+alwaysApply: true
+---
+- Do not create documentation file about new feature
+- Do not create markdown files unless the user asks

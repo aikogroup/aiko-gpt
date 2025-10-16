@@ -21,7 +21,6 @@ class NeedSummary(BaseModel):
     """Modèle pour le résumé de l'analyse des besoins"""
     total_needs: int = Field(description="Nombre total de besoins identifiés")
     themes: List[str] = Field(description="Liste des thèmes identifiés")
-    high_priority_count: int = Field(description="Nombre de besoins haute priorité")
 
 
 class NeedAnalysisResponse(BaseModel):

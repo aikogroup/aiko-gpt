@@ -19,7 +19,7 @@ Tu dois identifier environ 10 besoins métier distincts, organisés par thémati
 
 Structure attendue :
 - identified_needs : Liste de 8 à 12 besoins, chacun avec un id, un theme et 3 à 5 quotes (citations exactes)
-- summary : Résumé avec total_needs, themes (liste), et high_priority_count
+- summary : Résumé avec total_needs et themes (liste)
 
 Exemple de structure de sortie basé sur les données de Cousin Surgery :
 

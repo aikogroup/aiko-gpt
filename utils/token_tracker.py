@@ -1,5 +1,5 @@
 """
-Système de tracking des tokens et des coûts d'API OpenAI
+Système de tracking des tokens d'API OpenAI
 """
 
 import json
@@ -13,41 +13,9 @@ logger = logging.getLogger(__name__)
 
 class TokenTracker:
     """
-    Classe pour tracker les tokens et calculer les coûts des appels API.
+    Classe pour tracker les tokens des appels API.
+    Compatible avec LangGraph Studio (pas d'opérations bloquantes synchrones).
     """
-    
-    # Prix par 1M tokens (à ajuster selon les tarifs actuels OpenAI)
-    # Source: https://openai.com/api/pricing/
-    PRICING = {
-        "gpt-4": {
-            "input": 30.0,   # $30 / 1M tokens
-            "output": 60.0   # $60 / 1M tokens
-        },
-        "gpt-4-turbo": {
-            "input": 10.0,
-            "output": 30.0
-        },
-        "gpt-4o": {
-            "input": 5.0,
-            "output": 15.0
-        },
-        "gpt-4o-mini": {
-            "input": 0.15,
-            "output": 0.60
-        },
-        "gpt-5-nano": {
-            "input": 0.10,   # Prix estimé
-            "output": 0.40   # Prix estimé
-        },
-        "o1": {
-            "input": 15.0,
-            "output": 60.0
-        },
-        "o1-mini": {
-            "input": 3.0,
-            "output": 12.0
-        }
-    }
     
     def __init__(self, output_dir: str = "outputs/token_tracking"):
         """
@@ -57,7 +25,8 @@ class TokenTracker:
             output_dir: Répertoire de sauvegarde des rapports
         """
         self.output_dir = Path(output_dir)
-        self.output_dir.mkdir(parents=True, exist_ok=True)
+        # ⚠️ Ne pas créer le dossier ici pour compatibilité LangGraph Studio
+        # Il sera créé lors de la sauvegarde si nécessaire
         
         self.session_stats = {
             "session_start": datetime.now().isoformat(),
@@ -65,7 +34,6 @@ class TokenTracker:
             "total_input_tokens": 0,
             "total_output_tokens": 0,
             "total_tokens": 0,
-            "total_cost": 0.0,
             "calls_by_agent": {},
             "calls_detail": []
         }
@@ -78,7 +46,7 @@ class TokenTracker:
         model: str = "gpt-5-nano"
     ) -> Dict[str, Any]:
         """
-        Track une réponse d'API et calcule les coûts.
+        Track une réponse d'API et compte les tokens.
         
         Args:
             response: Objet response de l'API OpenAI
@@ -101,9 +69,6 @@ class TokenTracker:
             output_tokens = usage.get("output_tokens", 0)
             total_tokens = input_tokens + output_tokens
             
-            # Calcul du coût
-            cost = self._calculate_cost(model, input_tokens, output_tokens)
-            
             # Création du record
             call_record = {
                 "timestamp": datetime.now().isoformat(),
@@ -112,8 +77,7 @@ class TokenTracker:
                 "model": model,
                 "input_tokens": input_tokens,
                 "output_tokens": output_tokens,
-                "total_tokens": total_tokens,
-                "cost_usd": cost
+                "total_tokens": total_tokens
             }
             
             # Mise à jour des statistiques globales
@@ -122,8 +86,7 @@ class TokenTracker:
             # Log
             logger.info(
                 f"📊 [{agent_name}] {operation} - "
-                f"Tokens: {input_tokens:,} in + {output_tokens:,} out = {total_tokens:,} total | "
-                f"Coût: ${cost:.4f}"
+                f"Tokens: {input_tokens:,} in + {output_tokens:,} out = {total_tokens:,} total"
             )
             
             return call_record
@@ -168,37 +131,6 @@ class TokenTracker:
         
         return None
     
-    def _calculate_cost(self, model: str, input_tokens: int, output_tokens: int) -> float:
-        """
-        Calcule le coût d'un appel API.
-        
-        Args:
-            model: Nom du modèle
-            input_tokens: Nombre de tokens d'entrée
-            output_tokens: Nombre de tokens de sortie
-            
-        Returns:
-            Coût en USD
-        """
-        # Normalisation du nom du modèle
-        model_key = model.lower()
-        for key in self.PRICING.keys():
-            if key in model_key:
-                model_key = key
-                break
-        
-        if model_key not in self.PRICING:
-            logger.warning(f"Modèle '{model}' non trouvé dans la table des prix, utilisation de gpt-5-nano par défaut")
-            model_key = "gpt-5-nano"
-        
-        pricing = self.PRICING[model_key]
-        
-        # Calcul: (tokens / 1_000_000) * prix_par_million
-        input_cost = (input_tokens / 1_000_000) * pricing["input"]
-        output_cost = (output_tokens / 1_000_000) * pricing["output"]
-        
-        return input_cost + output_cost
-    
     def _update_session_stats(self, call_record: Dict[str, Any]):
         """
         Met à jour les statistiques de session.
@@ -210,20 +142,21 @@ class TokenTracker:
         self.session_stats["total_input_tokens"] += call_record["input_tokens"]
         self.session_stats["total_output_tokens"] += call_record["output_tokens"]
         self.session_stats["total_tokens"] += call_record["total_tokens"]
-        self.session_stats["total_cost"] += call_record["cost_usd"]
         
         # Statistiques par agent
         agent_name = call_record["agent_name"]
         if agent_name not in self.session_stats["calls_by_agent"]:
             self.session_stats["calls_by_agent"][agent_name] = {
                 "calls": 0,
-                "total_tokens": 0,
-                "total_cost": 0.0
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "total_tokens": 0
             }
         
         self.session_stats["calls_by_agent"][agent_name]["calls"] += 1
+        self.session_stats["calls_by_agent"][agent_name]["input_tokens"] += call_record["input_tokens"]
+        self.session_stats["calls_by_agent"][agent_name]["output_tokens"] += call_record["output_tokens"]
         self.session_stats["calls_by_agent"][agent_name]["total_tokens"] += call_record["total_tokens"]
-        self.session_stats["calls_by_agent"][agent_name]["total_cost"] += call_record["cost_usd"]
         
         # Ajout du détail
         self.session_stats["calls_detail"].append(call_record)
@@ -241,7 +174,6 @@ class TokenTracker:
             "total_input_tokens": self.session_stats["total_input_tokens"],
             "total_output_tokens": self.session_stats["total_output_tokens"],
             "total_tokens": self.session_stats["total_tokens"],
-            "total_cost_usd": round(self.session_stats["total_cost"], 4),
             "calls_by_agent": self.session_stats["calls_by_agent"]
         }
     
@@ -252,28 +184,29 @@ class TokenTracker:
         summary = self.get_session_summary()
         
         print("\n" + "="*70)
-        print("📊 RÉSUMÉ DES TOKENS & COÛTS")
+        print("📊 RÉSUMÉ DES TOKENS")
         print("="*70)
         print(f"🕐 Session démarrée: {summary['session_start']}")
         print(f"📞 Nombre d'appels API: {summary['total_calls']}")
         print(f"🔤 Tokens totaux: {summary['total_tokens']:,}")
         print(f"   ├─ Input:  {summary['total_input_tokens']:,}")
         print(f"   └─ Output: {summary['total_output_tokens']:,}")
-        print(f"💰 Coût total: ${summary['total_cost_usd']:.4f}")
         
         if summary['calls_by_agent']:
             print("\n📊 Détails par agent:")
             for agent_name, stats in summary['calls_by_agent'].items():
                 print(f"   • {agent_name}:")
                 print(f"     ├─ Appels: {stats['calls']}")
-                print(f"     ├─ Tokens: {stats['total_tokens']:,}")
-                print(f"     └─ Coût: ${stats['total_cost']:.4f}")
+                print(f"     ├─ Input tokens: {stats['input_tokens']:,}")
+                print(f"     ├─ Output tokens: {stats['output_tokens']:,}")
+                print(f"     └─ Total tokens: {stats['total_tokens']:,}")
         
         print("="*70 + "\n")
     
     def save_report(self, filename: str = None):
         """
         Sauvegarde le rapport complet en JSON.
+        Crée le dossier de sortie si nécessaire.
         
         Args:
             filename: Nom du fichier (auto-généré si None)
@@ -281,6 +214,9 @@ class TokenTracker:
         if filename is None:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"token_report_{timestamp}.json"
+        
+        # Créer le dossier uniquement lors de la sauvegarde
+        self.output_dir.mkdir(parents=True, exist_ok=True)
         
         filepath = self.output_dir / filename
         

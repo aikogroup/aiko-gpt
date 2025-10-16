@@ -43,100 +43,132 @@ class StreamlitUseCaseValidation:
         """
         logger.info(f"Affichage de {len(quick_wins)} Quick Wins et {len(structuration_ia)} Structuration IA")
         
-        st.title("🚀 Validation des Cas d'Usage IA")
+        # Afficher un spinner si on est en train de valider
+        if st.session_state.get('is_validating_uc', False):
+            print(f"🔄 [DEBUG UC] Spinner activé - validation en cours")
+            with st.spinner("Traitement de votre validation en cours..."):
+                import time
+                time.sleep(0.5)  # Petit délai pour que le spinner soit visible
+            # Réinitialiser le flag
+            st.session_state.is_validating_uc = False
+            print(f"✅ [DEBUG UC] Flag is_validating_uc réinitialisé")
+        
+        st.title("Validation des Cas d'Usage IA")
         
         # Afficher le statut de validation
         col1, col2 = st.columns(2)
         
         with col1:
             if validated_qw_count >= 5:
-                st.success(f"✅ Quick Wins : {validated_qw_count}/5 validés")
+                st.success(f"Quick Wins : {validated_qw_count}/5 validés")
             else:
                 remaining_qw = 5 - validated_qw_count
-                st.warning(f"⏳ Quick Wins : {validated_qw_count}/5 validés (encore {remaining_qw} requis)")
+                st.warning(f"Quick Wins : {validated_qw_count}/5 validés (encore {remaining_qw} requis)")
         
         with col2:
             if validated_sia_count >= 5:
-                st.success(f"✅ Structuration IA : {validated_sia_count}/5 validés")
+                st.success(f"Structuration IA : {validated_sia_count}/5 validés")
             else:
                 remaining_sia = 5 - validated_sia_count
-                st.warning(f"⏳ Structuration IA : {validated_sia_count}/5 validés (encore {remaining_sia} requis)")
+                st.warning(f"Structuration IA : {validated_sia_count}/5 validés (encore {remaining_sia} requis)")
         
         st.markdown("---")
         
+        # CSS pour améliorer la séparation visuelle
+        st.markdown("""
+            <style>
+            .usecase-container {
+                border: 2px solid #e0e0e0;
+                border-radius: 8px;
+                padding: 20px;
+                margin-bottom: 20px;
+                background-color: #fafafa;
+                min-height: 250px;
+            }
+            </style>
+        """, unsafe_allow_html=True)
+        
         # Section Quick Wins
-        st.header("⚡ Quick Wins - Automatisation & assistance intelligente")
+        st.header("Quick Wins - Automatisation & assistance intelligente")
         st.caption("Solutions à faible complexité technique, mise en œuvre rapide (< 3 mois), ROI immédiat")
         
         # Afficher les Quick Wins - 2 par ligne
         for i in range(0, len(quick_wins), 2):
-            col1, col2 = st.columns(2)
+            col1, col2 = st.columns(2, gap="large")
             
             # Premier Quick Win de la ligne
             with col1:
                 use_case = quick_wins[i]
                 with st.container():
-                    st.markdown(f"### 🎯 {use_case.get('titre', 'Titre non défini')}")
-                    st.markdown(f"**💡 IA utilisée :** {use_case.get('ia_utilisee', 'Non spécifié')}")
-                    st.markdown(f"**📝 Description :**")
+                    st.markdown('<div class="usecase-container">', unsafe_allow_html=True)
+                    st.markdown(f"### {use_case.get('titre', 'Titre non défini')}")
+                    st.markdown(f"**IA utilisée :** {use_case.get('ia_utilisee', 'Non spécifié')}")
+                    st.markdown(f"**Description :**")
                     st.markdown(use_case.get('description', 'Description non disponible'))
                     
                     # Checkbox pour sélectionner ce Quick Win
                     checkbox_key = f"validate_qw_{i+1}_{len(quick_wins)}"
-                    is_selected = st.checkbox(f"✅ Valider ce Quick Win", key=checkbox_key)
+                    is_selected = st.checkbox(f"Valider ce Quick Win", key=checkbox_key)
+                    st.markdown('</div>', unsafe_allow_html=True)
             
             # Deuxième Quick Win de la ligne (si existant)
             if i + 1 < len(quick_wins):
                 with col2:
                     use_case = quick_wins[i + 1]
                     with st.container():
-                        st.markdown(f"### 🎯 {use_case.get('titre', 'Titre non défini')}")
-                        st.markdown(f"**💡 IA utilisée :** {use_case.get('ia_utilisee', 'Non spécifié')}")
-                        st.markdown(f"**📝 Description :**")
+                        st.markdown('<div class="usecase-container">', unsafe_allow_html=True)
+                        st.markdown(f"### {use_case.get('titre', 'Titre non défini')}")
+                        st.markdown(f"**IA utilisée :** {use_case.get('ia_utilisee', 'Non spécifié')}")
+                        st.markdown(f"**Description :**")
                         st.markdown(use_case.get('description', 'Description non disponible'))
                         
                         # Checkbox pour sélectionner ce Quick Win
                         checkbox_key = f"validate_qw_{i+2}_{len(quick_wins)}"
-                        is_selected = st.checkbox(f"✅ Valider ce Quick Win", key=checkbox_key)
+                        is_selected = st.checkbox(f"Valider ce Quick Win", key=checkbox_key)
+                        st.markdown('</div>', unsafe_allow_html=True)
             
-            st.markdown("---")
+            st.markdown("<br>", unsafe_allow_html=True)
         
         # Section Structuration IA
-        st.header("🧠 Structuration IA à moyen et long terme - Scalabilité & qualité prédictive")
+        st.header("Structuration IA à moyen et long terme - Scalabilité & qualité prédictive")
         st.caption("Solutions à complexité moyenne/élevée, mise en œuvre progressive (3-12 mois), ROI moyen/long terme")
         
         # Afficher les Structuration IA - 2 par ligne
         for i in range(0, len(structuration_ia), 2):
-            col1, col2 = st.columns(2)
+            col1, col2 = st.columns(2, gap="large")
             
             # Premier Structuration IA de la ligne
             with col1:
                 use_case = structuration_ia[i]
                 with st.container():
-                    st.markdown(f"### 🔬 {use_case.get('titre', 'Titre non défini')}")
-                    st.markdown(f"**💡 IA utilisée :** {use_case.get('ia_utilisee', 'Non spécifié')}")
-                    st.markdown(f"**📝 Description :**")
+                    st.markdown('<div class="usecase-container">', unsafe_allow_html=True)
+                    st.markdown(f"### {use_case.get('titre', 'Titre non défini')}")
+                    st.markdown(f"**IA utilisée :** {use_case.get('ia_utilisee', 'Non spécifié')}")
+                    st.markdown(f"**Description :**")
                     st.markdown(use_case.get('description', 'Description non disponible'))
                     
                     # Checkbox pour sélectionner cette Structuration IA
                     checkbox_key = f"validate_sia_{i+1}_{len(structuration_ia)}"
-                    is_selected = st.checkbox(f"✅ Valider ce cas d'usage", key=checkbox_key)
+                    is_selected = st.checkbox(f"Valider ce cas d'usage", key=checkbox_key)
+                    st.markdown('</div>', unsafe_allow_html=True)
             
             # Deuxième Structuration IA de la ligne (si existant)
             if i + 1 < len(structuration_ia):
                 with col2:
                     use_case = structuration_ia[i + 1]
                     with st.container():
-                        st.markdown(f"### 🔬 {use_case.get('titre', 'Titre non défini')}")
-                        st.markdown(f"**💡 IA utilisée :** {use_case.get('ia_utilisee', 'Non spécifié')}")
-                        st.markdown(f"**📝 Description :**")
+                        st.markdown('<div class="usecase-container">', unsafe_allow_html=True)
+                        st.markdown(f"### {use_case.get('titre', 'Titre non défini')}")
+                        st.markdown(f"**IA utilisée :** {use_case.get('ia_utilisee', 'Non spécifié')}")
+                        st.markdown(f"**Description :**")
                         st.markdown(use_case.get('description', 'Description non disponible'))
                         
                         # Checkbox pour sélectionner cette Structuration IA
                         checkbox_key = f"validate_sia_{i+2}_{len(structuration_ia)}"
-                        is_selected = st.checkbox(f"✅ Valider ce cas d'usage", key=checkbox_key)
+                        is_selected = st.checkbox(f"Valider ce cas d'usage", key=checkbox_key)
+                        st.markdown('</div>', unsafe_allow_html=True)
             
-            st.markdown("---")
+            st.markdown("<br>", unsafe_allow_html=True)
         
         # Calculer le nombre de sélections en temps réel
         selected_qw_count = len([i for i in range(1, len(quick_wins) + 1) 
@@ -150,14 +182,14 @@ class StreamlitUseCaseValidation:
         
         with col1:
             if selected_qw_count > 0:
-                st.info(f"📊 {selected_qw_count} Quick Win(s) sélectionné(s)")
+                st.info(f"{selected_qw_count} Quick Win(s) sélectionné(s)")
         
         with col2:
             if selected_sia_count > 0:
-                st.info(f"📊 {selected_sia_count} Structuration IA sélectionné(s)")
+                st.info(f"{selected_sia_count} Structuration IA sélectionné(s)")
         
         # Zone de commentaires
-        st.subheader("💬 Commentaires (optionnel)")
+        st.subheader("Commentaires (optionnel)")
         comments = st.text_area(
             "Ajoutez des commentaires sur votre sélection :",
             placeholder="Ex: Les Quick Wins sélectionnés sont les plus pertinents pour notre contexte...",
@@ -170,9 +202,9 @@ class StreamlitUseCaseValidation:
         
         with col1:
             can_validate = selected_qw_count > 0 or selected_sia_count > 0
-            if st.button("✅ Valider la sélection", type="primary", disabled=not can_validate):
+            if st.button("Valider la sélection", type="primary", disabled=not can_validate):
                 if not can_validate:
-                    st.warning("⚠️ Veuillez sélectionner au moins un cas d'usage")
+                    st.warning("Veuillez sélectionner au moins un cas d'usage")
                 else:
                     # Lire l'état des checkboxes directement
                     selected_qw_indices = []
@@ -187,6 +219,9 @@ class StreamlitUseCaseValidation:
                         if st.session_state.get(checkbox_key, False):
                             selected_sia_indices.append(i)
                     
+                    # Marquer qu'on est en train de valider
+                    st.session_state.is_validating_uc = True
+                    
                     # Traiter la validation
                     result = self._process_validation(
                         quick_wins, 
@@ -197,10 +232,10 @@ class StreamlitUseCaseValidation:
                         validated_qw_count,
                         validated_sia_count
                     )
-                    return result
+                    # Note: st.rerun() est appelé dans _process_validation, donc on n'atteint jamais cette ligne
         
         with col2:
-            if st.button("🔄 Recommencer", type="secondary"):
+            if st.button("Recommencer", type="secondary"):
                 # Réinitialiser les checkboxes
                 for i in range(1, len(quick_wins) + 1):
                     checkbox_key = f"validate_qw_{i}_{len(quick_wins)}"
@@ -215,7 +250,7 @@ class StreamlitUseCaseValidation:
                 st.rerun()
         
         with col3:
-            if st.button("❌ Annuler", type="secondary"):
+            if st.button("Annuler", type="secondary"):
                 # Réinitialiser les checkboxes
                 for i in range(1, len(quick_wins) + 1):
                     checkbox_key = f"validate_qw_{i}_{len(quick_wins)}"
@@ -267,6 +302,11 @@ class StreamlitUseCaseValidation:
             Résultat de la validation
         """
         logger.info(f"Traitement de la validation : {len(selected_qw_indices)} QW, {len(selected_sia_indices)} SIA")
+        print(f"\n✅ [DEBUG UC] _process_validation - DÉBUT")
+        print(f"📊 [DEBUG UC] selected_qw_indices: {selected_qw_indices}")
+        print(f"📊 [DEBUG UC] selected_sia_indices: {selected_sia_indices}")
+        print(f"📊 [DEBUG UC] validated_qw_count: {validated_qw_count}")
+        print(f"📊 [DEBUG UC] validated_sia_count: {validated_sia_count}")
         
         # Extraire les cas d'usage validés et rejetés
         validated_qw = [quick_wins[i-1] for i in selected_qw_indices]
@@ -301,20 +341,25 @@ class StreamlitUseCaseValidation:
             "newly_rejected_sia": rejected_sia
         }
         
+        print(f"💾 [DEBUG UC] Sauvegarde du résultat dans session_state.use_case_validation_result")
         # Sauvegarder le résultat dans session_state
         st.session_state.use_case_validation_result = result
+        print(f"✅ [DEBUG UC] Résultat sauvegardé - success={result['success']}, QW={result['total_validated_qw']}, SIA={result['total_validated_sia']}")
         
         # Nettoyer les clés de validation
+        print(f"🧹 [DEBUG UC] Nettoyage des clés de validation")
         for key in list(st.session_state.keys()):
             if key.startswith("validate_qw_") or key.startswith("validate_sia_"):
                 del st.session_state[key]
+        print(f"✅ [DEBUG UC] Nettoyage terminé")
         
         if success:
-            st.success(f"✅ Validation réussie ! {total_validated_qw} Quick Wins et {total_validated_sia} Structuration IA validés")
+            st.success(f"Validation réussie - {total_validated_qw} Quick Wins et {total_validated_sia} Structuration IA validés")
+            print(f"🎉 [DEBUG UC] Validation réussie")
         else:
             remaining_qw = max(0, 5 - total_validated_qw)
             remaining_sia = max(0, 5 - total_validated_sia)
-            msg = f"⚠️ Validation partielle : "
+            msg = f"Validation partielle : "
             
             if remaining_qw > 0:
                 msg += f"il reste {remaining_qw} Quick Win(s) à valider "
@@ -322,7 +367,13 @@ class StreamlitUseCaseValidation:
                 msg += f"il reste {remaining_sia} Structuration IA à valider"
             
             st.warning(msg)
+            print(f"⚠️ [DEBUG UC] Validation partielle - QW restants={remaining_qw}, SIA restants={remaining_sia}")
         
+        # Forcer le rechargement de l'interface pour afficher le bouton "Reprendre le workflow"
+        print(f"🔄 [DEBUG UC] Appel de st.rerun()...")
+        st.rerun()
+        
+        print(f"✅ [DEBUG UC] _process_validation - FIN (cette ligne ne devrait jamais s'afficher)")
         return result
     
     def validate_use_cases(
