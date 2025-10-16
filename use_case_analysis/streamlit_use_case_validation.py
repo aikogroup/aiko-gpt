@@ -89,7 +89,7 @@ class StreamlitUseCaseValidation:
         """, unsafe_allow_html=True)
         
         # Section Quick Wins
-        st.header("Quick Wins - Automatisation & assistance intelligente")
+        st.header("⚡ Quick Wins - Automatisation & assistance intelligente")
         st.caption("Solutions à faible complexité technique, mise en œuvre rapide (< 3 mois), ROI immédiat")
         
         # Afficher les Quick Wins - 2 par ligne
@@ -129,8 +129,12 @@ class StreamlitUseCaseValidation:
             
             st.markdown("<br>", unsafe_allow_html=True)
         
+        # Séparation visuelle forte entre les deux sections
+        st.markdown("---")
+        st.markdown("##")  # Espace supplémentaire
+        
         # Section Structuration IA
-        st.header("Structuration IA à moyen et long terme - Scalabilité & qualité prédictive")
+        st.header("🔬 Structuration IA à moyen et long terme - Scalabilité & qualité prédictive")
         st.caption("Solutions à complexité moyenne/élevée, mise en œuvre progressive (3-12 mois), ROI moyen/long terme")
         
         # Afficher les Structuration IA - 2 par ligne

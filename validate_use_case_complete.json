@@ -1,0 +1,70 @@
+{
+  "validated_quick_wins": [
+    {
+      "id": "qw_1",
+      "titre": "Mise à jour automatisée des documents réglementaires",
+      "ia_utilisee": "ML pour l'extraction de données",
+      "description": "Utiliser le machine learning pour identifier les changements nécessaires dans les documents réglementaires, automatisant ainsi leur mise à jour lorsque des modifications sont apportées."
+    },
+    {
+      "id": "qw_2",
+      "titre": "Génération instantanée de rapports de conformité",
+      "ia_utilisee": "NLP + automatisation",
+      "description": "Développer une solution qui utilise le NLP pour comprendre et générer automatiquement des rapports de conformité à partir des données collectées, améliorant ainsi l'efficacité administrative."
+    },
+    {
+      "id": "qw_3",
+      "titre": "Base de connaissances automatisée pour support client",
+      "ia_utilisee": "Chatbot (LLM)",
+      "description": "Créer une base de connaissances accessible via un chatbot LLM pour que les clients et les employés puissent trouver rapidement des réponses aux questions fréquemment posées sur les produits."
+    },
+    {
+      "id": "qw_4",
+      "titre": "Optimisation des processus de commande de composants",
+      "ia_utilisee": "Règles d'affaires + automatisation",
+      "description": "Mettre en place un système automatisé qui analyse les niveaux de stock et passe des commandes pour les composants nécessaires, réduisant ainsi le temps consacré à la gestion des approvisionnements."
+    },
+    {
+      "id": "qw_5",
+      "titre": "Suivi automatique de la performance énergétique",
+      "ia_utilisee": "ML supervisé",
+      "description": "Utiliser des algorithmes de machine learning pour surveiller et analyser la consommation énergétique des installations, réalisant des économies de coûts et améliorant la durabilité."
+    }
+  ],
+  "validated_structuration_ia": [
+    {
+      "id": "sia_1",
+      "titre": "Analyse prédictive des tendances de demande",
+      "ia_utilisee": "ML supervisé",
+      "description": "Mettre en place un modèle de ML supervisé pour analyser les données de vente et prédire les tendances de demande, permettant ainsi une meilleure planification des productions."
+    },
+    {
+      "id": "sia_2",
+      "titre": "Intégration et agrégation des données de production",
+      "ia_utilisee": "Data Warehouse + BI",
+      "description": "Développer un data warehouse pour centraliser et structurer les données provenant de plusieurs systèmes de production, accompagné d'outils BI pour une visualisation et une analyse efficace."
+    },
+    {
+      "id": "sia_3",
+      "titre": "Prédiction des pannes des équipements",
+      "ia_utilisee": "Séries temporelles + ML",
+      "description": "Implémenter un modèle basé sur des séries temporelles pour prévoir les défaillances des machines, permettant de réaliser une maintenance prédictive et d'optimiser les temps d'arrêt."
+    },
+    {
+      "id": "sia_4",
+      "titre": "Optimisation des ressources en fonction des candidatures",
+      "ia_utilisee": "Clustering + classification",
+      "description": "Utiliser le clustering pour segmenter les candidatures et un modèle de classification pour prédire la meilleure adéquation des candidats aux offres, améliorant ainsi l'efficacité du recrutement."
+    },
+    {
+      "id": "sia_5",
+      "titre": "Optimisation de la planification de la production",
+      "ia_utilisee": "ML supervisé + prévisions de demande",
+      "description": "Mettre en œuvre un système de ML pour analyser les données historiques et prédire les besoins futurs en matière de production, améliorant ainsi l'efficacité."
+    }
+  ],
+  "rejected_quick_wins": [],
+  "rejected_structuration_ia": [],
+  "user_feedback": "Excellente sélection de cas d'usage. Tous les Quick Wins et projets de Structuration IA sont validés et correspondent aux besoins identifiés. Nous pouvons finaliser le rapport."
+}
+
