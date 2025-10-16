@@ -113,18 +113,22 @@ Si vous validez moins de 5 besoins, l'agent relancera l'analyse.
 NEED_REGENERATION_PROMPT = """
 Les besoins précédents n'ont pas obtenu suffisamment de validations.
 
-BESOINS PROPOSÉS PRÉCÉDEMMENT :
+⚠️ BESOINS DÉJÀ PROPOSÉS LORS DE L'ITÉRATION PRÉCÉDENTE (À NE JAMAIS REPROPOSER) :
 {previous_needs}
 
-BESOINS REJETÉS PAR L'UTILISATEUR :
+Note importante : La liste ci-dessus contient TOUS les besoins proposés précédemment (validés ET rejetés).
+Tu dois générer des besoins COMPLÈTEMENT DIFFÉRENTS de ces thèmes.
+
+🚫 BESOINS EXPLICITEMENT REJETÉS PAR L'UTILISATEUR :
 {rejected_needs}
 
-COMMENTAIRES DE L'UTILISATEUR :
+💬 COMMENTAIRES DE L'UTILISATEUR :
 {user_feedback}
 
-RÉSUMÉ DE LA VALIDATION :
+📊 RÉSUMÉ DE LA VALIDATION :
 - Besoins validés : {validated_needs_count} / 5 minimum requis
 - Besoins rejetés : {rejected_needs_count}
+- Besoins restants à générer : {remaining_needs_count}
 
 ⚠️ RAPPEL CRITIQUE : Les besoins doivent provenir EXCLUSIVEMENT des WORKSHOPS et TRANSCRIPTS !
 Ne pas utiliser le WEB_SEARCH pour identifier des besoins.
@@ -140,20 +144,37 @@ DONNÉES SOURCES (rappel) :
 🌐 DONNÉES WEB SEARCH (CONTEXTE UNIQUEMENT - Informations publiques sur l'entreprise) :
 {web_search_data}
 
-INSTRUCTIONS POUR LA NOUVELLE ITÉRATION :
-1. NE PAS reproposer les besoins qui ont été rejetés
-2. Analyser les besoins rejetés pour comprendre ce qui n'allait pas
-3. Prendre en compte les commentaires de l'utilisateur pour affiner les nouveaux besoins
-4. Explorer d'autres thématiques ou angles d'approche non couverts dans les WORKSHOPS et TRANSCRIPTS
-5. Proposer des besoins plus concrets, actionnables et mieux sourcés depuis les ATELIERS et ENTRETIENS
-6. Générer {remaining_needs_count} nouveaux besoins pour atteindre l'objectif de 5 validations
-7. TOUTES les citations doivent venir des workshops (use_cases, objectives) ou transcripts (citations_cles, besoins_exprimes)
-8. IGNORER les informations génériques du web (acquisitions, stratégie, conformité)
-9. ⚠️ VÉRIFIE L'UNICITÉ DES THÈMES : Assure-toi qu'aucun thème n'est utilisé deux fois dans ta proposition
-10. ⚠️ FORMAT STRICT : Les citations doivent contenir UNIQUEMENT le texte, SANS mention de source (pas de "- Transcript", "- Nom de personne", etc.)
+🎯 INSTRUCTIONS CRITIQUES POUR LA NOUVELLE ITÉRATION :
+
+⛔ INTERDICTIONS ABSOLUES :
+1. NE JAMAIS reproposer un besoin déjà proposé dans l'itération précédente (même avec un thème légèrement différent)
+2. NE PAS créer de variantes ou reformulations des besoins déjà proposés
+3. Exemples à éviter :
+   - Si "Automatisation des processus de contrôle qualité" a déjà été proposé
+   - NE PAS proposer "Automatisation des contrôles qualité" (trop similaire)
+   - NE PAS proposer "Optimisation du contrôle qualité" (même domaine)
+   - PLUTÔT explorer d'autres domaines : R&D, commercial, supply chain, RH, etc.
+
+✅ OBLIGATIONS :
+4. Explorer des DOMAINES MÉTIER COMPLÈTEMENT DIFFÉRENTS de ceux déjà proposés
+5. Identifier des PROCESSUS ou SERVICES NON ENCORE COUVERTS dans les workshops/transcripts
+6. Proposer des besoins plus concrets, actionnables et mieux sourcés depuis les ATELIERS et ENTRETIENS
+7. Générer EXACTEMENT {remaining_needs_count} nouveaux besoins DISTINCTS pour atteindre l'objectif de 5 validations
+8. TOUTES les citations doivent venir des workshops (use_cases, objectives) ou transcripts (citations_cles, besoins_exprimes, frustrations_blocages, opportunites_automatisation)
+9. IGNORER les informations génériques du web (acquisitions, stratégie, conformité)
+
+📏 RÈGLES DE FORMAT :
+10. ⚠️ VÉRIFIE L'UNICITÉ DES THÈMES : Assure-toi qu'aucun thème n'est utilisé deux fois dans ta proposition ET qu'aucun thème ne ressemble aux besoins déjà proposés
+11. ⚠️ FORMAT STRICT : Les citations doivent contenir UNIQUEMENT le texte, SANS mention de source (pas de "- Transcript", "- Nom de personne", etc.)
+12. Chaque besoin doit avoir 3 à 5 citations CONCRÈTES et DIFFÉRENTES
+
+💡 STRATÉGIE DE DIVERSIFICATION :
+- Analyse les besoins déjà proposés pour identifier les domaines/processus déjà couverts
+- Cherche dans les WORKSHOPS et TRANSCRIPTS des aspects complètement différents
+- Si un domaine a déjà été exploré (ex: qualité, automatisation), passe à un autre domaine (ex: formation, collaboration, prévision, analyse de données, communication, etc.)
 
 Itération actuelle : {current_iteration} / {max_iterations}
 
-Génère de nouveaux besoins avec 3 à 5 citations CONCRÈTES issues des WORKSHOPS et TRANSCRIPTS uniquement pour chaque besoin identifié. VÉRIFIE que chaque thème est UNIQUE. Les citations doivent être du texte pur, sans indication de source.
+🚀 OBJECTIF : Génère {remaining_needs_count} nouveaux besoins avec des THÈMES VRAIMENT DIFFÉRENTS de tous les besoins déjà proposés, avec 3 à 5 citations CONCRÈTES issues des WORKSHOPS et TRANSCRIPTS uniquement. VÉRIFIE que chaque thème est UNIQUE et DISTINCT de TOUS les besoins déjà proposés (validés ou rejetés). Les citations doivent être du texte pur, sans indication de source.
 """
 
