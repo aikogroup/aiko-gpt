@@ -25,11 +25,12 @@ IMPORTANT :
 - Chaque cas d'usage doit être spécifique au contexte de l'entreprise
 - Utilise des technologies IA concrètes et pertinentes
 - La description doit être actionnable et technique
+- ⚠️ RÈGLE CRITIQUE : Les TITRES de cas d'usage doivent être DISTINCTS et VARIÉS - éviter les doublons sémantiques ou thématiques
 
 Structure attendue :
-- quick_wins : Liste de 6 à 10 cas d'usage, chacun avec id, titre, ia_utilisee et description
-- structuration_ia : Liste de 8 à 12 cas d'usage, chacun avec id, titre, ia_utilisee et description
-- summary : Résumé avec total_quick_wins, total_structuration_ia, total_use_cases et main_themes (liste)
+- quick_wins : Liste de 6 à 10 cas d'usage, chacun avec id, titre UNIQUE, ia_utilisee et description
+- structuration_ia : Liste de 8 à 12 cas d'usage, chacun avec id, titre UNIQUE, ia_utilisee et description
+- summary : Résumé avec total_quick_wins, total_structuration_ia, total_use_cases et main_themes (liste SANS DOUBLONS)
 
 EXEMPLES DE QUICK WINS :
 - Agent de productivité conversationnel (LLM + RAG sur docs internes)
@@ -70,8 +71,9 @@ INSTRUCTIONS :
 4. Utilise les données workshops et transcripts pour contextualiser les cas d'usage avec des détails techniques/métier concrets
 5. Utilise des technologies IA concrètes et appropriées
 6. Sois spécifique au contexte de l'entreprise (processus, outils, contraintes mentionnés dans les workshops/transcripts)
+7. ⚠️ VÉRIFIE L'UNICITÉ DES THÈMES : Assure-toi que les titres/thèmes des cas d'usage sont tous distincts et ne se répètent pas
 
-Génère les cas d'usage en respectant la structure attendue.
+Génère les cas d'usage en respectant la structure attendue. VÉRIFIE qu'il n'y a pas de doublons thématiques.
 """
 
 USE_CASE_REGENERATION_PROMPT = """
@@ -113,9 +115,10 @@ INSTRUCTIONS POUR LA NOUVELLE ITÉRATION :
 6. Varier les thématiques et les approches techniques
 7. Rester aligné avec le contexte et les contraintes de l'entreprise
 8. Utilise les données workshops et transcripts pour contextualiser avec des détails techniques/métier concrets
+9. ⚠️ VÉRIFIE L'UNICITÉ DES THÈMES : Assure-toi qu'aucun titre/thème de cas d'usage n'est utilisé deux fois
 
 Itération actuelle : {current_iteration} / {max_iterations}
 
-Génère de nouveaux cas d'usage en respectant la structure attendue, en évitant de reproduire les erreurs précédentes.
+Génère de nouveaux cas d'usage en respectant la structure attendue, en évitant de reproduire les erreurs précédentes. VÉRIFIE que tous les titres/thèmes sont UNIQUES.
 """
 
