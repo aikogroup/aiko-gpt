@@ -3,6 +3,7 @@ Générateur de rapport Word (.docx) pour les résultats d'analyse IA
 """
 
 import os
+from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Any
 from docx import Document
@@ -26,8 +27,16 @@ class ReportGenerator:
         """
         self.logo_path = logo_path
         if not logo_path:
-            # Chemin par défaut pour le logo Aiko
-            self.logo_path = "/home/addeche/aiko/aikoGPT/assets/aiko_logo.png"
+            # Chemin par défaut pour le logo Aiko (mis à jour pour utiliser le logo frontend s'il est synchronisé côté API)
+            # On tente d'abord dans un dossier public standard, sinon fallback sur l'ancien chemin si présent
+            candidate_paths = [
+                str(Path(__file__).parent.parent / "frontend" / "public" / "logoAiko.jpeg"),
+                "/home/addeche/aiko/aikoGPT/assets/aiko_logo.png",
+            ]
+            for p in candidate_paths:
+                if os.path.exists(p):
+                    self.logo_path = p
+                    break
     
     def generate_report(
         self,

@@ -4,7 +4,8 @@ Architecture propre : Streamlit = UI, API = Logique métier.
 """
 
 from fastapi import FastAPI, UploadFile, File, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, FileResponse
 from typing import List, Optional, Dict, Any
 import uvicorn
 import uuid
@@ -22,12 +23,22 @@ import sys
 sys.path.append(str(Path(__file__).parent.parent))
 from workflow.need_analysis_workflow import NeedAnalysisWorkflow
 from langgraph.checkpoint.memory import MemorySaver
+from utils.report_generator import ReportGenerator
 
 # Initialisation de l'API
 app = FastAPI(
     title="AIKO - LangGraph API",
     description="API pour le workflow d'analyse des besoins IA",
     version="1.0.0"
+)
+
+# CORS pour Next.js (localhost:3000)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Stockage en mémoire des workflows (en production, utiliser Redis ou DB)
@@ -351,6 +362,40 @@ async def delete_thread(thread_id: str):
         return {"status": "deleted", "thread_id": thread_id}
     else:
         raise HTTPException(status_code=404, detail="Thread non trouvé")
+
+
+@app.get("/threads/{thread_id}/report")
+async def generate_report(thread_id: str):
+    """
+    Génère et renvoie un rapport Word basé sur l'état courant du workflow.
+    Utilise prioritairement validated_* puis fallback sur final_*.
+    """
+    if thread_id not in workflows:
+        raise HTTPException(status_code=404, detail="Thread non trouvé")
+    try:
+        workflow = workflows[thread_id]["workflow"]
+        config = {"configurable": {"thread_id": thread_id}}
+        snapshot = workflow.graph.get_state(config)
+        state = snapshot.values
+
+        company_name = (state.get("company_info", {}) or {}).get("company_name", "Entreprise")
+        final_needs = state.get("validated_needs") or state.get("final_needs") or []
+        final_qw = state.get("validated_quick_wins") or state.get("final_quick_wins") or []
+        final_sia = state.get("validated_structuration_ia") or state.get("final_structuration_ia") or []
+
+        generator = ReportGenerator()
+        # Écrire dans /tmp pour portabilité
+        output_path = generator.generate_report(
+            company_name=company_name,
+            final_needs=final_needs,
+            final_quick_wins=final_qw,
+            final_structuration_ia=final_sia,
+            output_dir=str(UPLOAD_DIR)
+        )
+        filename = os.path.basename(output_path)
+        return FileResponse(output_path, media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document", filename=filename)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur génération rapport: {str(e)}")
 
 
 # ==================== DÉMARRAGE ====================
