@@ -13,6 +13,12 @@ import json
 import threading
 from concurrent.futures import ThreadPoolExecutor
 import queue
+import os
+import sys
+
+# Ajouter le répertoire parent au path pour importer les modules
+sys.path.append(str(Path(__file__).parent.parent))
+from utils.report_generator import ReportGenerator
 
 # Configuration de l'API
 API_URL = "http://localhost:2025"
@@ -683,6 +689,73 @@ def display_use_cases_validation_interface():
             except queue.Empty:
                 status_placeholder.error("❌ Timeout lors de la validation")
 
+def generate_word_report():
+    """
+    Génère un rapport Word à partir des résultats d'analyse.
+    """
+    with st.spinner("📝 Génération du rapport Word en cours..."):
+        try:
+            # Récupérer le nom de l'entreprise depuis workflow_state
+            company_name = "Entreprise"  # Valeur par défaut
+            
+            workflow_state = st.session_state.workflow_state
+            
+            # Essayer depuis web_search_results dans workflow_state
+            if workflow_state.get('web_search_results'):
+                web_search = workflow_state['web_search_results']
+                company_name = web_search.get('company_name', 'Entreprise')
+                print(f"🏢 [REPORT] Nom d'entreprise trouvé dans workflow_state.web_search_results: {company_name}")
+            # Essayer depuis company_info dans workflow_state
+            elif workflow_state.get('company_info'):
+                company_info = workflow_state['company_info']
+                company_name = company_info.get('company_name', 'Entreprise')
+                print(f"🏢 [REPORT] Nom d'entreprise trouvé dans workflow_state.company_info: {company_name}")
+            
+            # Formater le nom de l'entreprise (première lettre en majuscule pour chaque mot)
+            if company_name and company_name != "Entreprise":
+                company_name = company_name.title()
+                print(f"✨ [REPORT] Nom formaté: {company_name}")
+            
+            print(f"🏢 [REPORT] Nom final de l'entreprise: {company_name}")
+            
+            # Récupérer les données depuis workflow_state
+            final_needs = workflow_state.get('final_needs', [])
+            final_quick_wins = workflow_state.get('final_quick_wins', [])
+            final_structuration_ia = workflow_state.get('final_structuration_ia', [])
+            
+            # Vérifier qu'on a au moins des données à exporter
+            if not final_needs and not final_quick_wins and not final_structuration_ia:
+                st.warning("⚠️ Aucune donnée à exporter. Veuillez d'abord valider des besoins et des cas d'usage.")
+                return
+            
+            # Initialiser le générateur de rapport
+            report_generator = ReportGenerator()
+            
+            # Générer le rapport
+            output_path = report_generator.generate_report(
+                company_name=company_name,
+                final_needs=final_needs,
+                final_quick_wins=final_quick_wins,
+                final_structuration_ia=final_structuration_ia
+            )
+            
+            st.success(f"✅ Rapport généré avec succès !")
+            st.info(f"📁 Fichier sauvegardé : `{output_path}`")
+            
+            # Proposer le téléchargement du fichier
+            with open(output_path, 'rb') as f:
+                st.download_button(
+                    label="📥 Télécharger le rapport Word",
+                    data=f,
+                    file_name=os.path.basename(output_path),
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    use_container_width=True
+                )
+            
+        except Exception as e:
+            st.error(f"❌ Erreur lors de la génération du rapport : {str(e)}")
+            st.exception(e)
+
 def display_final_results():
     """Affiche les résultats finaux"""
     
@@ -734,21 +807,31 @@ def display_final_results():
                 st.markdown(f"**Description :** {uc.get('description', 'N/A')}")
                 st.markdown("---")
     
-    # Bouton de téléchargement JSON
+    # Boutons de téléchargement
     if final_needs or final_qw or final_sia:
-        import json
-        results_json = {
-            "final_needs": final_needs,
-            "final_quick_wins": final_qw,
-            "final_structuration_ia": final_sia
-        }
-        st.download_button(
-            label="📥 Télécharger les résultats (JSON)",
-            data=json.dumps(results_json, indent=2, ensure_ascii=False),
-            file_name="aiko_results.json",
-            mime="application/json",
-            use_container_width=True
-        )
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Bouton de téléchargement JSON
+            results_json = {
+                "final_needs": final_needs,
+                "final_quick_wins": final_qw,
+                "final_structuration_ia": final_sia
+            }
+            st.download_button(
+                label="📥 Télécharger les résultats (JSON)",
+                data=json.dumps(results_json, indent=2, ensure_ascii=False),
+                file_name="aiko_results.json",
+                mime="application/json",
+                use_container_width=True
+            )
+        
+        with col2:
+            # Bouton de génération de rapport Word
+            if st.button("📄 Générer le rapport Word", type="primary", use_container_width=True):
+                generate_word_report()
+    
+    st.markdown("---")
     
     # Bouton pour recommencer
     if st.button("🔄 Nouvelle Analyse", use_container_width=True):
