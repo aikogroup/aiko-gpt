@@ -105,15 +105,11 @@ class NeedAnalysisWorkflow:
         self.transcript_agent = TranscriptAgent(api_key)
         self.web_search_agent = WebSearchAgent()  # Pas de paramètre
         self.need_analysis_agent = NeedAnalysisAgent(api_key, tracker=self.tracker)
-        # Interfaces Streamlit désactivées si non disponibles
-        self.human_interface = (
-            StreamlitValidationInterface() if StreamlitValidationInterface else None
-        )
+        # Interfaces Streamlit supprimées - plus utilisées
+        self.human_interface = None
         # Nouveaux agents pour l'analyse des use cases
         self.use_case_analysis_agent = UseCaseAnalysisAgent(api_key, tracker=self.tracker)
-        self.use_case_validation_interface = (
-            StreamlitUseCaseValidation() if StreamlitUseCaseValidation else None
-        )
+        self.use_case_validation_interface = None
         
         # Configuration du checkpointer pour le debugging
         self.checkpointer = self._setup_checkpointer()
