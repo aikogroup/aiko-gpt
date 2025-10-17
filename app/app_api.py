@@ -91,7 +91,7 @@ def start_workflow_api_call(workshop_files: List[str], transcript_files: List[st
                 "transcript_files": transcript_files,
                 "company_name": company_name if company_name else None
             },
-            timeout=300  # 5 minutes pour le traitement initial
+            timeout=900  # 5 minutes pour le traitement initial
         )
         response.raise_for_status()
         
@@ -134,7 +134,7 @@ def poll_workflow_status():
     try:
         response = requests.get(
             f"{API_URL}/threads/{st.session_state.thread_id}/state",
-            timeout=30  # 30 secondes pour récupérer l'état
+            timeout=60  # 60 secondes pour récupérer l'état
         )
         response.raise_for_status()
         
@@ -171,7 +171,7 @@ def send_validation_feedback_api_call(validated_needs: List[Dict], rejected_need
                 "rejected_needs": rejected_needs,
                 "user_feedback": user_feedback
             },
-            timeout=120  # 2 minutes pour la validation et la reprise du workflow
+            timeout=600  # 10 minutes pour la validation et la reprise du workflow
         )
         response.raise_for_status()
         result_queue.put((True, None))
@@ -195,7 +195,7 @@ def send_use_case_validation_feedback_api_call(validated_qw: List[Dict], validat
                 "rejected_structuration_ia": rejected_sia,
                 "user_feedback": user_feedback
             },
-            timeout=120  # 2 minutes pour la validation finale
+            timeout=600  # 10 minutes pour la validation finale
         )
         response.raise_for_status()
         
@@ -214,7 +214,7 @@ def main():
     
     # Vérifier que l'API est accessible
     try:
-        response = requests.get(f"{API_URL}/", timeout=30)  # Augmenté à 30 secondes
+        response = requests.get(f"{API_URL}/", timeout=60)  # Augmenté à 60 secondes
         if response.status_code != 200:
             st.error(f"❌ L'API n'est pas accessible à {API_URL}")
             st.info("💡 Lancez l'API avec : `uv run python api/start_api.py`")
