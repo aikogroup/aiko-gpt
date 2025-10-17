@@ -83,12 +83,14 @@ class SemanticFilterAgent:
         
         try:
             # Appel à l'API OpenAI Responses avec structured output
+            # Utilisation du paramètre 'instructions' pour le system prompt
             response = self.client.responses.parse(
                 model=self.model,
+                instructions=SEMANTIC_ANALYSIS_SYSTEM_PROMPT_V2,
                 input=[
                     {
                         "role": "user",
-                        "content": f"{SEMANTIC_ANALYSIS_SYSTEM_PROMPT_V2}\n\n{prompt}"
+                        "content": prompt
                     }
                 ],
                 text_format=SemanticAnalysisResponse
