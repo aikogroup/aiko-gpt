@@ -96,15 +96,17 @@ class InterestingPartsAgent:
         
         try:
             model = os.getenv('OPENAI_MODEL', 'gpt-5-nano')
+            # Utilisation du paramètre 'instructions' pour le system prompt
             response = openai.responses.create(
                 model=model,
+                instructions=INTERESTING_PARTS_SYSTEM_PROMPT,
                 input=[
                     {
                         "role": "user",
                         "content": [
                             {
                                 "type": "input_text",
-                                "text": f"{INTERESTING_PARTS_SYSTEM_PROMPT}\n\n{prompt}"
+                                "text": prompt
                             }
                         ]
                     }

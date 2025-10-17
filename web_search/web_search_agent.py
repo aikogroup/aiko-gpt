@@ -14,6 +14,10 @@ from openai import OpenAI
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from models.web_search_models import CompanyInfo
+from prompts.web_search_agent_prompts import (
+    WEB_SEARCH_SYSTEM_PROMPT,
+    WEB_SEARCH_USER_PROMPT_TEMPLATE
+)
 
 # Charger les variables d'environnement
 load_dotenv()
@@ -104,27 +108,23 @@ Fournis des informations précises et vérifiables."""
             Dict[str, Any]: Informations structurées
         """
         try:
-            prompt = f"""Analyse les résultats de recherche suivants pour l'entreprise "{company_name}" et extrait les informations structurées.
+            # Utilisation des prompts depuis le fichier web_search_agent_prompts.py
+            user_prompt = f"""Analyse les résultats de recherche suivants pour l'entreprise "{company_name}" et extrait les informations structurées.
 
 RÉSULTATS DE RECHERCHE PERPLEXITY:
 {search_results}
 
-Extrait et structure les informations suivantes:
-- Nom complet de l'entreprise
-- Secteur d'activité de l'entreprise
-- Nombre d'employés
-- Chiffre d'affaires
-- Description concise de l'entreprise (2-3 phrases)
-
-Si une information n'est pas disponible dans les résultats, indique "Non disponible"."""
+{WEB_SEARCH_USER_PROMPT_TEMPLATE.format(company_name=company_name)}"""
 
             # Appel à l'API OpenAI avec structured output
+            # Utilisation du paramètre 'instructions' pour le system prompt
             response = self.openai_client.responses.parse(
                 model=self.model,
+                instructions=WEB_SEARCH_SYSTEM_PROMPT,
                 input=[
                     {
                         "role": "user",
-                        "content": f"Tu es un expert en analyse d'informations d'entreprises. Extrait et structure les informations de manière concise et précise.\n\n{prompt}"
+                        "content": user_prompt
                     }
                 ],
                 text_format=CompanyInfo

@@ -19,9 +19,15 @@ import sys
 # Ajouter le répertoire parent au path pour importer les modules
 sys.path.append(str(Path(__file__).parent.parent))
 from utils.report_generator import ReportGenerator
+from human_in_the_loop.streamlit_validation_interface import StreamlitValidationInterface
+from use_case_analysis.streamlit_use_case_validation import StreamlitUseCaseValidation
 
 # Configuration de l'API
 API_URL = "http://localhost:2025"
+
+# Initialisation des interfaces de validation
+validation_interface = StreamlitValidationInterface()
+use_case_validation = StreamlitUseCaseValidation()
 
 # Configuration de la page
 st.set_page_config(
@@ -357,7 +363,10 @@ def display_workflow_progress():
         st.warning(f"⚠️ Statut inconnu: {status}")
 
 def display_needs_validation_interface():
-    """Affiche l'interface de validation des besoins"""
+    """
+    Affiche l'interface de validation des besoins.
+    Utilise StreamlitValidationInterface et envoie le résultat à l'API.
+    """
     
     st.markdown("### Validation des Besoins Identifiés")
     
@@ -375,7 +384,7 @@ def display_needs_validation_interface():
                     del st.session_state[key]
         st.session_state.last_needs_iteration = iteration_count
     
-    # Message clair sur la progression
+    # Affichage du message de progression
     remaining_to_validate = max(0, 5 - validated_count)
     
     if iteration_count == 0:
@@ -386,78 +395,17 @@ def display_needs_validation_interface():
     
     st.markdown("---")
     
-    # Afficher chaque besoin avec un checkbox (2 colonnes avec lignes de séparation)
-    validated_needs = []
-    rejected_needs = []
-    
-    # Créer 2 colonnes pour l'affichage
-    for i in range(0, len(identified_needs), 2):
-        col1, col2 = st.columns(2)
-        
-        # Besoin de gauche
-        with col1:
-            if i < len(identified_needs):
-                need = identified_needs[i]
-                st.markdown(f"#### {need.get('theme', 'N/A')}")
-                
-                quotes = need.get('quotes', [])
-                if quotes:
-                    st.markdown("**Citations clés :**")
-                    for quote in quotes[:3]:  # Limiter à 3 citations pour la lisibilité
-                        st.markdown(f"• _{quote}_")
-                else:
-                    st.markdown("_Aucune citation disponible_")
-                
-                validated = st.checkbox(
-                    "Valider ce besoin",
-                    key=f"validate_need_{i}_{iteration_count}",  # Clé unique par itération
-                    value=False
-                )
-                
-                if validated:
-                    validated_needs.append(need)
-                else:
-                    rejected_needs.append(need)
-        
-        # Besoin de droite
-        with col2:
-            if i + 1 < len(identified_needs):
-                need = identified_needs[i + 1]
-                st.markdown(f"#### {need.get('theme', 'N/A')}")
-                
-                quotes = need.get('quotes', [])
-                if quotes:
-                    st.markdown("**Citations clés :**")
-                    for quote in quotes[:3]:  # Limiter à 3 citations
-                        st.markdown(f"• _{quote}_")
-                else:
-                    st.markdown("_Aucune citation disponible_")
-                
-                validated = st.checkbox(
-                    "Valider ce besoin",
-                    key=f"validate_need_{i+1}_{iteration_count}",  # Clé unique par itération
-                    value=False
-                )
-                
-                if validated:
-                    validated_needs.append(need)
-                else:
-                    rejected_needs.append(need)
-        
-        # Ligne de séparation fine après chaque paire de besoins
-        st.markdown("---")
-    
-    # Zone de feedback
-    user_feedback = st.text_area(
-        "Commentaires (optionnel)",
-        placeholder="Ajoutez vos commentaires ici...",
-        key="user_feedback_needs"
+    # ✅ UTILISER LA CLASSE pour afficher l'interface de validation
+    # La classe retourne le résultat si l'utilisateur clique sur "Valider"
+    result = validation_interface.display_needs_for_validation(
+        identified_needs=identified_needs,
+        validated_count=validated_count,
+        key_suffix=str(iteration_count)  # Utiliser iteration_count comme suffixe
     )
     
-    # Bouton de validation
-    st.markdown("---")
-    if st.button("✅ Valider la Sélection", type="primary", use_container_width=True):
-        # Messages d'attente pour la validation
+    # Si un résultat est retourné, envoyer à l'API avec messages rotatifs
+    if result is not None:
+        # Envoyer à l'API avec messages rotatifs
         validation_messages = [
             "📤 Envoi de votre validation...",
             "🤖 Analyse vos retours...",
@@ -471,9 +419,9 @@ def display_needs_validation_interface():
         with ThreadPoolExecutor(max_workers=1) as executor:
             future = executor.submit(
                 send_validation_feedback_api_call,
-                validated_needs,
-                rejected_needs,
-                user_feedback,
+                result['validated_needs'],
+                result['rejected_needs'],
+                result['user_feedback'],
                 st.session_state.thread_id,
                 result_queue
             )
@@ -500,7 +448,10 @@ def display_needs_validation_interface():
                 status_placeholder.error("❌ Timeout lors de la validation")
 
 def display_use_cases_validation_interface():
-    """Affiche l'interface de validation des use cases"""
+    """
+    Affiche l'interface de validation des use cases.
+    Utilise StreamlitUseCaseValidation et envoie le résultat à l'API.
+    """
     
     st.markdown("### Validation des Cas d'Usage IA")
     
@@ -529,117 +480,19 @@ def display_use_cases_validation_interface():
     
     st.markdown("---")
     
-    # Quick Wins - 2 colonnes côte à côte
-    st.subheader("Quick Wins - Automatisation & assistance intelligente")
-    st.caption("Solutions à faible complexité technique, mise en œuvre rapide (< 3 mois), ROI immédiat")
-    validated_qw = []
-    rejected_qw = []
-    
-    for i in range(0, len(proposed_qw), 2):
-        col1, col2 = st.columns(2)
-        
-        # Quick Win de gauche
-        with col1:
-            if i < len(proposed_qw):
-                uc = proposed_qw[i]
-                st.markdown(f"#### {uc.get('titre', 'N/A')}")
-                st.markdown(f"**IA utilisée :** {uc.get('ia_utilisee', 'N/A')}")
-                st.markdown(f"**Description :** {uc.get('description', 'N/A')}")
-                
-                validated = st.checkbox(
-                    "Valider ce Quick Win",
-                    key=f"validate_qw_{i}_{use_case_iteration}",
-                    value=False
-                )
-                
-                if validated:
-                    validated_qw.append(uc)
-                else:
-                    rejected_qw.append(uc)
-        
-        # Quick Win de droite
-        with col2:
-            if i + 1 < len(proposed_qw):
-                uc = proposed_qw[i + 1]
-                st.markdown(f"#### {uc.get('titre', 'N/A')}")
-                st.markdown(f"**IA utilisée :** {uc.get('ia_utilisee', 'N/A')}")
-                st.markdown(f"**Description :** {uc.get('description', 'N/A')}")
-                
-                validated = st.checkbox(
-                    "Valider ce Quick Win",
-                    key=f"validate_qw_{i+1}_{use_case_iteration}",
-                    value=False
-                )
-                
-                if validated:
-                    validated_qw.append(uc)
-                else:
-                    rejected_qw.append(uc)
-        
-        # Ligne de séparation fine après chaque paire de Quick Wins
-        st.markdown("---")
-        st.markdown("##")
-    # Structuration IA - 2 colonnes côte à côte
-    st.subheader("🔬 Structuration IA à moyen et long terme")
-    st.caption("Solutions à complexité moyenne/élevée, mise en œuvre progressive (3-12 mois), ROI moyen/long terme")
-    validated_sia = []
-    rejected_sia = []
-    
-    for i in range(0, len(proposed_sia), 2):
-        col1, col2 = st.columns(2)
-        
-        # Structuration IA de gauche
-        with col1:
-            if i < len(proposed_sia):
-                uc = proposed_sia[i]
-                st.markdown(f"#### {uc.get('titre', 'N/A')}")
-                st.markdown(f"**IA utilisée :** {uc.get('ia_utilisee', 'N/A')}")
-                st.markdown(f"**Description :** {uc.get('description', 'N/A')}")
-                
-                validated = st.checkbox(
-                    "Valider ce cas d'usage",
-                    key=f"validate_sia_{i}_{use_case_iteration}",
-                    value=False
-                )
-                
-                if validated:
-                    validated_sia.append(uc)
-                else:
-                    rejected_sia.append(uc)
-        
-        # Structuration IA de droite
-        with col2:
-            if i + 1 < len(proposed_sia):
-                uc = proposed_sia[i + 1]
-                st.markdown(f"#### {uc.get('titre', 'N/A')}")
-                st.markdown(f"**IA utilisée :** {uc.get('ia_utilisee', 'N/A')}")
-                st.markdown(f"**Description :** {uc.get('description', 'N/A')}")
-                
-                validated = st.checkbox(
-                    "Valider ce cas d'usage",
-                    key=f"validate_sia_{i+1}_{use_case_iteration}",
-                    value=False
-                )
-                
-                if validated:
-                    validated_sia.append(uc)
-                else:
-                    rejected_sia.append(uc)
-        
-        # Ligne de séparation fine après chaque paire de Structuration IA
-        st.markdown("---")
-    
-    # Zone de feedback
-    user_feedback = st.text_area(
-        "Commentaires (optionnel)",
-        placeholder="Ajoutez vos commentaires ici...",
-        key="user_feedback_use_cases"
+    # ✅ UTILISER LA CLASSE pour afficher l'interface de validation
+    # La classe retourne le résultat si l'utilisateur clique sur "Valider"
+    result = use_case_validation.display_use_cases_for_validation(
+        quick_wins=proposed_qw,
+        structuration_ia=proposed_sia,
+        validated_qw_count=validated_qw_count,
+        validated_sia_count=validated_sia_count,
+        key_suffix=str(use_case_iteration)  # Utiliser use_case_iteration comme suffixe
     )
     
-    # Bouton de validation
-    st.markdown("---")
-    if st.button("✅ Valider et Terminer", type="primary", use_container_width=True):
-        # Messages d'attente pour la validation finale
+    # Si un résultat est retourné, envoyer à l'API avec messages rotatifs
+    if result is not None:
+        # Envoyer à l'API avec messages rotatifs
         validation_messages = [
             "📤 Envoi de votre validation finale...",
             "🤖 L'IA finalise l'analyse...",
@@ -654,11 +507,11 @@ def display_use_cases_validation_interface():
         with ThreadPoolExecutor(max_workers=1) as executor:
             future = executor.submit(
                 send_use_case_validation_feedback_api_call,
-                validated_qw,
-                validated_sia,
-                rejected_qw,
-                rejected_sia,
-                user_feedback,
+                result['validated_quick_wins'],
+                result['validated_structuration_ia'],
+                result['rejected_quick_wins'],
+                result['rejected_structuration_ia'],
+                result['user_feedback'],
                 st.session_state.thread_id,
                 result_queue
             )
