@@ -8,7 +8,7 @@ import { useRouter } from "next/navigation";
 
 export default function Home() {
   const router = useRouter();
-  const { excelFile, transcriptFiles, companyName, setExcelFile, setTranscriptFiles, setCompanyName } = useUiStore();
+  const { excelFile, transcriptFiles, companyName, setExcelFile, setTranscriptFiles, setCompanyName, isBusy, setIsBusy, setPhase } = useUiStore();
   const [submitting, setSubmitting] = useState(false);
   const [statusMsg, setStatusMsg] = useState<string>("");
   const ready = !!excelFile && transcriptFiles.length > 0 && companyName.trim().length > 0;
@@ -16,6 +16,7 @@ export default function Home() {
   async function onStart() {
     if (!excelFile) return;
     setSubmitting(true);
+    setIsBusy(true);
     try {
       // Upload Excel
       const upExcel = await uploadFiles([excelFile]);
@@ -32,15 +33,21 @@ export default function Home() {
 
       // Démarrer le workflow avec chemins renvoyés par l'API
       const run = await startWorkflowWithFiles(workshopPaths, transcriptPaths, companyName);
-      if (!run || !("ok" in run) || !run.ok) throw new Error("Démarrage workflow échoué");
+      if (!run || !("ok" in run) || !run.ok) {
+        const text = run ? await run.text() : "Réponse invalide";
+        throw new Error(`Démarrage workflow échoué (${run && 'status' in run ? run.status : 'N/A'}): ${text}`);
+      }
 
       setStatusMsg("Analyse démarrée. Passage à la validation des besoins...");
+      // On active la phase "needs" pour autoriser la page suivante
+      setPhase("needs");
       router.push("/validation/needs");
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Erreur inconnue";
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
       setStatusMsg(msg);
     } finally {
       setSubmitting(false);
+      setIsBusy(false);
     }
   }
 

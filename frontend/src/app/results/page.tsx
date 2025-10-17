@@ -5,9 +5,22 @@ import { getWorkflowStatus, getWorkflowResults, downloadReport } from "@/lib/api
 export default function ResultsPage() {
   const [status, setStatus] = useState<string>("idle");
   const [results, setResults] = useState<any>(null);
-  const needs = results?.values?.validated_needs ?? results?.values?.final_needs ?? [];
-  const qw = results?.values?.validated_quick_wins ?? results?.values?.final_quick_wins ?? [];
-  const sia = results?.values?.validated_structuration_ia ?? results?.values?.final_structuration_ia ?? [];
+  // Supporte à la fois les clés au niveau racine et sous values
+  const needs = (results?.validated_needs
+    ?? results?.final_needs
+    ?? results?.values?.validated_needs
+    ?? results?.values?.final_needs
+    ?? []);
+  const qw = (results?.validated_quick_wins
+    ?? results?.final_quick_wins
+    ?? results?.values?.validated_quick_wins
+    ?? results?.values?.final_quick_wins
+    ?? []);
+  const sia = (results?.validated_structuration_ia
+    ?? results?.final_structuration_ia
+    ?? results?.values?.validated_structuration_ia
+    ?? results?.values?.final_structuration_ia
+    ?? []);
 
   useEffect(() => {
     let mounted = true;
@@ -43,9 +56,10 @@ export default function ResultsPage() {
       a.download = "rapport.docx";
       a.click();
       URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error("Erreur téléchargement:", error);
-      alert(`Erreur lors du téléchargement: ${error.message}`);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error("Erreur téléchargement:", message);
+      alert(`Erreur lors du téléchargement: ${message}`);
     }
   };
 

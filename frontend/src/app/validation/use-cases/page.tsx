@@ -3,9 +3,11 @@ import { useEffect, useState } from "react";
 import { getThreadState, sendUseCaseValidation } from "@/lib/api-client";
 import { Spinner } from "@/components/Spinner";
 import { useRouter } from "next/navigation";
+import { useUiStore } from "@/lib/store";
 
 export default function UseCasesValidationPage() {
   const router = useRouter();
+  const { isBusy, setIsBusy, setPhase } = useUiStore();
   const [quickWins, setQuickWins] = useState<any[]>([]);
   const [structIa, setStructIa] = useState<any[]>([]);
   const [selQw, setSelQw] = useState<Record<number, boolean>>({});
@@ -27,6 +29,7 @@ export default function UseCasesValidationPage() {
 
   const submit = async () => {
     setSubmitting(true);
+    setIsBusy(true);
     const validated_qw = quickWins.filter((_, i) => selQw[i]);
     const rejected_qw = quickWins.filter((_, i) => !selQw[i]);
     const validated_sia = structIa.filter((_, i) => selSia[i]);
@@ -59,6 +62,7 @@ export default function UseCasesValidationPage() {
       const vsia = state?.values?.validated_structuration_ia || [];
       const total = vqw.length + vsia.length;
       if (total >= 5) {
+        setPhase("done");
         router.push("/results");
         return;
       }
@@ -70,11 +74,12 @@ export default function UseCasesValidationPage() {
       setComment("");
     } catch {}
     setSubmitting(false);
+    setIsBusy(false);
   };
 
   return (
     <main className="mx-auto max-w-4xl p-6 space-y-6 text-black">
-      <h1 className="text-2xl font-semibold">Validation des cas d'usage</h1>
+      <h1 className="text-2xl font-semibold">Validation des cas d'usage (5 minimum)</h1>
 
       {persistedSelected.length > 0 && (
         <section className="space-y-2">
@@ -107,7 +112,7 @@ export default function UseCasesValidationPage() {
           <div className="space-y-2">
             {quickWins.map((uc, i) => (
               <label key={i} className="flex items-start gap-3 border rounded-md p-3 cursor-pointer">
-                <input type="checkbox" checked={!!selQw[i]} onChange={() => setSelQw((s) => ({ ...s, [i]: !s[i] }))} />
+                <input type="checkbox" disabled={submitting} checked={!!selQw[i]} onChange={() => setSelQw((s) => ({ ...s, [i]: !s[i] }))} />
                 <div>
                   <div className="font-medium">{uc.titre || uc.title || "Cas d'usage"}</div>
                   {uc.description && <div className="text-sm text-gray-700">{uc.description}</div>}
@@ -127,7 +132,7 @@ export default function UseCasesValidationPage() {
           <div className="space-y-2">
             {structIa.map((uc, i) => (
               <label key={i} className="flex items-start gap-3 border rounded-md p-3 cursor-pointer">
-                <input type="checkbox" checked={!!selSia[i]} onChange={() => setSelSia((s) => ({ ...s, [i]: !s[i] }))} />
+                <input type="checkbox" disabled={submitting} checked={!!selSia[i]} onChange={() => setSelSia((s) => ({ ...s, [i]: !s[i] }))} />
                 <div>
                   <div className="font-medium">{uc.titre || uc.title || "Cas d'usage"}</div>
                   {uc.description && <div className="text-sm text-gray-700">{uc.description}</div>}
@@ -141,7 +146,7 @@ export default function UseCasesValidationPage() {
 
       <div className="space-y-2">
         <h3 className="font-medium">Commentaires (optionnel)</h3>
-        <textarea value={comment} onChange={(e) => setComment(e.target.value)} className="w-full border rounded-md p-2" rows={4} />
+        <textarea disabled={submitting} value={comment} onChange={(e) => setComment(e.target.value)} className="w-full border rounded-md p-2 disabled:bg-gray-100" rows={4} />
       </div>
 
       <button disabled={submitting} onClick={submit} className="rounded-md px-4 py-2 text-white disabled:opacity-50" style={{ backgroundColor: submitting ? 'rgb(161, 109, 246)' : '#670ffc' }}>
