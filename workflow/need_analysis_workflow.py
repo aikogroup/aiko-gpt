@@ -114,10 +114,15 @@ class NeedAnalysisWorkflow:
         self.transcript_agent = TranscriptAgent(api_key)
         self.web_search_agent = WebSearchAgent()  # Pas de paramètre
         self.need_analysis_agent = NeedAnalysisAgent(api_key, tracker=self.tracker)
-        self.human_interface = StreamlitValidationInterface()
+        # Interfaces Streamlit désactivées si non disponibles
+        self.human_interface = (
+            StreamlitValidationInterface() if StreamlitValidationInterface else None
+        )
         # Nouveaux agents pour l'analyse des use cases
         self.use_case_analysis_agent = UseCaseAnalysisAgent(api_key, tracker=self.tracker)
-        self.use_case_validation_interface = StreamlitUseCaseValidation()
+        self.use_case_validation_interface = (
+            StreamlitUseCaseValidation() if StreamlitUseCaseValidation else None
+        )
         
         # Configuration du checkpointer pour le debugging
         self.checkpointer = self._setup_checkpointer()
@@ -1215,178 +1220,19 @@ class NeedAnalysisWorkflow:
                 "messages": [f"Erreur workflow: {str(e)}"]
             }
     
-    def resume_workflow(self) -> Dict[str, Any]:
+    # Fonction resume_workflow supprimée - était spécifique à Streamlit
+    def resume_workflow_removed(self) -> Dict[str, Any]:
         """
-        Reprend le workflow après validation humaine.
-        VERSION CORRIGÉE: Reprend depuis le nœud check_success au lieu de repartir du début.
-        
-        Returns:
-            Résultats du workflow
+        FONCTION SUPPRIMÉE - était spécifique à Streamlit.
+        La validation humaine se fait maintenant via l'API FastAPI.
         """
-        print(f"\n🔄 [DEBUG] resume_workflow() appelé")
-        
-        try:
-            # Récupérer l'état du workflow depuis session_state
-            if "workflow_state" not in st.session_state:
-                print(f"❌ [DEBUG] Aucun état de workflow trouvé dans session_state")
-                return {
-                    "success": False,
-                    "error": "Aucun état de workflow trouvé",
-                    "final_needs": [],
-                    "iteration_count": 0,
-                    "messages": ["Erreur: Aucun état de workflow trouvé"]
-                }
-            
-            # Récupérer l'état sauvegardé
-            workflow_state = st.session_state.workflow_state
-            print(f"📊 [DEBUG] État du workflow récupéré: {len(workflow_state)} clés")
-            
-            # Récupérer le résultat de validation depuis session_state
-            if "validation_result" not in st.session_state:
-                print(f"❌ [DEBUG] Aucun résultat de validation trouvé")
-                return {
-                    "success": False,
-                    "error": "Aucun résultat de validation trouvé",
-                    "final_needs": [],
-                    "iteration_count": 0,
-                    "messages": ["Erreur: Aucun résultat de validation trouvé"]
-                }
-            
-            validation_result = st.session_state.validation_result
-            print(f"📊 [DEBUG] Résultat de validation récupéré: {validation_result.get('total_validated', 0)} besoins validés")
-            
-            # CORRECTION: Ne pas écraser validated_needs, mais accumuler correctement
-            # validation_result contient les besoins nouvellement validés
-            existing_validated = workflow_state.get("validated_needs", [])
-            newly_validated = validation_result.get("validated_needs", [])
-            
-            # Éviter les doublons
-            existing_ids = [need.get("theme", "") for need in existing_validated]
-            unique_newly_validated = [need for need in newly_validated if need.get("theme", "") not in existing_ids]
-            
-            workflow_state["validated_needs"] = existing_validated + unique_newly_validated
-            
-            # Même chose pour rejected_needs
-            existing_rejected = workflow_state.get("rejected_needs", [])
-            newly_rejected = validation_result.get("rejected_needs", [])
-            
-            existing_rejected_ids = [need.get("theme", "") for need in existing_rejected]
-            unique_newly_rejected = [need for need in newly_rejected if need.get("theme", "") not in existing_rejected_ids]
-            
-            workflow_state["rejected_needs"] = existing_rejected + unique_newly_rejected
-            
-            workflow_state["user_feedback"] = validation_result.get("user_feedback", "")
-            workflow_state["validation_result"] = validation_result
-            
-            print(f"📊 [DEBUG] Besoins nouvellement validés: {len(unique_newly_validated)}")
-            print(f"📊 [DEBUG] Total besoins validés: {len(workflow_state['validated_needs'])}")
-            
-            # Exécuter les nœuds suivants manuellement
-            print(f"🔄 [DEBUG] Exécution des nœuds suivants après validation...")
-            
-            # 1. Vérifier le succès
-            workflow_state = self._check_success_node(workflow_state)
-            
-            # 2. Déterminer la suite selon le résultat
-            should_continue = self._should_continue(workflow_state)
-            print(f"📊 [DEBUG] Décision de continuation: {should_continue}")
-            
-            if should_continue == "success":
-                # 3. Finaliser les résultats
-                print(f"🔍 [DEBUG] _finalize_results_node - DÉBUT")
-                workflow_state = self._finalize_results_node(workflow_state)
-                print(f"✅ [DEBUG] _finalize_results_node - FIN")
-                
-                print(f"✅ [DEBUG] Phase 1 (besoins) terminée avec succès")
-                print(f"📊 [DEBUG] Success: {workflow_state.get('success', False)}")
-                print(f"📊 [DEBUG] Final needs: {len(workflow_state.get('final_needs', []))}")
-                
-                # NETTOYAGE DES FLAGS DE LA PHASE 1 ← NOUVEAU
-                print(f"🧹 [DEBUG] Nettoyage des flags de la Phase 1")
-                workflow_state["workflow_paused"] = False
-                st.session_state.workflow_paused = False
-                st.session_state.waiting_for_validation = False
-                if "validation_result" in st.session_state:
-                    del st.session_state.validation_result
-                if "workflow_state" in st.session_state:
-                    del st.session_state.workflow_state
-                print(f"✅ [DEBUG] Flags de Phase 1 nettoyés")
-                
-                # CORRECTION: Continuer vers l'analyse des use cases au lieu de retourner
-                print(f"🚀 [DEBUG] Passage à la Phase 2 : Analyse des use cases")
-                
-                # 4. Analyser les use cases
-                workflow_state = self._analyze_use_cases_node(workflow_state)
-                
-                # 5. Afficher l'interface de validation des use cases
-                workflow_state = self._validate_use_cases_node(workflow_state)
-                
-                print(f"⏸️ [DEBUG] Workflow en pause - en attente de validation des use cases")
-                
-                # Retourner un état "en pause" pour les use cases
-                return {
-                    "success": False,  # Pas encore terminé, on attend la validation use cases
-                    "final_needs": workflow_state.get("final_needs", []),
-                    "summary": {
-                        "total_needs": len(workflow_state.get("final_needs", [])),
-                        "themes": list(set([need.get("theme", "") for need in workflow_state.get("final_needs", []) if need.get("theme")])),
-                    },
-                    "iteration_count": workflow_state.get("iteration_count", 0),
-                    "workshop_results": workflow_state.get("workshop_results", {}),
-                    "transcript_results": workflow_state.get("transcript_results", []),
-                    "web_search_results": workflow_state.get("web_search_results", {}),
-                    "messages": ["Phase 1 terminée - en attente de validation des use cases"]
-                }
-            elif should_continue == "continue":
-                # 4. Continuer avec une nouvelle analyse (pas encore 5 besoins validés)
-                print(f"🔄 [DEBUG] Besoin de plus de besoins validés - génération d'une nouvelle itération")
-                print(f"📊 [DEBUG] Besoins actuellement validés: {len(workflow_state.get('validated_needs', []))}/5")
-                print(f"🔄 [DEBUG] Itération actuelle: {workflow_state.get('iteration_count', 0)}/{workflow_state.get('max_iterations', 3)}")
-                
-                # NOTE: L'incrémentation est déjà faite dans _check_success_node
-                # Ne pas incrémenter ici pour éviter la double incrémentation !
-                
-                # CORRECTION: Nettoyer validation_result avant la nouvelle itération
-                print(f"🧹 [DEBUG] Nettoyage de validation_result pour la nouvelle itération")
-                if "validation_result" in st.session_state:
-                    del st.session_state.validation_result
-                print(f"✅ [DEBUG] validation_result nettoyé")
-                
-                # Analyser de nouveaux besoins
-                workflow_state = self._analyze_needs_node(workflow_state)
-                
-                # Afficher l'interface de validation pour les nouveaux besoins
-                workflow_state = self._human_validation_node(workflow_state)
-                
-                print(f"⏸️ [DEBUG] Workflow en pause - nouvelle validation requise")
-                
-                # Le workflow s'arrête à nouveau pour une nouvelle validation
-                return {
-                    "success": False,
-                    "error": "Nouvelle validation requise",
-                    "final_needs": [],
-                    "iteration_count": workflow_state.get("iteration_count", 0),
-                    "messages": ["Nouvelle validation requise"]
-                }
-            else:  # max_iterations
-                print(f"❌ [DEBUG] Nombre maximum d'itérations atteint")
-                return {
-                    "success": False,
-                    "error": "Nombre maximum d'itérations atteint",
-                    "final_needs": [],
-                    "iteration_count": workflow_state.get("iteration_count", 0),
-                    "messages": ["Nombre maximum d'itérations atteint"]
-                }
-            
-        except Exception as e:
-            print(f"❌ [DEBUG] Erreur dans resume_workflow(): {str(e)}")
-            return {
-                "success": False,
-                "error": str(e),
-                "final_needs": [],
-                "iteration_count": 0,
-                "messages": [f"Erreur reprise workflow: {str(e)}"]
-            }
+        return {
+            "success": False,
+            "error": "Fonction supprimée - utilisez l'API FastAPI pour la validation",
+            "final_needs": [],
+            "iteration_count": 0,
+            "messages": ["Fonction obsolète"]
+        }
     
     # ==================== NOUVEAUX NŒUDS POUR L'ANALYSE DES USE CASES ====================
     
@@ -2064,157 +1910,18 @@ class NeedAnalysisWorkflow:
                 "messages": [f"Erreur reprise workflow use cases: {str(e)}"]
             }
     
-    def resume_use_case_workflow(self) -> Dict[str, Any]:
+    # Fonction resume_use_case_workflow supprimée - était spécifique à Streamlit
+    def resume_use_case_workflow_removed(self) -> Dict[str, Any]:
         """
-        Reprend le workflow après validation humaine des use cases.
-        
-        Returns:
-            Résultats du workflow
+        FONCTION SUPPRIMÉE - était spécifique à Streamlit.
+        La validation humaine se fait maintenant via l'API FastAPI.
         """
-        print(f"\n🔄 [DEBUG] resume_use_case_workflow() appelé")
-        
-        try:
-            # Récupérer l'état du workflow depuis session_state
-            if "use_case_workflow_state" not in st.session_state:
-                print(f"❌ [DEBUG] Aucun état de workflow use case trouvé dans session_state")
-                return {
-                    "success": False,
-                    "error": "Aucun état de workflow use case trouvé",
-                    "final_quick_wins": [],
-                    "final_structuration_ia": [],
-                    "messages": ["Erreur: Aucun état de workflow use case trouvé"]
-                }
-            
-            # Récupérer l'état sauvegardé
-            workflow_state = st.session_state.use_case_workflow_state
-            print(f"📊 [DEBUG] État du workflow récupéré: {len(workflow_state)} clés")
-            
-            # Récupérer le résultat de validation depuis session_state
-            if "use_case_validation_result" not in st.session_state:
-                print(f"❌ [DEBUG] Aucun résultat de validation trouvé")
-                return {
-                    "success": False,
-                    "error": "Aucun résultat de validation trouvé",
-                    "final_quick_wins": [],
-                    "final_structuration_ia": [],
-                    "messages": ["Erreur: Aucun résultat de validation trouvé"]
-                }
-            
-            validation_result = st.session_state.use_case_validation_result
-            print(f"📊 [DEBUG] Résultat de validation récupéré")
-            
-            # Accumuler les validations
-            existing_qw = workflow_state.get("validated_quick_wins", [])
-            newly_validated_qw = validation_result.get("validated_quick_wins", [])
-            
-            existing_sia = workflow_state.get("validated_structuration_ia", [])
-            newly_validated_sia = validation_result.get("validated_structuration_ia", [])
-            
-            # Éviter les doublons
-            existing_qw_ids = [uc.get("titre", "") for uc in existing_qw]
-            unique_qw = [uc for uc in newly_validated_qw if uc.get("titre", "") not in existing_qw_ids]
-            
-            existing_sia_ids = [uc.get("titre", "") for uc in existing_sia]
-            unique_sia = [uc for uc in newly_validated_sia if uc.get("titre", "") not in existing_sia_ids]
-            
-            workflow_state["validated_quick_wins"] = existing_qw + unique_qw
-            workflow_state["validated_structuration_ia"] = existing_sia + unique_sia
-            
-            # Même chose pour les rejetés
-            existing_rejected_qw = workflow_state.get("rejected_quick_wins", [])
-            newly_rejected_qw = validation_result.get("rejected_quick_wins", [])
-            workflow_state["rejected_quick_wins"] = existing_rejected_qw + newly_rejected_qw
-            
-            existing_rejected_sia = workflow_state.get("rejected_structuration_ia", [])
-            newly_rejected_sia = validation_result.get("rejected_structuration_ia", [])
-            workflow_state["rejected_structuration_ia"] = existing_rejected_sia + newly_rejected_sia
-            
-            workflow_state["use_case_user_feedback"] = validation_result.get("user_feedback", "")
-            workflow_state["use_case_validation_result"] = validation_result
-            
-            print(f"📊 [DEBUG] Quick Wins nouvellement validés: {len(unique_qw)}")
-            print(f"📊 [DEBUG] Structuration IA nouvellement validés: {len(unique_sia)}")
-            print(f"📊 [DEBUG] Total Quick Wins validés: {len(workflow_state['validated_quick_wins'])}")
-            print(f"📊 [DEBUG] Total Structuration IA validés: {len(workflow_state['validated_structuration_ia'])}")
-            
-            # Exécuter les nœuds suivants manuellement
-            print(f"🔄 [DEBUG] Exécution des nœuds suivants après validation...")
-            
-            # 1. Vérifier le succès
-            workflow_state = self._check_use_case_success_node(workflow_state)
-            
-            # 2. Déterminer la suite selon le résultat
-            should_continue = self._should_continue_use_cases(workflow_state)
-            print(f"📊 [DEBUG] Décision de continuation: {should_continue}")
-            
-            if should_continue == "success":
-                # 3. Finaliser les résultats
-                print(f"🔍 [DEBUG] _finalize_use_cases_node - DÉBUT")
-                workflow_state = self._finalize_use_cases_node(workflow_state)
-                print(f"✅ [DEBUG] _finalize_use_cases_node - FIN")
-                
-                print(f"✅ [DEBUG] Workflow use cases terminé avec succès")
-                print(f"📊 [DEBUG] Success: {workflow_state.get('use_case_success', False)}")
-                print(f"📊 [DEBUG] Final Quick Wins: {len(workflow_state.get('final_quick_wins', []))}")
-                print(f"📊 [DEBUG] Final Structuration IA: {len(workflow_state.get('final_structuration_ia', []))}")
-                
-                return {
-                    "success": workflow_state.get("use_case_success", False),
-                    "final_quick_wins": workflow_state.get("final_quick_wins", []),
-                    "final_structuration_ia": workflow_state.get("final_structuration_ia", []),
-                    "use_case_iteration": workflow_state.get("use_case_iteration", 0),
-                    "final_needs": workflow_state.get("final_needs", []),
-                    "messages": ["Analyse des use cases terminée avec succès"]
-                }
-            elif should_continue == "continue":
-                # 4. Continuer avec une nouvelle analyse
-                print(f"🔄 [DEBUG] Besoin de plus de use cases validés - génération d'une nouvelle itération")
-                print(f"📊 [DEBUG] Quick Wins actuellement validés: {len(workflow_state.get('validated_quick_wins', []))}/5")
-                print(f"📊 [DEBUG] Structuration IA actuellement validés: {len(workflow_state.get('validated_structuration_ia', []))}/5")
-                print(f"🔄 [DEBUG] Itération actuelle: {workflow_state.get('use_case_iteration', 0)}/{workflow_state.get('max_use_case_iterations', 3)}")
-                
-                # Nettoyer validation_result avant la nouvelle itération
-                print(f"🧹 [DEBUG] Nettoyage de use_case_validation_result pour la nouvelle itération")
-                if "use_case_validation_result" in st.session_state:
-                    del st.session_state.use_case_validation_result
-                print(f"✅ [DEBUG] use_case_validation_result nettoyé")
-                
-                # Analyser de nouveaux use cases
-                workflow_state = self._analyze_use_cases_node(workflow_state)
-                
-                # Afficher l'interface de validation pour les nouveaux use cases
-                workflow_state = self._validate_use_cases_node(workflow_state)
-                
-                print(f"⏸️ [DEBUG] Workflow en pause - nouvelle validation use cases requise")
-                
-                # Le workflow s'arrête à nouveau pour une nouvelle validation
-                return {
-                    "success": False,
-                    "error": "Nouvelle validation use cases requise",
-                    "final_quick_wins": [],
-                    "final_structuration_ia": [],
-                    "use_case_iteration": workflow_state.get("use_case_iteration", 0),
-                    "messages": ["Nouvelle validation use cases requise"]
-                }
-            else:  # max_iterations
-                print(f"❌ [DEBUG] Nombre maximum d'itérations atteint")
-                return {
-                    "success": False,
-                    "error": "Nombre maximum d'itérations atteint",
-                    "final_quick_wins": [],
-                    "final_structuration_ia": [],
-                    "use_case_iteration": workflow_state.get("use_case_iteration", 0),
-                    "messages": ["Nombre maximum d'itérations atteint"]
-                }
-            
-        except Exception as e:
-            print(f"❌ [DEBUG] Erreur dans resume_use_case_workflow(): {str(e)}")
-            import traceback
-            traceback.print_exc()
-            return {
-                "success": False,
-                "error": str(e),
-                "final_quick_wins": [],
-                "final_structuration_ia": [],
-                "messages": [f"Erreur reprise workflow use cases: {str(e)}"]
-            }
+        return {
+            "success": False,
+            "error": "Fonction supprimée - utilisez l'API FastAPI pour la validation",
+            "final_quick_wins": [],
+            "final_structuration_ia": [],
+            "messages": ["Fonction obsolète"]
+        }
+    
+    # ==================== FIN DU NETTOYAGE STREAMLIT ====================
