@@ -11,6 +11,10 @@ from pydantic import BaseModel, Field
 from openai import OpenAI
 from dotenv import load_dotenv
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from prompts.workshop_agent_prompts import (
+    WORKSHOP_ANALYSIS_PROMPT,
+    USE_CASE_CONSOLIDATION_PROMPT
+)
 
 # Configuration du logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -132,28 +136,22 @@ class WorkshopAgent:
             if use_case and use_case.strip():
                 use_cases_text.append(f"- {use_case}: {objective}")
         
-        # Prompt pour le LLM
-        prompt = f"""
-        Analysez les cas d'usage suivants pour l'atelier "{atelier_name}" et structurez-les de manière cohérente.
-        
-        Cas d'usage identifiés:
-        {chr(10).join(use_cases_text)}
-        
-        Consolidez les cas d'usage en:
-        - Identifiant le thème principal de l'atelier
-        - Regroupant les cas similaires
-        - Éliminant les doublons
-        - Listant les bénéfices pour chaque cas d'usage
-        """
+        # Utilisation du prompt depuis workshop_agent_prompts.py
+        user_prompt = USE_CASE_CONSOLIDATION_PROMPT.format(
+            atelier_name=atelier_name,
+            use_cases_text=chr(10).join(use_cases_text)
+        )
         
         try:
             # Appel à l'API OpenAI Responses avec structured output
+            # Utilisation du paramètre 'instructions' pour le system prompt
             response = self.client.responses.parse(
                 model=self.model,
+                instructions=WORKSHOP_ANALYSIS_PROMPT,
                 input=[
                     {
                         "role": "user",
-                        "content": f"Vous êtes un expert en analyse de cas d'usage IA. Structurez les données de manière claire et professionnelle.\n\n{prompt}"
+                        "content": user_prompt
                     }
                 ],
                 text_format=WorkshopAnalysisResponse
