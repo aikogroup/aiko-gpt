@@ -1,10 +1,12 @@
 "use client";
 import { useEffect, useState } from "react";
 import { getWorkflowStatus, getWorkflowResults, downloadReport } from "@/lib/api-client";
+import { LogViewer } from "@/components/LogViewer";
 
 export default function ResultsPage() {
   const [status, setStatus] = useState<string>("idle");
   const [results, setResults] = useState<any>(null);
+  const [downloading, setDownloading] = useState(false);
   // Supporte à la fois les clés au niveau racine et sous values
   const needs = (results?.validated_needs
     ?? results?.final_needs
@@ -48,6 +50,7 @@ export default function ResultsPage() {
   };
 
   const onDownload = async () => {
+    setDownloading(true);
     try {
       const blob = await downloadReport();
       const url = URL.createObjectURL(blob);
@@ -60,6 +63,8 @@ export default function ResultsPage() {
       const message = error instanceof Error ? error.message : String(error);
       console.error("Erreur téléchargement:", message);
       alert(`Erreur lors du téléchargement: ${message}`);
+    } finally {
+      setDownloading(false);
     }
   };
 
@@ -69,8 +74,17 @@ export default function ResultsPage() {
       <p className="text-sm">Statut: {status}</p>
       <div className="flex gap-3">
         <button onClick={loadResults} className="rounded-md px-4 py-2 text-white" style={{ backgroundColor: '#670ffc' }}>Charger les résultats</button>
-        <button onClick={onDownload} className="rounded-md px-4 py-2 text-white" style={{ backgroundColor: '#670ffc' }}>Télécharger le rapport Word</button>
+        <button 
+          disabled={downloading} 
+          onClick={onDownload} 
+          className="rounded-md px-4 py-2 text-white disabled:opacity-50" 
+          style={{ backgroundColor: downloading ? 'rgb(161, 109, 246)' : '#670ffc' }}
+        >
+          {downloading ? "Génération en cours..." : "Télécharger le rapport Word"}
+        </button>
       </div>
+      
+      <LogViewer isActive={downloading} context="download" />
       <section className="space-y-4">
         <h2 className="text-xl font-medium">Besoins validés</h2>
         {needs.length === 0 ? <p>Aucun besoin validé.</p> : (

@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { getThreadState, sendNeedsValidation } from "@/lib/api-client";
 import { Spinner } from "@/components/Spinner";
+import { LogViewer } from "@/components/LogViewer";
 import { useRouter } from "next/navigation";
 import { useUiStore } from "@/lib/store";
 
@@ -147,6 +148,8 @@ export default function NeedsValidationPage() {
         {submitting ? (<span className="inline-flex items-center gap-2"><Spinner /> Traitement...</span>) : "Valider la sélection"}
       </button>
       {statusMsg && <p className="text-sm mt-2">{statusMsg}</p>}
+      
+      <LogViewer isActive={submitting} context="validation" />
     </main>
   );
 }

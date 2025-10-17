@@ -4,6 +4,7 @@ import { UploadZone } from "@/components/UploadZone";
 import { useUiStore } from "@/lib/store";
 import { uploadFiles, setCompanyName, startWorkflowWithFiles } from "@/lib/api-client";
 import { Spinner } from "@/components/Spinner";
+import { LogViewer } from "@/components/LogViewer";
 import { useRouter } from "next/navigation";
 
 export default function Home() {
@@ -64,7 +65,16 @@ export default function Home() {
       <section className="space-y-2">
         <h2 className="font-medium">2) Transcriptions (PDF/JSON)</h2>
         <UploadZone accept=".pdf,.json" multiple onFiles={setTranscriptFiles} />
-        {transcriptFiles.length > 0 && <p className="text-sm text-gray-600">{transcriptFiles.length} fichier(s) sélectionné(s)</p>}
+        {transcriptFiles.length > 0 && (
+          <div className="text-sm text-gray-600">
+            <p className="font-medium">{transcriptFiles.length} fichier(s) sélectionné(s):</p>
+            <ul className="list-disc list-inside mt-1 space-y-1">
+              {transcriptFiles.map((file, index) => (
+                <li key={index} className="text-xs">{file.name}</li>
+              ))}
+            </ul>
+          </div>
+        )}
       </section>
 
       <section className="space-y-2">
@@ -94,6 +104,8 @@ export default function Home() {
         {statusMsg && (
           <p className="mt-2 text-sm">{statusMsg}</p>
         )}
+        
+        <LogViewer isActive={submitting} context="workflow" />
       </section>
     </main>
   );
