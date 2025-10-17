@@ -11,7 +11,10 @@ from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from langgraph.checkpoint.memory import MemorySaver
-import streamlit as st
+try:
+    import streamlit as st
+except Exception:
+    st = None
 
 # Import des agents
 import sys
@@ -20,9 +23,15 @@ from need_analysis.need_analysis_agent import NeedAnalysisAgent
 from process_atelier.workshop_agent import WorkshopAgent
 from process_transcript.transcript_agent import TranscriptAgent
 from web_search.web_search_agent import WebSearchAgent
-from human_in_the_loop.streamlit_validation_interface import StreamlitValidationInterface
+try:
+    from human_in_the_loop.streamlit_validation_interface import StreamlitValidationInterface
+except Exception:
+    StreamlitValidationInterface = None
 from use_case_analysis.use_case_analysis_agent import UseCaseAnalysisAgent
-from use_case_analysis.streamlit_use_case_validation import StreamlitUseCaseValidation
+try:
+    from use_case_analysis.streamlit_use_case_validation import StreamlitUseCaseValidation
+except Exception:
+    StreamlitUseCaseValidation = None
 from utils.token_tracker import TokenTracker
 
 
