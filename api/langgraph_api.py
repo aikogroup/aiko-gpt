@@ -202,44 +202,59 @@ async def create_run(thread_id: str, workflow_input: WorkflowInput):
 @app.get("/threads/{thread_id}/state")
 async def get_state(thread_id: str):
     """
-    Récupère l'état actuel du workflow.
+    Récupère l'état actuel du workflow depuis le checkpointer (état à jour).
     
     Returns:
         {
             "thread_id": "uuid",
             "status": "running" | "paused" | "completed",
-            "values": {...},  # État complet
+            "values": {...},  # État complet depuis checkpointer
             "next": ["node_name"] | []  # Prochain nœud ou vide si terminé
         }
     """
     if thread_id not in workflows:
         raise HTTPException(status_code=404, detail="Thread non trouvé")
     
-    workflow_data = workflows[thread_id]
-    state = workflow_data.get("state", {})
-    
-    # Déterminer le prochain nœud en fonction de l'état
-    next_node = []
-    if workflow_data["status"] == "paused":
-        # Vérifier où le workflow est en pause
+    try:
+        workflow_data = workflows[thread_id]
+        workflow = workflow_data["workflow"]
+        
+        # Lire l'état à jour depuis le checkpointer
+        config = {"configurable": {"thread_id": thread_id}}
+        snapshot = workflow.graph.get_state(config)
+        state = snapshot.values
+        next_nodes = list(snapshot.next) if snapshot.next else []
+        
+        # Mettre à jour le cache local avec l'état à jour
+        workflow_data["state"] = state
+        
+        # Déterminer le statut en fonction de l'état
+        status = workflow_data["status"]
         if state.get("use_case_workflow_paused"):
-            # Priorité à use_case car c'est la phase 2
-            next_node = ("validate_use_cases",)  # Tuple pour être cohérent avec LangGraph
+            status = "paused"
         elif state.get("workflow_paused"):
-            next_node = ("human_validation",)
-        elif state.get("identified_needs"):
-            # Si on a des besoins identifiés mais pas encore de flag workflow_paused
-            next_node = ("human_validation",)
-        elif state.get("proposed_quick_wins") or state.get("proposed_structuration_ia"):
-            # Si on a des use cases proposés
-            next_node = ("validate_use_cases",)
+            status = "paused"
+        elif state.get("success"):
+            status = "completed"
+        elif next_nodes:
+            status = "paused"
+        
+        workflow_data["status"] = status
+        
+        return {
+            "thread_id": thread_id,
+            "status": status,
+            "values": state,
+            "next": next_nodes,
+            # Exposer aussi au niveau racine pour compatibilité frontend
+            "validated_needs": state.get("validated_needs", []),
+            "validated_quick_wins": state.get("validated_quick_wins", []),
+            "validated_structuration_ia": state.get("validated_structuration_ia", [])
+        }
     
-    return {
-        "thread_id": thread_id,
-        "status": workflow_data["status"],
-        "values": state,
-        "next": next_node
-    }
+    except Exception as e:
+        print(f"❌ [API] Erreur get_state: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Erreur récupération état: {str(e)}")
 
 
 @app.post("/threads/{thread_id}/validation")
@@ -276,14 +291,35 @@ async def send_validation(thread_id: str, feedback: ValidationFeedback):
             thread_id=thread_id
         )
         
-        # Mettre à jour l'état
-        workflow_data["state"] = result
-        workflow_data["status"] = "completed" if result.get("success") else "paused"
+        # Lire l'état à jour depuis le checkpointer après reprise
+        config = {"configurable": {"thread_id": thread_id}}
+        snapshot = workflow.graph.get_state(config)
+        state = snapshot.values
+        next_nodes = list(snapshot.next) if snapshot.next else []
+        
+        # Mettre à jour le cache local avec l'état à jour
+        workflow_data["state"] = state
+        
+        # Déterminer le statut en fonction de l'état
+        if state.get("use_case_workflow_paused"):
+            workflow_data["status"] = "paused"
+        elif state.get("workflow_paused"):
+            workflow_data["status"] = "paused"
+        elif state.get("success"):
+            workflow_data["status"] = "completed"
+        elif next_nodes:
+            workflow_data["status"] = "paused"
+        else:
+            workflow_data["status"] = "completed"
+        
+        print(f"🔄 [API] État après validation: {workflow_data['status']}")
+        print(f"📊 [API] validated_needs count: {len(state.get('validated_needs', []))}")
         
         return {
             "status": "resumed",
             "thread_id": thread_id,
-            "workflow_status": workflow_data["status"]
+            "workflow_status": workflow_data["status"],
+            "validated_needs_count": len(state.get("validated_needs", []))
         }
     
     except Exception as e:
@@ -327,21 +363,36 @@ async def send_use_case_validation(thread_id: str, feedback: UseCaseValidationFe
             thread_id=thread_id
         )
         
-        # Mettre à jour l'état
-        workflow_data["state"] = result
-        # Mettre à jour le statut en fonction du résultat
-        if result.get("success"):
+        # Lire l'état à jour depuis le checkpointer après reprise
+        config = {"configurable": {"thread_id": thread_id}}
+        snapshot = workflow.graph.get_state(config)
+        state = snapshot.values
+        next_nodes = list(snapshot.next) if snapshot.next else []
+        
+        # Mettre à jour le cache local avec l'état à jour
+        workflow_data["state"] = state
+        
+        # Déterminer le statut en fonction de l'état
+        if state.get("success"):
             workflow_data["status"] = "completed"
-        elif result.get("use_case_workflow_paused"):
+        elif state.get("use_case_workflow_paused"):
+            workflow_data["status"] = "paused"
+        elif next_nodes:
             workflow_data["status"] = "paused"
         else:
-            workflow_data["status"] = "error"
+            workflow_data["status"] = "completed"
+        
+        print(f"🔄 [API] État après validation use cases: {workflow_data['status']}")
+        print(f"📊 [API] validated_quick_wins count: {len(state.get('validated_quick_wins', []))}")
+        print(f"📊 [API] validated_structuration_ia count: {len(state.get('validated_structuration_ia', []))}")
         
         return {
             "status": workflow_data["status"],
             "thread_id": thread_id,
             "final_results": result,
-            "success": result.get("success", False)
+            "success": result.get("success", False),
+            "validated_quick_wins_count": len(state.get("validated_quick_wins", [])),
+            "validated_structuration_ia_count": len(state.get("validated_structuration_ia", []))
         }
     
     except Exception as e:
