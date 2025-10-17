@@ -118,49 +118,23 @@ class StreamlitValidationInterface:
             height=100
         )
         
-        # Boutons d'action - TOUJOURS VISIBLES
+        # Bouton de validation
         st.markdown("---")
-        col1, col2, col3 = st.columns([1, 1, 1])
         
-        with col1:
-            if st.button("Valider la sélection", type="primary", disabled=selected_count == 0):
-                if selected_count == 0:
-                    st.warning("Veuillez sélectionner au moins un besoin")
-                else:
-                    # Lire l'état des checkboxes directement
-                    selected_needs = []
-                    for i in range(1, len(identified_needs) + 1):
-                        checkbox_key = f"validate_need_{i}_{key_suffix}"
-                        if st.session_state.get(checkbox_key, False):
-                            selected_needs.append(i)
-                    
-                    # Traiter la validation et retourner le résultat
-                    result = self._process_validation(identified_needs, selected_needs, comments, validated_count)
-                    return result  # Retourner le résultat pour que app_api.py puisse l'envoyer à l'API
-        
-        with col2:
-            if st.button("Recommencer", type="secondary"):
-                # Réinitialiser les checkboxes et l'état
+        if st.button("✅ Valider la sélection", type="primary", disabled=selected_count == 0, use_container_width=True):
+            if selected_count == 0:
+                st.warning("Veuillez sélectionner au moins un besoin")
+            else:
+                # Lire l'état des checkboxes directement
+                selected_needs = []
                 for i in range(1, len(identified_needs) + 1):
-                    if f"validate_need_{i}" in st.session_state:
-                        st.session_state[f"validate_need_{i}"] = False
-                st.session_state.selected_needs = set()
-                st.rerun()
-        
-        with col3:
-            if st.button("Annuler", type="secondary"):
-                # Réinitialiser les checkboxes et l'état
-                for i in range(1, len(identified_needs) + 1):
-                    if f"validate_need_{i}" in st.session_state:
-                        st.session_state[f"validate_need_{i}"] = False
-                st.session_state.selected_needs = set()
-                return {
-                    "validated_needs": [],
-                    "rejected_needs": [],
-                    "user_feedback": "Validation annulée",
-                    "success": False,
-                    "total_validated": validated_count
-                }
+                    checkbox_key = f"validate_need_{i}_{key_suffix}"
+                    if st.session_state.get(checkbox_key, False):
+                        selected_needs.append(i)
+                
+                # Traiter la validation et retourner le résultat
+                result = self._process_validation(identified_needs, selected_needs, comments, validated_count)
+                return result  # Retourner le résultat pour que app_api.py puisse l'envoyer à l'API
         
         # Retour par défaut (en attente de validation)
         return None

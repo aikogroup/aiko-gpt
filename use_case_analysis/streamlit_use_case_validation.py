@@ -173,79 +173,38 @@ class StreamlitUseCaseValidation:
             height=100
         )
         
-        # Boutons d'action
+        # Bouton de validation
         st.markdown("---")
-        col1, col2, col3 = st.columns([1, 1, 1])
         
-        with col1:
-            can_validate = selected_qw_count > 0 or selected_sia_count > 0
-            if st.button("Valider la sélection", type="primary", disabled=not can_validate):
-                if not can_validate:
-                    st.warning("Veuillez sélectionner au moins un cas d'usage")
-                else:
-                    # Lire l'état des checkboxes directement
-                    selected_qw_indices = []
-                    for i in range(1, len(quick_wins) + 1):
-                        checkbox_key = f"validate_qw_{i}_{key_suffix}"
-                        if st.session_state.get(checkbox_key, False):
-                            selected_qw_indices.append(i)
-                    
-                    selected_sia_indices = []
-                    for i in range(1, len(structuration_ia) + 1):
-                        checkbox_key = f"validate_sia_{i}_{key_suffix}"
-                        if st.session_state.get(checkbox_key, False):
-                            selected_sia_indices.append(i)
-                    
-                    # Traiter la validation et retourner le résultat
-                    result = self._process_validation(
-                        quick_wins, 
-                        structuration_ia,
-                        selected_qw_indices,
-                        selected_sia_indices,
-                        comments,
-                        validated_qw_count,
-                        validated_sia_count
-                    )
-                    return result  # Retourner le résultat pour que app_api.py puisse l'envoyer à l'API
-        
-        with col2:
-            if st.button("Recommencer", type="secondary"):
-                # Réinitialiser les checkboxes
+        can_validate = selected_qw_count > 0 or selected_sia_count > 0
+        if st.button("✅ Valider la sélection", type="primary", disabled=not can_validate, use_container_width=True):
+            if not can_validate:
+                st.warning("Veuillez sélectionner au moins un cas d'usage")
+            else:
+                # Lire l'état des checkboxes directement
+                selected_qw_indices = []
                 for i in range(1, len(quick_wins) + 1):
                     checkbox_key = f"validate_qw_{i}_{key_suffix}"
-                    if checkbox_key in st.session_state:
-                        st.session_state[checkbox_key] = False
+                    if st.session_state.get(checkbox_key, False):
+                        selected_qw_indices.append(i)
                 
+                selected_sia_indices = []
                 for i in range(1, len(structuration_ia) + 1):
                     checkbox_key = f"validate_sia_{i}_{key_suffix}"
-                    if checkbox_key in st.session_state:
-                        st.session_state[checkbox_key] = False
+                    if st.session_state.get(checkbox_key, False):
+                        selected_sia_indices.append(i)
                 
-                st.rerun()
-        
-        with col3:
-            if st.button("Annuler", type="secondary"):
-                # Réinitialiser les checkboxes
-                for i in range(1, len(quick_wins) + 1):
-                    checkbox_key = f"validate_qw_{i}_{key_suffix}"
-                    if checkbox_key in st.session_state:
-                        st.session_state[checkbox_key] = False
-                
-                for i in range(1, len(structuration_ia) + 1):
-                    checkbox_key = f"validate_sia_{i}_{key_suffix}"
-                    if checkbox_key in st.session_state:
-                        st.session_state[checkbox_key] = False
-                
-                return {
-                    "validated_quick_wins": [],
-                    "validated_structuration_ia": [],
-                    "rejected_quick_wins": [],
-                    "rejected_structuration_ia": [],
-                    "user_feedback": "Validation annulée",
-                    "success": False,
-                    "total_validated_qw": validated_qw_count,
-                    "total_validated_sia": validated_sia_count
-                }
+                # Traiter la validation et retourner le résultat
+                result = self._process_validation(
+                    quick_wins, 
+                    structuration_ia,
+                    selected_qw_indices,
+                    selected_sia_indices,
+                    comments,
+                    validated_qw_count,
+                    validated_sia_count
+                )
+                return result  # Retourner le résultat pour que app_api.py puisse l'envoyer à l'API
         
         # Retour par défaut (en attente de validation)
         return None
