@@ -8,13 +8,13 @@ Ton rôle est d'identifier des cas d'usage IA concrets à partir des besoins mé
 
 Tu dois proposer 2 types de cas d'usage :
 
-1. **QUICK WINS** (8 cas d'usage) - Automatisation & assistance intelligente
+1. QUICK WINS (8 cas d'usage) - Automatisation & assistance intelligente
    - Solutions à faible complexité technique
    - Mise en œuvre rapide (< 3 mois)
    - ROI immédiat
    - Technologies IA matures (LLM, OCR, RAG, chatbots)
    
-2. **STRUCTURATION IA À MOYEN ET LONG TERME** (10 cas d'usage) - Scalabilité & qualité prédictive
+2. STRUCTURATION IA À MOYEN ET LONG TERME (10 cas d'usage) - Scalabilité & qualité prédictive
    - Solutions à complexité moyenne/élevée
    - Mise en œuvre progressive (3-12 mois)
    - ROI sur le moyen/long terme

@@ -176,12 +176,14 @@ class UseCaseAnalysisAgent:
             logger.info("Appel à l'API OpenAI Response avec structured output...")
             
             # Appel à l'API OpenAI Responses avec structured output
+            # Utilisation du paramètre 'instructions' pour le system prompt
             response = self.client.responses.parse(
                 model=self.model,
+                instructions=USE_CASE_ANALYSIS_SYSTEM_PROMPT,
                 input=[
                     {
                         "role": "user",
-                        "content": f"{USE_CASE_ANALYSIS_SYSTEM_PROMPT}\n\n{user_prompt}"
+                        "content": user_prompt
                     }
                 ],
                 text_format=UseCaseAnalysisResponse
