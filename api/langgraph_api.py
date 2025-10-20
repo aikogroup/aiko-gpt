@@ -27,7 +27,7 @@ from utils.report_generator import ReportGenerator
 
 # Initialisation de l'API
 app = FastAPI(
-    title="AIKO - LangGraph API",
+    title="aiko - LangGraph API",
     description="API pour le workflow d'analyse des besoins IA",
     version="1.0.0"
 )
@@ -79,7 +79,7 @@ class UseCaseValidationFeedback(BaseModel):
 async def root():
     """Health check"""
     return {
-        "service": "AIKO LangGraph API",
+        "service": "aiko LangGraph API",
         "status": "running",
         "version": "1.0.0"
     }
@@ -452,7 +452,7 @@ async def generate_report(thread_id: str):
 # ==================== DÉMARRAGE ====================
 
 if __name__ == "__main__":
-    print("🚀 Démarrage de l'API LangGraph AIKO...")
+    print("🚀 Démarrage de l'API LangGraph aiko...")
     print("📍 URL: http://localhost:2025")
     print("📖 Documentation: http://localhost:2025/docs")
     print("ℹ️  LangGraph Studio utilise le port 2024")

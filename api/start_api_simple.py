@@ -14,7 +14,7 @@ if __name__ == "__main__":
     import uvicorn
     from api.langgraph_api import app
     
-    print("🚀 Démarrage de l'API LangGraph AIKO (mode simple)...")
+    print("🚀 Démarrage de l'API LangGraph aiko (mode simple)...")
     print("📍 URL: http://localhost:2025")
     print("📖 Documentation: http://localhost:2025/docs")
     print("ℹ️  LangGraph Studio utilise le port 2024")
