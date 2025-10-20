@@ -7,7 +7,7 @@ import subprocess
 import sys
 
 if __name__ == "__main__":
-    print("🚀 Lancement de l'application AIKO (Architecture API)...")
+    print("🚀 Lancement de l'application aiko (Architecture API)...")
     print("📱 Interface disponible sur: http://localhost:8501")
     print("🛑 Appuyez sur Ctrl+C pour arrêter l'application")
     print()

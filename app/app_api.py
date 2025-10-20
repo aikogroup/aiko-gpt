@@ -31,7 +31,7 @@ use_case_validation = StreamlitUseCaseValidation()
 
 # Configuration de la page
 st.set_page_config(
-    page_title="AIKO - Analyse des Besoins IA",
+    page_title="aiko - Analyse des Besoins IA",
     page_icon="🤖",
     layout="wide"
 )
@@ -208,7 +208,7 @@ def send_use_case_validation_feedback_api_call(validated_qw: List[Dict], validat
 # ==================== INTERFACE STREAMLIT ====================
 
 def main():
-    st.title("🤖 AIKO - Analyse des Besoins IA")
+    st.title("🤖 aiko - Analyse des Besoins IA")
     
     init_session_state()
     

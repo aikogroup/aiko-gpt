@@ -18,7 +18,7 @@ os.environ['PYTHONPATH'] = parent_dir + os.pathsep + os.environ.get('PYTHONPATH'
 if __name__ == "__main__":
     import uvicorn
     
-    print("🚀 Démarrage de l'API LangGraph AIKO...")
+    print("🚀 Démarrage de l'API LangGraph aiko...")
     print("📍 URL: http://localhost:2025")
     print("📖 Documentation: http://localhost:2025/docs")
     print("ℹ️  LangGraph Studio utilise le port 2024")
