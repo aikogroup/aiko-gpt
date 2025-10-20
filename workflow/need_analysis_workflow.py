@@ -248,19 +248,10 @@ class NeedAnalysisWorkflow:
         
         workflow.add_edge("finalize_use_cases", END)
         
-        # Configuration avec checkpointer et interrupts
-        # NOUVEAU: Toujours utiliser checkpointer et interrupts (pas seulement en debug)
-        compile_kwargs = {
-            "checkpointer": MemorySaver(),  # Toujours actif pour gérer les interrupts
-            "interrupt_before": ["human_validation", "validate_use_cases"]  # Points d'arrêt pour validation humaine
-        }
-        
-        # Options supplémentaires en mode debug
-        if self.debug_mode:
-            compile_kwargs["interrupt_after"] = ["dispatcher", "collect_data"]
-            compile_kwargs["debug"] = True
-        
-        return workflow.compile(**compile_kwargs)
+        # Configuration: LangGraph Platform gère le checkpointer via langgraph.json (Postgres)
+        # On ne définit PAS de checkpointer ici pour éviter les conflits
+        # Les interrupts sont gérés automatiquement par LangGraph Platform
+        return workflow.compile()
     
     # ==================== NOUVEAUX NŒUDS POUR LA PARALLÉLISATION ====================
     

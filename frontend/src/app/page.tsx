@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { UploadZone } from "@/components/UploadZone";
 import { useUiStore } from "@/lib/store";
-import { uploadFiles, setCompanyName, startWorkflowWithFiles } from "@/lib/api-client";
+import { uploadFiles, setCompanyName, startWorkflowWithFiles, waitForIdentifiedNeeds } from "@/lib/api-client";
 import { Spinner } from "@/components/Spinner";
 import { LogViewer } from "@/components/LogViewer";
 import { useRouter } from "next/navigation";
@@ -19,6 +19,8 @@ export default function Home() {
     setSubmitting(true);
     setIsBusy(true);
     try {
+      setStatusMsg("Upload des fichiers...");
+      
       // Upload Excel
       const upExcel = await uploadFiles([excelFile]);
       const workshopPaths = upExcel.file_types?.workshop || [];
@@ -32,20 +34,34 @@ export default function Home() {
       // Enregistrer l'entreprise (localStorage)
       await setCompanyName(companyName);
 
+      setStatusMsg("Démarrage du workflow LangGraph...");
+      
       // Démarrer le workflow avec chemins renvoyés par l'API
-      const run = await startWorkflowWithFiles(workshopPaths, transcriptPaths, companyName);
-      if (!run || !("ok" in run) || !run.ok) {
-        const text = run ? await run.text() : "Réponse invalide";
-        throw new Error(`Démarrage workflow échoué (${run && 'status' in run ? run.status : 'N/A'}): ${text}`);
+      const result = await startWorkflowWithFiles(workshopPaths, transcriptPaths, companyName);
+      if (!result.success) {
+        throw new Error(`Démarrage workflow échoué: ${result.error}`);
       }
 
-      setStatusMsg("Analyse démarrée. Passage à la validation des besoins...");
+      setStatusMsg(`Workflow lancé (run_id: ${result.run_id}). Analyse en cours...`);
+      
+      // Attendre que le workflow génère les identified_needs
+      console.log("[Home] Attente des identified_needs...");
+      await waitForIdentifiedNeeds(result.run_id!);
+      
+      setStatusMsg("✅ Besoins identifiés ! Passage à la validation...");
+      
       // On active la phase "needs" pour autoriser la page suivante
       setPhase("needs");
-      router.push("/validation/needs");
+      
+      // Petit délai pour que l'utilisateur voie le message de succès
+      setTimeout(() => {
+        router.push("/validation/needs");
+      }, 800);
+      
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
-      setStatusMsg(msg);
+      setStatusMsg(`❌ Erreur: ${msg}`);
+      console.error("[Home] Erreur:", e);
     } finally {
       setSubmitting(false);
       setIsBusy(false);

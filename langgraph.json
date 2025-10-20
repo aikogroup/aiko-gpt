@@ -5,15 +5,14 @@
   "graphs": {
     "need_analysis": {
       "path": "graph_factory:need_analysis",
-      "description": "Workflow d'analyse des besoins métier avec debugging"
+      "description": "Workflow analyse des besoins metier",
+      "interrupt_before": ["human_validation", "validate_use_cases"]
     }
   },
   "env": ".env",
-  "checkpointer": {
-    "type": "memory"
-  },
   "http": {
     "port": 2024,
-    "host": "127.0.0.1"
+    "host": "0.0.0.0",
+    "app": "api/http_app.py:app"
   }
 }

@@ -25,6 +25,9 @@ dependencies = [
     "perplexityai>=0.16.0",
 ]
 
+[tool.setuptools.packages.find]
+include = ["api*", "models*", "prompts*", "workflow*", "web_search*", "need_analysis*", "process_atelier*", "use_case_analysis*", "process_transcript*", "utils*"]
+
 [tool.uv]
 dev-dependencies = [
     "pytest>=7.0.0",
