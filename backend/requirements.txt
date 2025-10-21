@@ -1,0 +1,51 @@
+# Backend Python Dependencies
+# FR: Dépendances du backend
+
+# LangGraph SDK (⭐ Cœur du projet)
+# TODO (FR): Ajouter version exacte après tests
+langgraph
+langchain
+langchain-openai
+
+# OpenAI API
+openai
+
+# Perplexity API (via requests ou client officiel)
+# TODO (FR): Vérifier s'il existe un client Python officiel
+requests
+
+# Parsing fichiers
+openpyxl  # Excel
+PyPDF2  # PDF
+# ou pdfplumber  # Alternative PDF
+
+# Génération rapport Word
+python-docx
+
+# Data validation
+pydantic
+
+# Framework HTTP (optionnel, si routes API)
+fastapi
+uvicorn
+
+# Utilitaires
+python-dotenv  # Chargement .env
+python-multipart  # Upload fichiers
+
+# Logging
+loguru  # Alternative à logging standard (optionnel)
+
+# Type checking (dev)
+mypy
+
+# Tests (dev)
+pytest
+pytest-asyncio
+
+# TODO (FR): Fixer les versions pour production
+# Exemple :
+# openai==1.3.5
+# pydantic==2.4.2
+# etc.
+

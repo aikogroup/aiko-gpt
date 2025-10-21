@@ -1,128 +1,105 @@
 "use client";
+
+/**
+ * Page 1 : Accueil (Upload)
+ * 
+ * FR: Page d'upload des fichiers et lancement de l'analyse
+ * 
+ * Éléments :
+ * - Logo entreprise (en haut à gauche)
+ * - Navbar (pages du site)
+ * - Zone d'upload fichier Excel
+ * - Zone d'upload fichiers PDF/JSON (multi-fichiers)
+ * - Champ texte : nom de l'entreprise
+ * - Bouton "Analyser" → lance /api/run
+ */
+
 import { useState } from "react";
-import { UploadZone } from "@/components/UploadZone";
-import { useUiStore } from "@/lib/store";
-import { uploadFiles, setCompanyName, startWorkflowWithFiles, waitForIdentifiedNeeds } from "@/lib/api-client";
-import { Spinner } from "@/components/Spinner";
-import { LogViewer } from "@/components/LogViewer";
-import { useRouter } from "next/navigation";
+// TODO (FR): Importer les composants nécessaires
+// import SideNav from "@/components/SideNav";
+// import UploadZone from "@/components/UploadZone";
+// import Spinner from "@/components/Spinner";
 
 export default function Home() {
-  const router = useRouter();
-  const { excelFile, transcriptFiles, companyName, setExcelFile, setTranscriptFiles, setCompanyName, isBusy, setIsBusy, setPhase } = useUiStore();
-  const [submitting, setSubmitting] = useState(false);
-  const [statusMsg, setStatusMsg] = useState<string>("");
-  const ready = !!excelFile && transcriptFiles.length > 0 && companyName.trim().length > 0;
+  // TODO (FR): États locaux
+  // const [excelFile, setExcelFile] = useState<File | null>(null);
+  // const [pdfJsonFiles, setPdfJsonFiles] = useState<File[]>([]);
+  // const [companyName, setCompanyName] = useState<string>("");
+  // const [isLoading, setIsLoading] = useState<boolean>(false);
 
-  async function onStart() {
-    if (!excelFile) return;
-    setSubmitting(true);
-    setIsBusy(true);
-    try {
-      setStatusMsg("Upload des fichiers...");
-      
-      // Upload Excel
-      const upExcel = await uploadFiles([excelFile]);
-      const workshopPaths = upExcel.file_types?.workshop || [];
-      if (workshopPaths.length === 0) throw new Error("Aucun fichier Excel reconnu côté API");
+  // TODO (FR): Fonction handleAnalyze()
+  // - Valider que tous les fichiers sont présents
+  // - Valider le nom d'entreprise
+  // - Appeler /api/upload pour uploader les fichiers
+  // - Appeler /api/run avec action "generate_needs"
+  // - Stocker les résultats dans le state global (Zustand)
+  // - Naviguer vers /needs
 
-      // Upload PDFs/JSONs
-      const upTrans = await uploadFiles(transcriptFiles);
-      const transcriptPaths = upTrans.file_types?.transcript || [];
-      if (transcriptPaths.length === 0) throw new Error("Aucun PDF/JSON reconnu côté API");
-
-      // Enregistrer l'entreprise (localStorage)
-      await setCompanyName(companyName);
-
-      setStatusMsg("Démarrage du workflow LangGraph...");
-      
-      // Démarrer le workflow avec chemins renvoyés par l'API
-      const result = await startWorkflowWithFiles(workshopPaths, transcriptPaths, companyName);
-      if (!result.success) {
-        throw new Error(`Démarrage workflow échoué: ${result.error}`);
-      }
-
-      setStatusMsg(`Workflow lancé (run_id: ${result.run_id}). Analyse en cours...`);
-      
-      // Attendre que le workflow génère les identified_needs
-      console.log("[Home] Attente des identified_needs...");
-      await waitForIdentifiedNeeds(result.run_id!);
-      
-      setStatusMsg("✅ Besoins identifiés ! Passage à la validation...");
-      
-      // On active la phase "needs" pour autoriser la page suivante
-      setPhase("needs");
-      
-      // Petit délai pour que l'utilisateur voie le message de succès
-      setTimeout(() => {
-        router.push("/validation/needs");
-      }, 800);
-      
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setStatusMsg(`❌ Erreur: ${msg}`);
-      console.error("[Home] Erreur:", e);
-    } finally {
-      setSubmitting(false);
-      setIsBusy(false);
-    }
-  }
+  // TODO (FR): Fonction handleFileChange()
+  // - Gérer l'upload de fichiers
+  // - Valider les formats (.xlsx, .pdf, .json)
 
   return (
-    <main className="mx-auto max-w-3xl p-6 space-y-8">
-      <h1 className="text-2xl font-semibold">aiko – Rapports de besoins et use cases</h1>
+    <div className="min-h-screen bg-gray-50">
+      {/* TODO (FR): Logo + Navbar */}
+      <header className="bg-white shadow">
+        <div className="max-w-7xl mx-auto px-4 py-4">
+          <img
+            src="/logoAiko.jpeg"
+            alt="Aiko Logo"
+            className="h-12"
+          />
+        </div>
+      </header>
 
-      <section className="space-y-2">
-        <h2 className="font-medium">1) Fichier Excel des ateliers</h2>
-        <UploadZone accept=".xlsx,.xls" multiple={false} onFiles={(fs) => setExcelFile(fs[0] || null)} />
-        {excelFile && <p className="text-sm text-gray-600">Sélectionné: {excelFile.name}</p>}
-      </section>
+      <main className="max-w-7xl mx-auto px-4 py-8">
+        <h1 className="text-3xl font-bold mb-8">
+          Analyse de Besoins & Génération de Cas d'Usage IA
+        </h1>
 
-      <section className="space-y-2">
-        <h2 className="font-medium">2) Transcriptions (PDF/JSON)</h2>
-        <UploadZone accept=".pdf,.json" multiple onFiles={setTranscriptFiles} />
-        {transcriptFiles.length > 0 && (
-          <div className="text-sm text-gray-600">
-            <p className="font-medium">{transcriptFiles.length} fichier(s) sélectionné(s):</p>
-            <ul className="list-disc list-inside mt-1 space-y-1">
-              {transcriptFiles.map((file, index) => (
-                <li key={index} className="text-xs">{file.name}</li>
-              ))}
-            </ul>
+        {/* TODO (FR): Zone d'upload fichier Excel */}
+        <section className="mb-6">
+          <h2 className="text-xl font-semibold mb-4">1. Fichier Excel (Ateliers)</h2>
+          {/* TODO (FR): Implémenter UploadZone pour Excel */}
+          <div className="p-4 border-2 border-dashed border-gray-300 rounded-lg">
+            <p className="text-gray-600">TODO: Zone d'upload Excel</p>
           </div>
-        )}
-      </section>
+        </section>
 
-      <section className="space-y-2">
-        <h2 className="font-medium">3) Entreprise</h2>
-        <input
-          type="text"
-          placeholder="Ex: Cousin Surgery"
-          value={companyName}
-          onChange={(e) => setCompanyName(e.target.value)}
-          className="w-full rounded-md border p-2"
-        />
-      </section>
+        {/* TODO (FR): Zone d'upload fichiers PDF/JSON */}
+        <section className="mb-6">
+          <h2 className="text-xl font-semibold mb-4">2. Fichiers PDF/JSON (Transcriptions)</h2>
+          {/* TODO (FR): Implémenter UploadZone multi-fichiers */}
+          <div className="p-4 border-2 border-dashed border-gray-300 rounded-lg">
+            <p className="text-gray-600">TODO: Zone d'upload multi-fichiers PDF/JSON</p>
+          </div>
+        </section>
 
-      <section>
-        <button
-          disabled={!ready || submitting}
-          onClick={onStart}
-          className="rounded-md px-4 py-2 text-white disabled:opacity-50"
-          style={{ backgroundColor: submitting ? 'rgb(161, 109, 246)' : '#670ffc' }}
-        >
-          {submitting ? (
-            <span className="inline-flex items-center gap-2"><Spinner /> Démarrage...</span>
-          ) : (
-            "Démarrer l'analyse des besoins"
-          )}
-        </button>
-        {statusMsg && (
-          <p className="mt-2 text-sm">{statusMsg}</p>
-        )}
-        
-        <LogViewer isActive={submitting} context="workflow" />
-      </section>
-    </main>
+        {/* TODO (FR): Champ nom d'entreprise */}
+        <section className="mb-6">
+          <h2 className="text-xl font-semibold mb-4">3. Nom de l'entreprise</h2>
+          <input
+            type="text"
+            placeholder="Ex: Aiko Technologies"
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+            // TODO (FR): Lier à l'état companyName
+          />
+        </section>
+
+        {/* TODO (FR): Bouton Analyser */}
+        <section className="mt-8">
+          <button
+            className="bg-blue-600 text-white px-8 py-3 rounded-lg font-semibold hover:bg-blue-700"
+            // TODO (FR): Lier à handleAnalyze
+          >
+            Analyser
+          </button>
+        </section>
+
+        {/* TODO (FR): Loader pendant l'analyse */}
+        {/* {isLoading && <Spinner />} */}
+      </main>
+    </div>
   );
 }
+

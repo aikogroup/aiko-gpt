@@ -1,146 +1,100 @@
 "use client";
-import { useEffect, useState } from "react";
-import { getWorkflowStatus, getWorkflowResults, downloadReport } from "@/lib/api-client";
-import { LogViewer } from "@/components/LogViewer";
+
+/**
+ * Page 4 : Résultats
+ * 
+ * FR: Synthèse et téléchargement rapport Word
+ * 
+ * Éléments :
+ * - Liste besoins validés
+ * - Liste cas d'usage retenus
+ * - Bouton "Télécharger" → appel /api/report
+ */
+
+import { useState } from "react";
+// TODO (FR): Importer composants et store
+// import { useStore } from "@/lib/store";
+// import Spinner from "@/components/Spinner";
 
 export default function ResultsPage() {
-  const [status, setStatus] = useState<string>("idle");
-  const [results, setResults] = useState<any>(null);
-  const [downloading, setDownloading] = useState(false);
-  // Supporte à la fois les clés au niveau racine et sous values
-  const needs = (results?.validated_needs
-    ?? results?.final_needs
-    ?? results?.values?.validated_needs
-    ?? results?.values?.final_needs
-    ?? []);
-  const qw = (results?.validated_quick_wins
-    ?? results?.final_quick_wins
-    ?? results?.values?.validated_quick_wins
-    ?? results?.values?.final_quick_wins
-    ?? []);
-  const sia = (results?.validated_structuration_ia
-    ?? results?.final_structuration_ia
-    ?? results?.values?.validated_structuration_ia
-    ?? results?.values?.final_structuration_ia
-    ?? []);
+  // TODO (FR): Récupérer depuis state global
+  // const { validatedNeeds, validatedUseCases } = useStore();
 
-  useEffect(() => {
-    let mounted = true;
-    const loadAll = async () => {
-      try {
-        const [st, rs] = await Promise.all([getWorkflowStatus(), getWorkflowResults()]);
-        if (st.ok) {
-          const js = await st.json();
-          if (mounted) setStatus(js.status || "unknown");
-        }
-        if (rs.ok) {
-          const jr = await rs.json();
-          if (mounted) setResults(jr);
-        }
-      } catch {}
-    };
-    loadAll();
-    const iv = setInterval(loadAll, 5000);
-    return () => { mounted = false; clearInterval(iv); };
-  }, []);
+  // TODO (FR): États locaux
+  // const [isDownloading, setIsDownloading] = useState<boolean>(false);
 
-  const loadResults = async () => {
-    const res = await getWorkflowResults();
-    if (res.ok) setResults(await res.json());
-  };
-
-  const onDownload = async () => {
-    setDownloading(true);
-    try {
-      const blob = await downloadReport();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "rapport.docx";
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
-      console.error("Erreur téléchargement:", message);
-      alert(`Erreur lors du téléchargement: ${message}`);
-    } finally {
-      setDownloading(false);
-    }
-  };
+  // TODO (FR): Fonction handleDownloadReport()
+  // - Appeler GET /api/report avec validated_needs et validated_use_cases
+  // - Télécharger le fichier .docx
+  // - Afficher feedback (succès/erreur)
 
   return (
-    <main className="mx-auto max-w-4xl p-6 space-y-6 text-black">
-      <h1 className="text-2xl font-semibold">Résultats & suivi</h1>
-      <p className="text-sm">Statut: {status}</p>
-      <div className="flex gap-3">
-        <button onClick={loadResults} className="rounded-md px-4 py-2 text-white" style={{ backgroundColor: '#670ffc' }}>Charger les résultats</button>
-        <button 
-          disabled={downloading} 
-          onClick={onDownload} 
-          className="rounded-md px-4 py-2 text-white disabled:opacity-50" 
-          style={{ backgroundColor: downloading ? 'rgb(161, 109, 246)' : '#670ffc' }}
-        >
-          {downloading ? "Génération en cours..." : "Télécharger le rapport Word"}
-        </button>
-      </div>
-      
-      <LogViewer isActive={downloading} context="download" />
-      <section className="space-y-4">
-        <h2 className="text-xl font-medium">Besoins validés</h2>
-        {needs.length === 0 ? <p>Aucun besoin validé.</p> : (
-          <ul className="list-disc pl-6">
-            {needs.map((n: any, i: number) => (
-              <li key={i}>
-                <div className="font-medium">{n.theme || "Thème"}</div>
-                {Array.isArray(n.quotes) && n.quotes.length > 0 && (
-                  <ul className="list-disc pl-6 text-sm">
-                    {n.quotes.map((q: string, qi: number) => <li key={qi}>{q}</li>)}
-                  </ul>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+    <div className="min-h-screen bg-gray-50">
+      <header className="bg-white shadow">
+        <div className="max-w-7xl mx-auto px-4 py-4">
+          <h1 className="text-2xl font-bold">Résultats Finaux</h1>
+        </div>
+      </header>
 
-      <section className="space-y-4">
-        <h2 className="text-xl font-medium">Quick Wins validés</h2>
-        {qw.length === 0 ? <p>Aucun Quick Win validé.</p> : (
-          <ul className="list-disc pl-6">
-            {qw.map((uc: any, i: number) => (
-              <li key={i}>
-                <div className="font-medium">{uc.titre || uc.title || "Cas d'usage"}</div>
-                {uc.description && <div className="text-sm text-gray-700">{uc.description}</div>}
-                {uc.ia_utilisee && <div className="text-xs text-gray-500">IA: {uc.ia_utilisee}</div>}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      <main className="max-w-7xl mx-auto px-4 py-8">
+        {/* TODO (FR): Section Besoins validés */}
+        <section className="mb-12">
+          <h2 className="text-2xl font-semibold mb-4">
+            Besoins Validés
+          </h2>
+          <div className="bg-white rounded-lg shadow p-6">
+            {/* TODO (FR): Afficher la liste des besoins validés */}
+            <p className="text-gray-600">TODO: Liste des besoins validés</p>
+            {/* {validatedNeeds.map(need => (
+              <div key={need.id} className="mb-4 pb-4 border-b last:border-0">
+                <h3 className="font-semibold">{need.title}</h3>
+                <ul className="mt-2 space-y-1">
+                  {need.citations.map((citation, idx) => (
+                    <li key={idx} className="text-sm text-gray-600">• {citation}</li>
+                  ))}
+                </ul>
+              </div>
+            ))} */}
+          </div>
+        </section>
 
-      <section className="space-y-4">
-        <h2 className="text-xl font-medium">Structuration IA validés</h2>
-        {sia.length === 0 ? <p>Aucun cas structuration IA validé.</p> : (
-          <ul className="list-disc pl-6">
-            {sia.map((uc: any, i: number) => (
-              <li key={i}>
-                <div className="font-medium">{uc.titre || uc.title || "Cas d'usage"}</div>
-                {uc.description && <div className="text-sm text-gray-700">{uc.description}</div>}
-                {uc.ia_utilisee && <div className="text-xs text-gray-500">IA: {uc.ia_utilisee}</div>}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+        {/* TODO (FR): Section Cas d'usage retenus */}
+        <section className="mb-12">
+          <h2 className="text-2xl font-semibold mb-4">
+            Cas d'Usage Retenus
+          </h2>
+          
+          {/* TODO (FR): Quick Wins */}
+          <div className="mb-6">
+            <h3 className="text-xl font-semibold mb-3">Quick Wins</h3>
+            <div className="bg-white rounded-lg shadow p-6">
+              <p className="text-gray-600">TODO: Quick Wins validés</p>
+            </div>
+          </div>
 
-      {results && (
-        <details>
-          <summary className="cursor-pointer">Voir l'état brut</summary>
-          <pre className="text-xs bg-gray-50 p-3 rounded-md overflow-auto text-black">{JSON.stringify(results, null, 2)}</pre>
-        </details>
-      )}
-    </main>
+          {/* TODO (FR): Structuration IA */}
+          <div>
+            <h3 className="text-xl font-semibold mb-3">Structuration IA</h3>
+            <div className="bg-white rounded-lg shadow p-6">
+              <p className="text-gray-600">TODO: Structuration IA validés</p>
+            </div>
+          </div>
+        </section>
+
+        {/* TODO (FR): Bouton téléchargement */}
+        <section className="mt-8">
+          <button
+            className="bg-green-600 text-white px-8 py-4 rounded-lg font-semibold text-lg hover:bg-green-700"
+            // TODO (FR): Lier à handleDownloadReport
+          >
+            📥 Télécharger le Rapport Word
+          </button>
+        </section>
+
+        {/* TODO (FR): Feedback téléchargement */}
+        {/* {isDownloading && <Spinner />} */}
+      </main>
+    </div>
   );
 }
-
 

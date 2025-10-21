@@ -1,10 +1,19 @@
-export function Spinner() {
+/**
+ * Spinner - Indicateur de chargement
+ * 
+ * FR: Composant loader simple
+ */
+
+// TODO (FR): Implémenter spinner animé
+// - Animation CSS
+// - Message optionnel
+// - Overlay optionnel (fond semi-transparent)
+
+export default function Spinner() {
   return (
-    <span
-      aria-label="loading"
-      className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-black align-middle"
-    />
+    <div className="flex items-center justify-center p-8">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+    </div>
   );
 }
-
 

@@ -1,52 +1,72 @@
-import { create } from "zustand";
-import { persist } from "zustand/middleware";
+/**
+ * Store - State management global (Zustand)
+ * 
+ * FR: Gestion de l'état global de l'application
+ */
 
-type UiState = {
-  excelFile: File | null;
-  transcriptFiles: File[];
-  companyName: string;
-  isBusy: boolean;
-  phase: "start" | "needs" | "usecases" | "done";
-  persistedSelectedNeeds: any[];
-  persistedSelectedUseCases: any[];
-  setExcelFile: (f: File | null) => void;
-  setTranscriptFiles: (fs: File[]) => void;
-  setCompanyName: (n: string) => void;
-  setIsBusy: (b: boolean) => void;
-  setPhase: (p: UiState["phase"]) => void;
-  setPersistedSelectedNeeds: (needs: any[]) => void;
-  setPersistedSelectedUseCases: (useCases: any[]) => void;
-};
+// TODO (FR): Importer Zustand
+// import { create } from 'zustand';
+// import { Need, UseCase } from './schemas';
 
-export const useUiStore = create<UiState>()(
-  persist(
-    (set) => ({
-      excelFile: null,
-      transcriptFiles: [],
-      companyName: "",
-      isBusy: false,
-      phase: "start",
-      persistedSelectedNeeds: [],
-      persistedSelectedUseCases: [],
-      setExcelFile: (f) => set({ excelFile: f }),
-      setTranscriptFiles: (fs) => set({ transcriptFiles: fs }),
-      setCompanyName: (n) => set({ companyName: n }),
-      setIsBusy: (b) => set({ isBusy: b }),
-      setPhase: (p) => set({ phase: p }),
-      setPersistedSelectedNeeds: (needs) => set({ persistedSelectedNeeds: Array.isArray(needs) ? needs : [] }),
-      setPersistedSelectedUseCases: (useCases) => set({ persistedSelectedUseCases: Array.isArray(useCases) ? useCases : [] }),
-    }),
-    {
-      name: "aiko-ui-storage",
-      // Ne pas persister les fichiers (trop volumineux) et isBusy (état temporaire)
-      partialize: (state) => ({
-        companyName: state.companyName,
-        phase: state.phase,
-        persistedSelectedNeeds: Array.isArray(state.persistedSelectedNeeds) ? state.persistedSelectedNeeds : [],
-        persistedSelectedUseCases: Array.isArray(state.persistedSelectedUseCases) ? state.persistedSelectedUseCases : [],
-      }),
-    }
-  )
-);
+// TODO (FR): Définir l'interface du store
+// interface AppState {
+//   // FR: Fichiers uploadés
+//   excelFileId: string | null;
+//   transcriptFileIds: string[];
+//   companyName: string;
+//   
+//   // FR: Besoins
+//   needs: Need[];
+//   validatedNeeds: Need[];
+//   
+//   // FR: Cas d'usage
+//   quickWins: UseCase[];
+//   structurationIA: UseCase[];
+//   validatedQuickWins: UseCase[];
+//   validatedStructurationIA: UseCase[];
+//   
+//   // FR: Actions
+//   setExcelFileId: (id: string) => void;
+//   setTranscriptFileIds: (ids: string[]) => void;
+//   setCompanyName: (name: string) => void;
+//   setNeeds: (needs: Need[]) => void;
+//   setValidatedNeeds: (needs: Need[]) => void;
+//   setQuickWins: (useCases: UseCase[]) => void;
+//   setStructurationIA: (useCases: UseCase[]) => void;
+//   setValidatedQuickWins: (useCases: UseCase[]) => void;
+//   setValidatedStructurationIA: (useCases: UseCase[]) => void;
+//   
+//   // FR: Actions utilitaires
+//   toggleNeedSelection: (needId: string) => void;
+//   updateNeedTitle: (needId: string, newTitle: string) => void;
+//   toggleUseCaseSelection: (useCaseId: string, category: 'quick_win' | 'structuration_ia') => void;
+//   
+//   // FR: Reset
+//   reset: () => void;
+// }
 
+// TODO (FR): Créer le store
+// export const useStore = create<AppState>((set) => ({
+//   // FR: États initiaux
+//   excelFileId: null,
+//   transcriptFileIds: [],
+//   companyName: '',
+//   needs: [],
+//   validatedNeeds: [],
+//   quickWins: [],
+//   structurationIA: [],
+//   validatedQuickWins: [],
+//   validatedStructurationIA: [],
+//   
+//   // FR: Implémentation des actions
+//   setExcelFileId: (id) => set({ excelFileId: id }),
+//   // ... etc
+//   
+//   reset: () => set({
+//     excelFileId: null,
+//     // ... reset all states
+//   }),
+// }));
+
+export {};
 

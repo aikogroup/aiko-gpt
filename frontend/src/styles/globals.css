@@ -1,0 +1,60 @@
+/**
+ * Styles globaux
+ * 
+ * FR: Styles CSS globaux de l'application
+ */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* TODO (FR): Variables CSS personnalisées */
+:root {
+  --primary-color: #2563eb;
+  --secondary-color: #64748b;
+  --success-color: #16a34a;
+  --warning-color: #ea580c;
+  --danger-color: #dc2626;
+}
+
+/* TODO (FR): Styles globaux personnalisés */
+body {
+  @apply bg-gray-50 text-gray-900;
+}
+
+/* TODO (FR): Styles pour animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.fade-in {
+  animation: fadeIn 0.3s ease-in;
+}
+
+/* TODO (FR): Styles pour les cartes */
+.card {
+  @apply bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow;
+}
+
+.card-selected {
+  @apply border-2 border-blue-500;
+}
+
+/* TODO (FR): Styles pour les boutons */
+.btn-primary {
+  @apply bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors;
+}
+
+.btn-secondary {
+  @apply bg-gray-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-gray-700 transition-colors;
+}
+
+.btn-success {
+  @apply bg-green-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-green-700 transition-colors;
+}
+

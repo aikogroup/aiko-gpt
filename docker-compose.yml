@@ -1,54 +1,86 @@
-volumes:
-  uploads:
-    driver: local
-  pgdata:
-    driver: local
+version: '3.8'
+
+# FR: Configuration Docker Compose pour aikoGPT
+# Commande de lancement : docker compose up --build
 
 services:
-  langgraph-api:
-    image: aiko-langgraph:latest
+  # ==================================
+  # Backend - Python + LangGraph
+  # ==================================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: aikogpt-backend
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
     env_file:
       - .env
     environment:
-      # OPENAI_API_KEY et LANGSMITH_API_KEY sont chargées via .env
-      - DATABASE_URI=postgresql://postgres:postgres@postgres:5432/postgres
-      - REDIS_URI=redis://redis:6379
-    ports:
-      - "2024:8000"
+      - PYTHONUNBUFFERED=1
+      - ENVIRONMENT=${ENVIRONMENT:-development}
     volumes:
-      - uploads:/data/uploads
-    command: ["bash", "-lc", "langgraph up --host 0.0.0.0 --port 8000"]
-    depends_on:
-      - postgres
-      - redis
+      # FR: Mount code pour hot reload en dev
+      - ./backend:/app
+      # FR: Documents exemples
+      - ./documents:/app/documents:ro
+      # FR: Outputs
+      - ./outputs:/app/outputs
+      # FR: Temp files
+      - ./temp:/app/temp
+    networks:
+      - aikogpt-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    # FR: TODO - Créer le Dockerfile dans backend/
+    # command: python main.py
 
+  # ==================================
+  # Frontend - Next.js
+  # ==================================
   frontend:
-    image: node:20
-    working_dir: /app
-    volumes:
-      - ./frontend:/app
-    environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:2024
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: aikogpt-frontend
     ports:
       - "3000:3000"
-    command: ["bash", "-lc", "npm ci || npm install && npm run dev -- --port 3000"]
-    depends_on:
-      - langgraph-api
-
-  postgres:
-    image: postgres:16-alpine
+    env_file:
+      - .env
     environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=postgres
-    ports:
-      - "5432:5432"
+      - NODE_ENV=${ENVIRONMENT:-development}
+      - NEXT_PUBLIC_BACKEND_URL=${NEXT_PUBLIC_BACKEND_URL:-http://backend:8000}
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      # FR: Mount code pour hot reload en dev
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - aikogpt-network
+    restart: unless-stopped
+    # FR: TODO - Créer le Dockerfile dans frontend/
+    # command: npm run dev
 
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
+# ==================================
+# Network
+# ==================================
+networks:
+  aikogpt-network:
+    driver: bridge
+    name: aikogpt-network
 
-
+# ==================================
+# Volumes (optionnel)
+# ==================================
+# FR: Si besoin de volumes persistants
+# volumes:
+#   backend-data:
+#   frontend-data:

@@ -1,25 +1,47 @@
-"use client";
-import React from "react";
+/**
+ * UploadZone - Composant zone d'upload fichiers
+ * 
+ * FR: Composant réutilisable pour uploader des fichiers (drag & drop)
+ */
 
-type Props = {
-  accept: string;
-  multiple?: boolean;
-  onFiles: (files: File[]) => void;
-};
+// TODO (FR): Importer React et types
+// import { useState, useRef } from "react";
 
-export function UploadZone({ accept, multiple, onFiles }: Props) {
-  return (
-    <input
-      type="file"
-      accept={accept}
-      multiple={!!multiple}
-      onChange={(e) => {
-        const files = e.target.files ? Array.from(e.target.files) : [];
-        onFiles(files);
-      }}
-      className="block w-full text-sm text-gray-900 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-gray-100 hover:file:bg-gray-200"
-    />
-  );
+// TODO (FR): Interface Props
+// interface UploadZoneProps {
+//   accept?: string;  // Ex: ".xlsx", ".pdf,.json"
+//   multiple?: boolean;
+//   onFilesSelected: (files: File[]) => void;
+//   label?: string;
+// }
+
+// TODO (FR): Composant UploadZone
+// export default function UploadZone({
+//   accept = "*",
+//   multiple = false,
+//   onFilesSelected,
+//   label = "Glissez vos fichiers ici ou cliquez pour sélectionner"
+// }: UploadZoneProps) {
+//   // TODO (FR): État drag over
+//   // const [isDragOver, setIsDragOver] = useState(false);
+//   // const fileInputRef = useRef<HTMLInputElement>(null);
+
+//   // TODO (FR): Gestionnaires drag & drop
+//   // const handleDragOver = (e: React.DragEvent) => { ... }
+//   // const handleDragLeave = () => { ... }
+//   // const handleDrop = (e: React.DragEvent) => { ... }
+//   // const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => { ... }
+
+//   // TODO (FR): Interface drag & drop
+//   return (
+//     <div>
+//       {/* Zone de drop */}
+//       {/* Input file caché */}
+//     </div>
+//   );
+// }
+
+export default function UploadZone() {
+  return <div>TODO: UploadZone component</div>;
 }
-
 
