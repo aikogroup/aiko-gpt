@@ -1,35 +1,31 @@
 """
-Backend principal - Point d'entrée LangGraph
+Backend principal - Configuration et logging
 
-FR: Ce fichier initialise LangGraph et expose les routes API
+FR: Configuration de base pour le backend LangGraph
+⚠️ NOTE: LangGraph Server gère les APIs HTTP automatiquement
+         Ce fichier n'est plus un point d'entrée principal
 """
 
-# TODO (FR): Importer les dépendances nécessaires
-# - LangGraph SDK
-# - Agents (Workshop, Transcript, WebSearch, NeedAnalysis, UseCase, Report)
-# - Configuration depuis .env
-# - Logging
+import os
+import logging
+from dotenv import load_dotenv
 
-# TODO (FR): Initialiser LangGraph
-# - Créer l'instance LangGraph
-# - Charger tous les agents
-# - Définir le workflow de connexion :
-#   Workshop → Transcript → WebSearch → NeedAnalysis → UseCase → Report
+# FR: Charger les variables d'environnement
+load_dotenv()
 
-# TODO (FR): Configurer le logging
-# - Logger les étapes d'initialisation
-# - Logger les exécutions du graphe
-# - Logger les erreurs
+# FR: Configuration du logging
+logging.basicConfig(
+    level=getattr(logging, os.getenv("LOG_LEVEL", "INFO")),
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
 
-# TODO (FR): (Optionnel) Exposer des routes HTTP
-# - POST /api/upload : Upload de fichiers (Excel, PDF, JSON)
-# - POST /api/run : Lancer l'exécution du graphe LangGraph
-# - GET /api/report : Télécharger le rapport Word généré
-# ⚠️ Ces routes ne doivent contenir AUCUNE logique métier
-# ⚠️ Elles servent uniquement à déclencher LangGraph
+logger.info("✅ Configuration backend chargée")
+logger.info(f"📊 Environnement: {os.getenv('ENVIRONMENT', 'development')}")
+logger.info(f"🔑 OpenAI Model: {os.getenv('OPENAI_MODEL', 'gpt-4o-mini-2024-07-18')}")
+logger.info(f"🔍 Perplexity API: {'Configuré' if os.getenv('PERPLEXITY_API_KEY') else 'Non configuré'}")
 
-# TODO (FR): Point d'entrée principal
-if __name__ == "__main__":
-    # TODO (FR): Démarrer l'application
-    pass
+# FR: Le graphe LangGraph est défini dans graph_factory.py
+# FR: Pour lancer le serveur, utilisez : langgraph dev
+# FR: Ou pour Docker : langgraph up
 

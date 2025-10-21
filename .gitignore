@@ -142,6 +142,13 @@ token_tracking/
 # OLD/
 
 # ==================================
+# Documentation (sauf README)
+# ==================================
+# FR: Exclure tous les fichiers Markdown sauf README.md
+*.md
+!README.md
+
+# ==================================
 # Autres
 # ==================================
 *.bak

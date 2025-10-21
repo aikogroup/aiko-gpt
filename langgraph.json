@@ -1,18 +1,10 @@
 {
   "dependencies": [
-    "."
+    "./backend"
   ],
   "graphs": {
-    "need_analysis": {
-      "path": "graph_factory:need_analysis",
-      "description": "Workflow analyse des besoins metier",
-      "interrupt_before": ["human_validation", "validate_use_cases"]
-    }
+    "need_analysis": "graph_factory:need_analysis"
   },
   "env": ".env",
-  "http": {
-    "port": 2024,
-    "host": "0.0.0.0",
-    "app": "api/http_app.py:app"
-  }
+  "python_version": "3.11"
 }
