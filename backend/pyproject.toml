@@ -13,8 +13,13 @@ dependencies = [
     # OpenAI
     "openai>=1.0.0",
     
-    # Perplexity
-    "perplexity-python>=0.1.0",
+    # HTTP client (pour Perplexity et autres APIs)
+    "httpx>=0.27.0",
+    
+    # FastAPI pour routes custom
+    "fastapi>=0.115.0",
+    "python-multipart>=0.0.9",  # Pour upload de fichiers
+    "aiofiles>=24.0.0",  # Pour I/O async (upload)
     
     # Configuration
     "python-dotenv>=1.0.0",

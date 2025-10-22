@@ -1,73 +1,77 @@
 version: '3.8'
 
-# FR: Configuration Docker Compose pour aikoGPT
-# Commande de lancement : docker compose up --build
+# ============================================
+# 🚀 aikoGPT - Configuration Docker Compose
+# ============================================
+# 
+# Commande unique pour tout lancer :
+#   docker compose up --build
+#
+# Services :
+#   - Backend (LangGraph Server) : http://localhost:2024
+#   - Frontend (Next.js)         : http://localhost:3000
+#
+# ============================================
 
 services:
   # ==================================
-  # Backend - Python + LangGraph
+  # Backend - LangGraph Server
   # ==================================
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: Dockerfile.backend
     container_name: aikogpt-backend
     ports:
-      - "${BACKEND_PORT:-8000}:8000"
+      - "2024:2024"
     env_file:
       - .env
     environment:
       - PYTHONUNBUFFERED=1
-      - ENVIRONMENT=${ENVIRONMENT:-development}
+      - ENVIRONMENT=development
     volumes:
-      # FR: Mount code pour hot reload en dev
-      - ./backend:/app
-      # FR: Documents exemples
-      - ./documents:/app/documents:ro
-      # FR: Outputs
+      # FR: Outputs persistants
       - ./outputs:/app/outputs
-      # FR: Temp files
-      - ./temp:/app/temp
+      # FR: Hot reload du code backend (dev uniquement)
+      - ./backend:/app/backend
+      - ./prompts:/app/prompts
+      - ./models:/app/models
+      - ./agents:/app/agents
+      - ./workflow:/app/workflow
+      - ./utils:/app/utils
     networks:
       - aikogpt-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-    # FR: TODO - Créer le Dockerfile dans backend/
-    # command: python main.py
+      test: ["CMD", "curl", "-f", "http://localhost:2024/ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   # ==================================
   # Frontend - Next.js
   # ==================================
   frontend:
     build:
-      context: ./frontend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: Dockerfile.frontend
     container_name: aikogpt-frontend
     ports:
       - "3000:3000"
-    env_file:
-      - .env
     environment:
-      - NODE_ENV=${ENVIRONMENT:-development}
-      - NEXT_PUBLIC_BACKEND_URL=${NEXT_PUBLIC_BACKEND_URL:-http://backend:8000}
+      - NODE_ENV=development
+      - NEXT_PUBLIC_BACKEND_URL=http://localhost:2024
     volumes:
-      # FR: Mount code pour hot reload en dev
-      - ./frontend:/app
-      - /app/node_modules
-      - /app/.next
+      # FR: Hot reload du code frontend (dev uniquement)
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
     depends_on:
       backend:
         condition: service_healthy
     networks:
       - aikogpt-network
     restart: unless-stopped
-    # FR: TODO - Créer le Dockerfile dans frontend/
-    # command: npm run dev
 
 # ==================================
 # Network
@@ -76,11 +80,3 @@ networks:
   aikogpt-network:
     driver: bridge
     name: aikogpt-network
-
-# ==================================
-# Volumes (optionnel)
-# ==================================
-# FR: Si besoin de volumes persistants
-# volumes:
-#   backend-data:
-#   frontend-data:

@@ -1,29 +1,18 @@
 """
 Script de test pour l'API Perplexity
 
-FR: Test isolé de l'API Perplexity avec le client officiel
+FR: Test isolé de l'API Perplexity avec httpx
 """
 
 import os
 import sys
+import time
 from pathlib import Path
-
-# FR: Ajouter le backend au path Python
-backend_path = Path(__file__).parent.parent.parent / "backend"
-sys.path.insert(0, str(backend_path))
-
 from dotenv import load_dotenv
+import httpx
 
 # FR: Charger les variables d'environnement
 load_dotenv()
-
-try:
-    from perplexity import Perplexity
-    print("✅ Client Perplexity installé")
-except ImportError:
-    print("❌ Client Perplexity non installé")
-    print("💡 Installation: uv pip install perplexity-python")
-    exit(1)
 
 # FR: Vérifier la clé API
 api_key = os.getenv("PERPLEXITY_API_KEY")
@@ -41,72 +30,93 @@ print("🧪 Test 1 : Requête minimale avec modèle 'sonar'")
 print("="*60)
 
 try:
-    # FR: Initialiser le client
-    client = Perplexity(api_key=api_key)
-    
-    # FR: Requête simple
-    response = client.chat.completions.create(
-        model="sonar",
-        messages=[
-            {
-                "role": "system",
-                "content": "Tu es un assistant de recherche web."
-            },
-            {
-                "role": "user",
-                "content": "What is the capital of France?"
-            }
+    payload = {
+        "model": "sonar",
+        "messages": [
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": "What is the capital of France?"}
         ]
-    )
+    }
     
-    # FR: Afficher la réponse
-    content = response.choices[0].message.content
-    print(f"✅ Succès!")
-    print(f"📝 Réponse: {content}")
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
     
+    start_time = time.time()
+    
+    with httpx.Client(timeout=30.0) as client:
+        response = client.post(
+            "https://api.perplexity.ai/chat/completions",
+            json=payload,
+            headers=headers
+        )
+        response.raise_for_status()
+    
+    end_time = time.time()
+    result = response.json()
+    
+    print(f"✅ Succès! (Temps: {end_time - start_time:.2f}s)")
+    print(f"📝 Réponse: {result['choices'][0]['message']['content']}\n")
+    
+except httpx.HTTPStatusError as e:
+    print(f"❌ Erreur HTTP: {e.response.status_code}")
+    print(f"   Détails: {e.response.text}")
+    exit(1)
 except Exception as e:
     print(f"❌ Erreur: {e}")
-    import traceback
-    traceback.print_exc()
+    exit(1)
 
-# FR: Test 2 - Recherche entreprise (comme dans le code)
+# FR: Test 2 - Recherche entreprise
 print("\n" + "="*60)
 print("🧪 Test 2 : Recherche entreprise 'Cousin Biotech'")
 print("="*60)
 
+company_name = "Cousin Biotech"
+search_query = f"Recherche des informations factuelles sur l'entreprise '{company_name}': secteur d'activité, taille (nombre d'employés), localisation principale, et actualités récentes."
+
 try:
-    client = Perplexity(api_key=api_key)
-    
-    response = client.chat.completions.create(
-        model="sonar",
-        messages=[
+    payload = {
+        "model": "sonar",
+        "messages": [
             {
                 "role": "system",
                 "content": "Tu es un assistant de recherche web. Fournis des informations factuelles et récentes."
             },
             {
                 "role": "user",
-                "content": "Recherche des informations factuelles sur l'entreprise 'Cousin Biotech': secteur d'activité, taille (nombre d'employés), localisation principale, et actualités récentes."
+                "content": search_query
             }
         ]
-    )
+    }
     
-    content = response.choices[0].message.content
-    print(f"✅ Succès!")
-    print(f"📝 Contenu ({len(content)} caractères):")
-    print(content)
+    start_time = time.time()
     
+    with httpx.Client(timeout=30.0) as client:
+        response = client.post(
+            "https://api.perplexity.ai/chat/completions",
+            json=payload,
+            headers=headers
+        )
+        response.raise_for_status()
+    
+    end_time = time.time()
+    result = response.json()
+    content = result['choices'][0]['message']['content']
+    
+    print(f"✅ Succès! (Temps: {end_time - start_time:.2f}s)")
+    print(f"📝 Contenu ({len(content)} caractères):\n{content}\n")
+    
+except httpx.HTTPStatusError as e:
+    print(f"❌ Erreur HTTP: {e.response.status_code}")
+    print(f"   Détails: {e.response.text}")
+    exit(1)
 except Exception as e:
     print(f"❌ Erreur: {e}")
-    import traceback
-    traceback.print_exc()
+    exit(1)
 
 print("\n" + "="*60)
 print("📋 Résumé")
 print("="*60)
-print("✅ Si les deux tests ont réussi → Perplexity est correctement configuré")
-print("❌ Si les tests échouent → Vérifiez:")
-print("   1. La clé API est valide")
-print("   2. La facturation est configurée")
-print("   3. Le client perplexity-python est installé")
+print("✅ Les deux tests ont réussi → Perplexity est correctement configuré")
 print("\nDocumentation: https://docs.perplexity.ai/")

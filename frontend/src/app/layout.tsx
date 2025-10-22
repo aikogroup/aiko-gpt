@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "@/styles/globals.css";
+import { SideNav } from "@/components/SideNav";
 
 /**
  * FR: Métadonnées de l'application
@@ -20,9 +21,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="fr">
-      <body>
-        {children}
+    <html lang="fr" className="h-full">
+      <body className="h-full bg-gray-50 overflow-hidden">
+        {/* FR: Navbar à gauche (fixe) */}
+        <SideNav />
+        
+        {/* FR: Contenu principal à droite */}
+        <div className="ml-64 h-full overflow-y-auto bg-gray-50">
+          {children}
+        </div>
       </body>
     </html>
   );

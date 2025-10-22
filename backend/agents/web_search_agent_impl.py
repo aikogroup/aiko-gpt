@@ -10,13 +10,8 @@ import os
 from typing import Dict, Any, List
 from openai import OpenAI
 
-# FR: Import optionnel du client Perplexity
-try:
-    from perplexity import Perplexity
-    PERPLEXITY_AVAILABLE = True
-except ImportError:
-    PERPLEXITY_AVAILABLE = False
-    Perplexity = None
+# FR: Import httpx pour appels API Perplexity
+import httpx
 
 from models.graph_state import NeedAnalysisState
 from prompts.web_search_agent_prompts import (
@@ -30,37 +25,30 @@ logger = logging.getLogger(__name__)
 def search_with_perplexity(company_name: str) -> List[str]:
     """
     FR: Effectue une recherche avec l'API Perplexity
-    
+
     Args:
         company_name: Nom de l'entreprise à rechercher
-        
+
     Returns:
         List[str]: Résultats de la recherche
     """
     logger.info(f"🔍 Recherche Perplexity pour: {company_name}")
-    
-    if not PERPLEXITY_AVAILABLE:
-        logger.warning("⚠️ Client Perplexity non installé")
-        return ["Client Perplexity non installé - contexte limité"]
-    
+
     perplexity_api_key = os.getenv("PERPLEXITY_API_KEY")
-    
+
     if not perplexity_api_key:
         logger.warning("⚠️ PERPLEXITY_API_KEY non configurée")
         return ["Perplexity API key manquante - contexte limité"]
-    
+
     try:
-        # FR: Initialiser le client Perplexity
-        perplexity_client = Perplexity(api_key=perplexity_api_key)
-        
         # FR: Requête de recherche
         search_query = f"Recherche des informations factuelles sur l'entreprise '{company_name}': secteur d'activité, taille (nombre d'employés), localisation principale, et actualités récentes."
-        
-        # FR: Appel à l'API Perplexity avec le modèle "sonar"
+
+        # FR: Appel direct à l'API Perplexity avec httpx
         # Doc: https://docs.perplexity.ai/
-        perplexity_response = perplexity_client.chat.completions.create(
-            model="sonar",  # FR: Modèle Perplexity avec recherche web
-            messages=[
+        payload = {
+            "model": "sonar",  # FR: Modèle Perplexity avec recherche web
+            "messages": [
                 {
                     "role": "system",
                     "content": "Tu es un assistant de recherche web. Fournis des informations factuelles et récentes."
@@ -70,19 +58,36 @@ def search_with_perplexity(company_name: str) -> List[str]:
                     "content": search_query
                 }
             ]
-        )
-        
+        }
+
+        headers = {
+            "Authorization": f"Bearer {perplexity_api_key}",
+            "Content-Type": "application/json"
+        }
+
+        with httpx.Client(timeout=30.0) as client:
+            response = client.post(
+                "https://api.perplexity.ai/chat/completions",
+                json=payload,
+                headers=headers
+            )
+            response.raise_for_status()
+
         # FR: Extraire le contenu de la réponse
-        content = perplexity_response.choices[0].message.content
-        
+        result = response.json()
+        content = result.get("choices", [{}])[0].get("message", {}).get("content", "")
+
         if not content:
             logger.warning("⚠️ Réponse Perplexity vide")
             return ["Aucun résultat Perplexity"]
-        
+
         logger.info(f"✅ Recherche Perplexity terminée - {len(content)} caractères")
-        
+
         return [content]  # FR: Contenu de la recherche
-        
+
+    except httpx.HTTPStatusError as e:
+        logger.error(f"❌ Erreur HTTP Perplexity: {e.response.status_code} - {e.response.text}")
+        return [f"Erreur HTTP Perplexity: {e.response.status_code}"]
     except Exception as e:
         logger.error(f"❌ Erreur Perplexity: {e}")
         return [f"Erreur lors de la recherche: {str(e)}"]

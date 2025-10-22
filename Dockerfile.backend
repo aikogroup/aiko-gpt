@@ -1,0 +1,38 @@
+# FR: Dockerfile Backend - LangGraph Server
+
+FROM python:3.11-slim
+
+# FR: Variables d'environnement
+ENV PYTHONUNBUFFERED=1 \
+    UV_SYSTEM_PYTHON=1 \
+    PYTHONPATH=/app
+
+# FR: Installer UV et curl (pour healthcheck)
+RUN pip install --no-cache-dir uv && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends curl && \
+    rm -rf /var/lib/apt/lists/*
+
+# FR: Créer dossier de travail
+WORKDIR /app
+
+# FR: Copier TOUT le projet (pour accès aux documents, langgraph.json, etc.)
+COPY . .
+
+# FR: Installer dépendances backend + LangGraph CLI complet
+WORKDIR /app/backend
+RUN uv pip install --system -e . && \
+    uv pip install --system "langgraph-cli[inmem]"
+
+# FR: Revenir à la racine pour langgraph.json
+WORKDIR /app
+
+# FR: Créer dossiers nécessaires
+RUN mkdir -p /app/outputs /app/temp
+
+# FR: Exposer le port LangGraph
+EXPOSE 2024
+
+# FR: Commande de démarrage
+CMD ["langgraph", "dev", "--host", "0.0.0.0", "--port", "2024"]
+

@@ -3,98 +3,219 @@
 /**
  * Page 4 : Résultats
  * 
- * FR: Synthèse et téléchargement rapport Word
- * 
- * Éléments :
- * - Liste besoins validés
- * - Liste cas d'usage retenus
- * - Bouton "Télécharger" → appel /api/report
+ * FR: Synthèse et téléchargement du rapport Word
  */
 
-import { useState } from "react";
-// TODO (FR): Importer composants et store
-// import { useStore } from "@/lib/store";
-// import Spinner from "@/components/Spinner";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useStore } from "@/lib/store";
+import { downloadReport } from "@/lib/api-client";
 
 export default function ResultsPage() {
-  // TODO (FR): Récupérer depuis state global
-  // const { validatedNeeds, validatedUseCases } = useStore();
+  const router = useRouter();
+  const {
+    threadId,
+    validatedNeeds,
+    validatedQuickWins,
+    validatedStructurationIA,
+    reset,
+  } = useStore();
 
-  // TODO (FR): États locaux
-  // const [isDownloading, setIsDownloading] = useState<boolean>(false);
+  const [isDownloading, setIsDownloading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
 
-  // TODO (FR): Fonction handleDownloadReport()
-  // - Appeler GET /api/report avec validated_needs et validated_use_cases
-  // - Télécharger le fichier .docx
-  // - Afficher feedback (succès/erreur)
+  // FR: Vérifier qu'on a bien des données
+  useEffect(() => {
+    if (validatedNeeds.length === 0) {
+      router.push('/');
+    }
+  }, [validatedNeeds, router]);
+
+  // FR: Télécharger le rapport
+  const handleDownload = async () => {
+    if (!threadId) return;
+
+    setIsDownloading(true);
+    setError(null);
+
+    try {
+      const blob = await downloadReport(
+        validatedNeeds,
+        validatedQuickWins,
+        validatedStructurationIA,
+        threadId
+      );
+
+      // FR: Créer un lien de téléchargement
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `rapport-besoins-${Date.now()}.docx`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (err: any) {
+      console.error('Erreur téléchargement:', err);
+      setError(err.message || "Erreur lors du téléchargement");
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  // FR: Recommencer
+  const handleReset = () => {
+    reset();
+    router.push('/');
+  };
+
+  if (validatedNeeds.length === 0) {
+    return null; // Redirect en cours
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 py-4">
-          <h1 className="text-2xl font-bold">Résultats Finaux</h1>
+      <main className="max-w-6xl mx-auto px-8 py-8">
+        {/* FR: Header */}
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+            📄 Résultats
+          </h1>
+          <p className="text-lg text-gray-600">
+            Synthèse de votre analyse et téléchargement du rapport
+          </p>
         </div>
-      </header>
-
-      <main className="max-w-7xl mx-auto px-4 py-8">
-        {/* TODO (FR): Section Besoins validés */}
-        <section className="mb-12">
-          <h2 className="text-2xl font-semibold mb-4">
-            Besoins Validés
-          </h2>
-          <div className="bg-white rounded-lg shadow p-6">
-            {/* TODO (FR): Afficher la liste des besoins validés */}
-            <p className="text-gray-600">TODO: Liste des besoins validés</p>
-            {/* {validatedNeeds.map(need => (
-              <div key={need.id} className="mb-4 pb-4 border-b last:border-0">
-                <h3 className="font-semibold">{need.title}</h3>
-                <ul className="mt-2 space-y-1">
-                  {need.citations.map((citation, idx) => (
-                    <li key={idx} className="text-sm text-gray-600">• {citation}</li>
-                  ))}
-                </ul>
-              </div>
-            ))} */}
+        {/* FR: Erreur */}
+        {error && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+            ⚠️ {error}
           </div>
-        </section>
+        )}
 
-        {/* TODO (FR): Section Cas d'usage retenus */}
-        <section className="mb-12">
-          <h2 className="text-2xl font-semibold mb-4">
-            Cas d'Usage Retenus
-          </h2>
-          
-          {/* TODO (FR): Quick Wins */}
-          <div className="mb-6">
-            <h3 className="text-xl font-semibold mb-3">Quick Wins</h3>
-            <div className="bg-white rounded-lg shadow p-6">
-              <p className="text-gray-600">TODO: Quick Wins validés</p>
-            </div>
+        {/* FR: Synthèse */}
+        <div className="bg-white rounded-lg shadow p-6 mb-6">
+          <h2 className="text-2xl font-bold mb-6">📊 Synthèse de votre analyse</h2>
+
+          {/* FR: Besoins validés */}
+          <section className="mb-6">
+            <h3 className="text-lg font-semibold mb-3 text-blue-900">
+              💡 Besoins sélectionnés ({validatedNeeds.length})
+            </h3>
+            <ul className="space-y-2">
+              {validatedNeeds.map((need) => (
+                <li key={need.id} className="pl-4 border-l-4 border-blue-500">
+                  <p className="font-semibold">{need.title}</p>
+                  <p className="text-sm text-gray-600">
+                    {need.citations.length} citations
+                  </p>
+                </li>
+              ))}
+            </ul>
+          </section>
+
+          {/* FR: Quick Wins */}
+          {validatedQuickWins.length > 0 && (
+            <section className="mb-6">
+              <h3 className="text-lg font-semibold mb-3 text-green-900">
+                ⚡ Quick Wins ({validatedQuickWins.length})
+              </h3>
+              <ul className="space-y-2">
+                {validatedQuickWins.map((uc) => (
+                  <li key={uc.id} className="pl-4 border-l-4 border-green-500">
+                    <p className="font-semibold">{uc.title}</p>
+                    <p className="text-sm text-gray-600">{uc.description}</p>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {uc.ai_technologies.map((tech, idx) => (
+                        <span
+                          key={idx}
+                          className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded"
+                        >
+                          {tech}
+                        </span>
+                      ))}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {/* FR: Structuration IA */}
+          {validatedStructurationIA.length > 0 && (
+            <section className="mb-6">
+              <h3 className="text-lg font-semibold mb-3 text-purple-900">
+                🏗️ Structuration IA ({validatedStructurationIA.length})
+              </h3>
+              <ul className="space-y-2">
+                {validatedStructurationIA.map((uc) => (
+                  <li key={uc.id} className="pl-4 border-l-4 border-purple-500">
+                    <p className="font-semibold">{uc.title}</p>
+                    <p className="text-sm text-gray-600">{uc.description}</p>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {uc.ai_technologies.map((tech, idx) => (
+                        <span
+                          key={idx}
+                          className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded"
+                        >
+                          {tech}
+                        </span>
+                      ))}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+        </div>
+
+        {/* FR: Actions */}
+        <div className="bg-white rounded-lg shadow p-6">
+          <h3 className="text-lg font-semibold mb-4">📥 Téléchargement du rapport</h3>
+          <p className="text-gray-600 mb-6">
+            Cliquez sur le bouton ci-dessous pour télécharger un rapport Word contenant
+            tous les besoins et cas d'usage sélectionnés.
+          </p>
+
+          <div className="flex gap-4">
+            <button
+              onClick={handleDownload}
+              disabled={isDownloading}
+              className="bg-blue-600 text-white px-8 py-3 rounded-lg font-semibold hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition flex items-center gap-2"
+            >
+              {isDownloading ? (
+                <>
+                  <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Téléchargement...
+                </>
+              ) : (
+                <>
+                  📥 Télécharger le rapport Word
+                </>
+              )}
+            </button>
+
+            <button
+              onClick={handleReset}
+              className="bg-gray-200 text-gray-700 px-8 py-3 rounded-lg font-semibold hover:bg-gray-300 transition"
+            >
+              🔄 Nouvelle analyse
+            </button>
           </div>
+        </div>
 
-          {/* TODO (FR): Structuration IA */}
-          <div>
-            <h3 className="text-xl font-semibold mb-3">Structuration IA</h3>
-            <div className="bg-white rounded-lg shadow p-6">
-              <p className="text-gray-600">TODO: Structuration IA validés</p>
-            </div>
-          </div>
-        </section>
-
-        {/* TODO (FR): Bouton téléchargement */}
-        <section className="mt-8">
+        {/* FR: Retour */}
+        <div className="mt-6">
           <button
-            className="bg-green-600 text-white px-8 py-4 rounded-lg font-semibold text-lg hover:bg-green-700"
-            // TODO (FR): Lier à handleDownloadReport
+            onClick={() => router.push('/usecases')}
+            className="text-gray-600 hover:text-gray-800"
           >
-            📥 Télécharger le Rapport Word
+            ← Retour aux cas d'usage
           </button>
-        </section>
-
-        {/* TODO (FR): Feedback téléchargement */}
-        {/* {isDownloading && <Spinner />} */}
+        </div>
       </main>
     </div>
   );
 }
-

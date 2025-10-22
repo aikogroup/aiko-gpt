@@ -106,7 +106,8 @@ def create_word_report(
         for idx, uc in enumerate(quick_wins, 1):
             # FR: Titre du cas d'usage
             uc_heading = doc.add_paragraph()
-            uc_heading.add_run(f"QW{idx}. {uc.get('title', 'Cas d\'usage sans titre')}").bold = True
+            title = uc.get('title', "Cas d'usage sans titre")
+            uc_heading.add_run(f"QW{idx}. {title}").bold = True
             uc_heading.paragraph_format.left_indent = Inches(0.25)
             
             # FR: Description
@@ -132,7 +133,8 @@ def create_word_report(
         for idx, uc in enumerate(structuration_ia, 1):
             # FR: Titre du cas d'usage
             uc_heading = doc.add_paragraph()
-            uc_heading.add_run(f"SIA{idx}. {uc.get('title', 'Cas d\'usage sans titre')}").bold = True
+            title = uc.get('title', "Cas d'usage sans titre")
+            uc_heading.add_run(f"SIA{idx}. {title}").bold = True
             uc_heading.paragraph_format.left_indent = Inches(0.25)
             
             # FR: Description

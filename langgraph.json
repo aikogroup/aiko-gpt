@@ -5,6 +5,9 @@
   "graphs": {
     "need_analysis": "graph_factory:need_analysis"
   },
+  "http": {
+    "app": "api.app:app"
+  },
   "env": ".env",
   "python_version": "3.11"
 }

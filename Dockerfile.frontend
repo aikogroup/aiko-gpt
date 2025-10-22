@@ -1,0 +1,25 @@
+# FR: Dockerfile Frontend - Next.js
+
+FROM node:20-alpine
+
+# FR: Créer dossier de travail
+WORKDIR /app
+
+# FR: Copier package.json
+COPY frontend/package*.json ./
+
+# FR: Installer dépendances
+RUN npm ci --legacy-peer-deps
+
+# FR: Copier le code
+COPY frontend/ ./
+
+# FR: Exposer le port Next.js
+EXPOSE 3000
+
+# FR: Variable pour permettre connexion depuis l'extérieur
+ENV HOSTNAME=0.0.0.0
+
+# FR: Commande de démarrage (dev avec hot reload)
+CMD ["npm", "run", "dev"]
+

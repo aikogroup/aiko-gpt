@@ -18,8 +18,16 @@
 }
 
 /* TODO (FR): Styles globaux personnalisés */
+html,
 body {
-  @apply bg-gray-50 text-gray-900;
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow-x: hidden;
+}
+
+body {
+  @apply text-gray-900;
 }
 
 /* TODO (FR): Styles pour animations */
