@@ -128,8 +128,8 @@ if __name__ == "__main__":
 
     # Exemple de données à adapter
     company_name = "peugeot"
-    transcript_files = ["/home/addeche/aiko/aikoGPT/inputs/040425-Cousin-Biotech-x-aiko-R-D-090affe8-e55e.pdf"]
-    workshop_files = ["/home/addeche/aiko/aikoGPT/inputs/atelier_exemple.xlsx"]
+    transcript_files = ["/Users/julliardcyril/Projets/aikoGPT/inputs/040425-Cousin-Biotech-x-aiko-R-D-090affe8-e55e.pdf"]
+    workshop_files = ["/Users/julliardcyril/Projets/aikoGPT/inputs/atelier_exemple.xlsx"]
     validated_needs= [
     {
       "id": "need_1",
