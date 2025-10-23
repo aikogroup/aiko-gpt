@@ -29,31 +29,38 @@ async def create_thread_and_dispatch(client, company_name, workshop_files, trans
     return thread["thread_id"], state
 
 async def human_validation(client, thread_id, validated_needs, rejected_needs, user_feedback):  
+    # Get current state to access iteration_count  
+    current_state = await client.threads.get_state(thread_id)  
+    current_iteration = current_state['values'].get('iteration_count', 0)  
+      
     # Clear current validated_needs to prevent accumulation  
     await client.threads.update_state(  
         thread_id,  
-        values={"validated_needs": [], 
-        "rejected_needs": [], 
-        "user_feedback": []}  
+        values={  
+            "validated_needs": [],  
+            "rejected_needs": [],  
+            "user_feedback": []  
+        }  
     )  
       
     # Set new values AND add to history  
     await client.threads.update_state(  
         thread_id,  
         values={  
-            "validated_needs": validated_needs,  # Current iteration  
+            "validated_needs": validated_needs,  
             "rejected_needs": rejected_needs,  
             "user_feedback": user_feedback,  
-            # Add to history (will append due to reducer)  
+            # Add to history with correct iteration count  
             "validation_result": [{  
                 "validated_needs": validated_needs,  
                 "rejected_needs": rejected_needs,  
                 "user_feedback": user_feedback,  
-                "iteration": state.get("iteration_count", 0)  
+                "iteration": current_iteration  # Now properly defined  
             }]  
         }  
     )  
       
+    # Resume execution  
     result = await client.runs.wait(thread_id, assistant_id="need_analysis", input=None)  
     return result
 
