@@ -123,6 +123,45 @@ async def use_case_validation(
     return result
 
 
+async def update_identified_need_theme(client, thread_id, need_id, new_theme):  
+    """  
+    Update the theme of a specific identified need.  
+      
+    Args:  
+        client: LangGraph SDK client  
+        thread_id: Thread ID  
+        need_id: ID of the need to update (e.g., "need_1")  
+        new_theme: New theme text  
+    """  
+    # Get current state  
+    thread_state = await client.threads.get_state(thread_id)  
+    current_needs = thread_state['values'].get('identified_needs', [])  
+      
+    # Find and update the specific need  
+    updated_needs = []  
+    for need in current_needs:  
+        if need.get('id') == need_id:  
+            # Update the theme  
+            updated_need = need.copy()  
+            updated_need['theme'] = new_theme  
+            updated_needs.append(updated_need)  
+        else:  
+            updated_needs.append(need)  
+      
+    # Update state with modified needs  
+    await client.threads.update_state(  
+        thread_id,  
+        values={"identified_needs": updated_needs}  
+    )
+        # Return the updated state so caller can verify the change  
+    return await client.threads.get_state(thread_id)
+
+
+
+
+
+
+
 if __name__ == "__main__":
     client = get_langgraph_client()
 
