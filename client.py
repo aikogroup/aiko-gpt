@@ -29,31 +29,38 @@ async def create_thread_and_dispatch(client, company_name, workshop_files, trans
     return thread["thread_id"], state
 
 async def human_validation(client, thread_id, validated_needs, rejected_needs, user_feedback):  
+    # Get current state to access iteration_count  
+    current_state = await client.threads.get_state(thread_id)  
+    current_iteration = current_state['values'].get('iteration_count', 0)  
+      
     # Clear current validated_needs to prevent accumulation  
     await client.threads.update_state(  
         thread_id,  
-        values={"validated_needs": [], 
-        "rejected_needs": [], 
-        "user_feedback": []}  
+        values={  
+            "validated_needs": [],  
+            "rejected_needs": [],  
+            "user_feedback": []  
+        }  
     )  
       
     # Set new values AND add to history  
     await client.threads.update_state(  
         thread_id,  
         values={  
-            "validated_needs": validated_needs,  # Current iteration  
+            "validated_needs": validated_needs,  
             "rejected_needs": rejected_needs,  
             "user_feedback": user_feedback,  
-            # Add to history (will append due to reducer)  
+            # Add to history with correct iteration count  
             "validation_result": [{  
                 "validated_needs": validated_needs,  
                 "rejected_needs": rejected_needs,  
                 "user_feedback": user_feedback,  
-                "iteration": state.get("iteration_count", 0)  
+                "iteration": current_iteration  # Now properly defined  
             }]  
         }  
     )  
       
+    # Resume execution  
     result = await client.runs.wait(thread_id, assistant_id="need_analysis", input=None)  
     return result
 
@@ -121,6 +128,45 @@ async def use_case_validation(
     )  
       
     return result
+
+
+async def update_identified_need_theme(client, thread_id, need_id, new_theme):  
+    """  
+    Update the theme of a specific identified need.  
+      
+    Args:  
+        client: LangGraph SDK client  
+        thread_id: Thread ID  
+        need_id: ID of the need to update (e.g., "need_1")  
+        new_theme: New theme text  
+    """  
+    # Get current state  
+    thread_state = await client.threads.get_state(thread_id)  
+    current_needs = thread_state['values'].get('identified_needs', [])  
+      
+    # Find and update the specific need  
+    updated_needs = []  
+    for need in current_needs:  
+        if need.get('id') == need_id:  
+            # Update the theme  
+            updated_need = need.copy()  
+            updated_need['theme'] = new_theme  
+            updated_needs.append(updated_need)  
+        else:  
+            updated_needs.append(need)  
+      
+    # Update state with modified needs  
+    await client.threads.update_state(  
+        thread_id,  
+        values={"identified_needs": updated_needs}  
+    )
+        # Return the updated state so caller can verify the change  
+    return await client.threads.get_state(thread_id)
+
+
+
+
+
 
 
 if __name__ == "__main__":
