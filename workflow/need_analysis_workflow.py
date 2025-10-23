@@ -1090,7 +1090,7 @@ class NeedAnalysisWorkflow:
                 rejected_quick_wins=[],
                 rejected_structuration_ia=[],
                 use_case_user_feedback="",
-                use_case_validation_result={},
+                use_case_validation_result=[],
                 # État du workflow des use cases
                 final_quick_wins=[],
                 final_structuration_ia=[],
@@ -1387,41 +1387,51 @@ class NeedAnalysisWorkflow:
             # Vérifier si on a reçu le feedback (injecté par l'API)
             if "use_case_validation_result" in state and state["use_case_validation_result"]:
                 print(f"✅ [RESUME] Feedback use cases reçu via API")
-                validation_data = state["use_case_validation_result"]
+                validation_results = state["use_case_validation_result"]  # C'est maintenant une liste
                 
-                # Traiter les résultats de validation
+                # Traiter tous les résultats de validation (peut y en avoir plusieurs)
                 existing_qw = state.get("validated_quick_wins", [])
-                newly_validated_qw = validation_data.get("validated_quick_wins", [])
-                
                 existing_sia = state.get("validated_structuration_ia", [])
-                newly_validated_sia = validation_data.get("validated_structuration_ia", [])
-                
-                # Éviter les doublons
-                existing_qw_ids = [uc.get("titre", "") for uc in existing_qw]
-                unique_qw = [uc for uc in newly_validated_qw if uc.get("titre", "") not in existing_qw_ids]
-                
-                existing_sia_ids = [uc.get("titre", "") for uc in existing_sia]
-                unique_sia = [uc for uc in newly_validated_sia if uc.get("titre", "") not in existing_sia_ids]
-                
-                state["validated_quick_wins"] = existing_qw + unique_qw
-                state["validated_structuration_ia"] = existing_sia + unique_sia
-                
-                # Même chose pour les rejetés
                 existing_rejected_qw = state.get("rejected_quick_wins", [])
-                newly_rejected_qw = validation_data.get("rejected_quick_wins", [])
-                state["rejected_quick_wins"] = existing_rejected_qw + newly_rejected_qw
-                
                 existing_rejected_sia = state.get("rejected_structuration_ia", [])
-                newly_rejected_sia = validation_data.get("rejected_structuration_ia", [])
-                state["rejected_structuration_ia"] = existing_rejected_sia + newly_rejected_sia
                 
-                state["use_case_user_feedback"] = validation_data.get("user_feedback", "")
+                # Parcourir tous les résultats de validation
+                for validation_data in validation_results:
+                    # Traiter les résultats de validation
+                    newly_validated_qw = validation_data.get("validated_quick_wins", [])
+                    newly_validated_sia = validation_data.get("validated_structuration_ia", [])
+                    newly_rejected_qw = validation_data.get("rejected_quick_wins", [])
+                    newly_rejected_sia = validation_data.get("rejected_structuration_ia", [])
+                    
+                    # Éviter les doublons pour les Quick Wins validés
+                    existing_qw_ids = [uc.get("titre", "") for uc in existing_qw]
+                    unique_qw = [uc for uc in newly_validated_qw if uc.get("titre", "") not in existing_qw_ids]
+                    existing_qw.extend(unique_qw)
+                    
+                    # Éviter les doublons pour les Structuration IA validés
+                    existing_sia_ids = [uc.get("titre", "") for uc in existing_sia]
+                    unique_sia = [uc for uc in newly_validated_sia if uc.get("titre", "") not in existing_sia_ids]
+                    existing_sia.extend(unique_sia)
+                    
+                    # Ajouter les rejetés
+                    existing_rejected_qw.extend(newly_rejected_qw)
+                    existing_rejected_sia.extend(newly_rejected_sia)
+                
+                # Mettre à jour l'état
+                state["validated_quick_wins"] = existing_qw
+                state["validated_structuration_ia"] = existing_sia
+                state["rejected_quick_wins"] = existing_rejected_qw
+                state["rejected_structuration_ia"] = existing_rejected_sia
+                
+                # Récupérer le feedback du dernier résultat
+                if validation_results:
+                    state["use_case_user_feedback"] = validation_results[-1].get("user_feedback", "")
                 
                 # Nettoyer le flag
-                state["use_case_validation_result"] = {}
+                state["use_case_validation_result"] = []
                 
-                print(f"📊 [RESUME] Quick Wins nouvellement validés: {len(unique_qw)}")
-                print(f"📊 [RESUME] Structuration IA nouvellement validés: {len(unique_sia)}")
+                print(f"📊 [RESUME] Quick Wins nouvellement validés: {len([uc for validation_data in validation_results for uc in validation_data.get('validated_quick_wins', [])])}")
+                print(f"📊 [RESUME] Structuration IA nouvellement validés: {len([uc for validation_data in validation_results for uc in validation_data.get('validated_structuration_ia', [])])}")
                 print(f"📊 [RESUME] Total Quick Wins validés: {len(state['validated_quick_wins'])}")
                 print(f"📊 [RESUME] Total Structuration IA validés: {len(state['validated_structuration_ia'])}")
                 print(f"▶️ [RESUME] Workflow continue...")
@@ -1787,14 +1797,14 @@ class NeedAnalysisWorkflow:
             print(f"📊 [API] Quick Wins déjà validés: {len(state.get('validated_quick_wins', []))}")
             print(f"📊 [API] Structuration IA déjà validés: {len(state.get('validated_structuration_ia', []))}")
             
-            # Créer le résultat de validation
-            validation_result = {
+            # Créer le résultat de validation (maintenant une liste)
+            validation_result = [{
                 "validated_quick_wins": validated_quick_wins,
                 "validated_structuration_ia": validated_structuration_ia,
                 "rejected_quick_wins": rejected_quick_wins,
                 "rejected_structuration_ia": rejected_structuration_ia,
                 "user_feedback": user_feedback
-            }
+            }]
             
             # Mettre à jour l'état avec le feedback de validation
             self.graph.update_state(
