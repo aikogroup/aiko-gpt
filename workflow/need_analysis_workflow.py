@@ -5,6 +5,7 @@ Workflow LangGraph pour l'analyse des besoins
 import os
 import json
 from typing import Dict, List, Any, TypedDict, Annotated
+from operator import add
 from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
@@ -44,10 +45,10 @@ class WorkflowState(TypedDict):
     # Résultats de l'analyse des besoins
     identified_needs: List[Dict[str, Any]]
     # Validation humaine des besoins
-    validated_needs: List[Dict[str, Any]]
-    rejected_needs: List[Dict[str, Any]]
+    validated_needs: list[dict]  # No reducer - overwrites  
+    rejected_needs: list[dict]  
     user_feedback: str
-    validation_result: Dict[str, Any]
+    validation_result: Annotated[list[dict], add]
     # État du workflow des besoins
     final_needs: List[Dict[str, Any]]
     success: bool
@@ -63,7 +64,7 @@ class WorkflowState(TypedDict):
     rejected_quick_wins: List[Dict[str, Any]]
     rejected_structuration_ia: List[Dict[str, Any]]
     use_case_user_feedback: str
-    use_case_validation_result: Dict[str, Any]
+    use_case_validation_result: Annotated[list[dict], add]
     # État du workflow des use cases
     final_quick_wins: List[Dict[str, Any]]
     final_structuration_ia: List[Dict[str, Any]]
@@ -168,7 +169,7 @@ class NeedAnalysisWorkflow:
             return MemorySaver()
         else:
             # Mode normal - pas de checkpointer
-            return None
+            return MemorySaver()
     
     def _create_graph(self) -> StateGraph:
         """
@@ -788,32 +789,40 @@ class NeedAnalysisWorkflow:
             # Vérifier si on a reçu le feedback (injecté par l'API)
             if "validation_result" in state and state["validation_result"]:
                 print(f"✅ [RESUME] Feedback reçu via API")
-                validation_data = state["validation_result"]
+                validation_results = state["validation_result"]  # C'est maintenant une liste
                 
-                # Traiter les résultats de validation
+                # Traiter tous les résultats de validation (peut y en avoir plusieurs)
                 existing_validated = state.get("validated_needs", [])
-                newly_validated = validation_data.get("validated_needs", [])
-                
-                # Éviter les doublons
-                existing_ids = [need.get("theme", "") for need in existing_validated]
-                unique_newly_validated = [need for need in newly_validated if need.get("theme", "") not in existing_ids]
-                
-                state["validated_needs"] = existing_validated + unique_newly_validated
-                
-                # Même logique pour les rejets
                 existing_rejected = state.get("rejected_needs", [])
-                newly_rejected = validation_data.get("rejected_needs", [])
                 
-                existing_rejected_ids = [need.get("theme", "") for need in existing_rejected]
-                unique_newly_rejected = [need for need in newly_rejected if need.get("theme", "") not in existing_rejected_ids]
+                # Parcourir tous les résultats de validation
+                for validation_data in validation_results:
+                    # Traiter les résultats de validation
+                    newly_validated = validation_data.get("validated_needs", [])
+                    newly_rejected = validation_data.get("rejected_needs", [])
+                    
+                    # Éviter les doublons pour les validés
+                    existing_ids = [need.get("theme", "") for need in existing_validated]
+                    unique_newly_validated = [need for need in newly_validated if need.get("theme", "") not in existing_ids]
+                    existing_validated.extend(unique_newly_validated)
+                    
+                    # Éviter les doublons pour les rejetés
+                    existing_rejected_ids = [need.get("theme", "") for need in existing_rejected]
+                    unique_newly_rejected = [need for need in newly_rejected if need.get("theme", "") not in existing_rejected_ids]
+                    existing_rejected.extend(unique_newly_rejected)
                 
-                state["rejected_needs"] = existing_rejected + unique_newly_rejected
-                state["user_feedback"] = validation_data.get("user_feedback", "")
+                # Mettre à jour l'état
+                state["validated_needs"] = existing_validated
+                state["rejected_needs"] = existing_rejected
+                
+                # Récupérer le feedback du dernier résultat
+                if validation_results:
+                    state["user_feedback"] = validation_results[-1].get("user_feedback", "")
                 
                 # Nettoyer le flag
-                state["validation_result"] = {}
+                state["validation_result"] = []
                 
-                print(f"📊 [RESUME] Besoins nouvellement validés: {len(unique_newly_validated)}")
+                print(f"📊 [RESUME] Besoins nouvellement validés: {len([need for validation_data in validation_results for need in validation_data.get('validated_needs', [])])}")
                 print(f"📊 [RESUME] Total besoins validés: {len(state['validated_needs'])}")
                 print(f"▶️ [RESUME] Workflow continue...")
                 
@@ -923,8 +932,12 @@ class NeedAnalysisWorkflow:
             
             # Si pas de besoins validés dans l'état, essayer depuis validation_result
             if not validated_needs and "validation_result" in state and state["validation_result"]:
-                validation_result = state["validation_result"]
-                validated_needs = validation_result.get("validated_needs", [])
+                validation_results = state["validation_result"]  # C'est maintenant une liste
+                # Récupérer tous les besoins validés de tous les résultats
+                all_validated_needs = []
+                for validation_data in validation_results:
+                    all_validated_needs.extend(validation_data.get("validated_needs", []))
+                validated_needs = all_validated_needs
                 print(f"📊 [DEBUG] Besoins récupérés depuis validation_result: {len(validated_needs)}")
             
             # Si toujours pas de besoins, utiliser tous les besoins identifiés
@@ -1061,7 +1074,7 @@ class NeedAnalysisWorkflow:
                 validated_needs=[],
                 rejected_needs=[],
                 user_feedback="",
-                validation_result={},
+                validation_result=[],
                 # État du workflow des besoins
                 final_needs=[],
                 success=False,
@@ -1618,12 +1631,12 @@ class NeedAnalysisWorkflow:
             print(f"📊 [API] Besoins identifiés: {len(state.get('identified_needs', []))}")
             print(f"📊 [API] Besoins déjà validés: {len(state.get('validated_needs', []))}")
             
-            # Créer le résultat de validation
-            validation_result = {
+            # Créer le résultat de validation (maintenant une liste)
+            validation_result = [{
                 "validated_needs": validated_needs,
                 "rejected_needs": rejected_needs,
                 "user_feedback": user_feedback
-            }
+            }]
             
             # Mettre à jour l'état avec le feedback de validation
             self.graph.update_state(

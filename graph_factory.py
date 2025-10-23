@@ -29,7 +29,7 @@ def need_analysis(config: RunnableConfig):
     workflow = NeedAnalysisWorkflow(
         api_key=api_key,
         dev_mode=False,  # Mode production : vraies recherches
-        debug_mode=True  # Debug activé pour LangGraph Studio
+        debug_mode=False  # Debug activé pour LangGraph Studio
     )
     
     return workflow.graph
