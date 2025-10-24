@@ -35,7 +35,7 @@ class NeedAnalysisAgent:
             tracker: TokenTracker optionnel pour le suivi des tokens et coûts
         """
         self.client = OpenAI(api_key=api_key)
-        self.model = os.getenv('OPENAI_MODEL', 'gpt-5-nano')  # Modèle configurable via .env
+        self.model = os.getenv('OPENAI_MODEL', 'gpt-4o-mini')  # Modèle configurable via .env
         self.tracker = tracker  # Tracker pour le suivi des tokens
         
     def analyze_needs(

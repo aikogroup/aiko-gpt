@@ -41,7 +41,7 @@ class WebSearchAgent:
         # Initialiser le client Perplexity
         self.perplexity_client = Perplexity(api_key=self.perplexity_api_key)
         self.openai_client = OpenAI(api_key=self.openai_api_key)
-        self.model = os.getenv('OPENAI_MODEL', 'gpt-5-nano')
+        self.model = os.getenv('OPENAI_MODEL', 'gpt-4o-mini')
     
     def search_company_info(self, company_name: str) -> Dict[str, Any]:
         """

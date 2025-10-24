@@ -43,7 +43,7 @@ class TokenTracker:
         response: Any, 
         agent_name: str,
         operation: str,
-        model: str = "gpt-5-nano"
+        model: str = "gpt-4o-mini"
     ) -> Dict[str, Any]:
         """
         Track une réponse d'API et compte les tokens.

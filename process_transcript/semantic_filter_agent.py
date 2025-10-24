@@ -30,7 +30,7 @@ class SemanticFilterAgent:
             logger.warning("Clé API OpenAI non configurée")
         
         self.client = OpenAI(api_key=api_key)
-        self.model = os.getenv('OPENAI_MODEL', 'gpt-5-nano')
+        self.model = os.getenv('OPENAI_MODEL', 'gpt-4o-mini')
     
     def analyze_transcript(self, pdf_path: str) -> Dict[str, Any]:
         """

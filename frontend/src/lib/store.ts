@@ -11,12 +11,18 @@ interface UiStore {
   isBusy: boolean;
   phase: 'upload' | 'needs' | 'usecases' | 'results';
   
+  // Persisted selections
+  selectedNeeds: any[];
+  selectedUseCases: any[];
+  
   // Actions
   setExcelFile: (file: File | null) => void;
   setTranscriptFiles: (files: File[]) => void;
   setCompanyName: (name: string) => void;
   setIsBusy: (busy: boolean) => void;
   setPhase: (phase: 'upload' | 'needs' | 'usecases' | 'results') => void;
+  setSelectedNeeds: (needs: any[]) => void;
+  setSelectedUseCases: (useCases: any[]) => void;
   
   // Reset
   reset: () => void;
@@ -31,6 +37,8 @@ export const useUiStore = create<UiStore>()(
       companyName: '',
       isBusy: false,
       phase: 'upload',
+      selectedNeeds: [],
+      selectedUseCases: [],
       
       // Actions
       setExcelFile: (file) => set({ excelFile: file }),
@@ -38,6 +46,8 @@ export const useUiStore = create<UiStore>()(
       setCompanyName: (name) => set({ companyName: name }),
       setIsBusy: (busy) => set({ isBusy: busy }),
       setPhase: (phase) => set({ phase }),
+      setSelectedNeeds: (needs) => set({ selectedNeeds: needs }),
+      setSelectedUseCases: (useCases) => set({ selectedUseCases: useCases }),
       
       // Reset
       reset: () => set({

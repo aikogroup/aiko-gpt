@@ -40,7 +40,7 @@ class UseCaseAnalysisAgent:
         """
         import os
         self.client = OpenAI(api_key=api_key)
-        self.model = os.getenv('OPENAI_MODEL', 'gpt-5-nano')
+        self.model = os.getenv('OPENAI_MODEL', 'gpt-4o-mini')
         self.tracker = tracker  # Tracker pour le suivi des tokens
         logger.info(f"UseCaseAnalysisAgent initialisé avec le modèle {self.model}")
         

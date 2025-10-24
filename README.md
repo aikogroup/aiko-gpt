@@ -6,7 +6,7 @@ Générateur de rapports assisté par IA pour société de conseil spécialisée
 
 - Fichier `.env` avec au minimum:
   - `OPENAI_API_KEY=...`
-  - Optionnel: `OPENAI_MODEL=gpt-5-nano`
+  - Optionnel: `OPENAI_MODEL=gpt-4o-mini`
 
 ## Installation
 
@@ -36,6 +36,6 @@ Dans l'interface Streamlit:
 
 ## Notes
 
-- Les agents utilisent l'API OpenAI (Responses) avec le modèle `gpt-5-nano`.
+- Les agents utilisent l'API OpenAI (Responses) avec le modèle `gpt-4o-mini`.
 - LangGraph Studio (optionnel) peut être lancé séparément si nécessaire.
 

@@ -10,7 +10,9 @@
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
+    "@langchain/langgraph-sdk": "^1.0.0",
     "axios": "^1.12.2",
+    "docx": "^9.5.1",
     "next": "15.5.5",
     "react": "19.1.0",
     "react-dom": "19.1.0",

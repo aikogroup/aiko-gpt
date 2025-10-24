@@ -95,7 +95,7 @@ class InterestingPartsAgent:
         prompt = INTERESTING_PARTS_FILTER_PROMPT.format(transcript_text=text)
         
         try:
-            model = os.getenv('OPENAI_MODEL', 'gpt-5-nano')
+            model = os.getenv('OPENAI_MODEL', 'gpt-4o-mini')
             # Utilisation du paramètre 'instructions' pour le system prompt
             response = openai.responses.create(
                 model=model,

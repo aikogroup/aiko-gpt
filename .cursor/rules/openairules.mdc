@@ -6,4 +6,4 @@ alwaysApply: true
 
 - Always use OPEN AI Response API
 - Never use chat.completion
-- Always use the model gpt-5-nano
+- Always use the model gpt-4o-mini

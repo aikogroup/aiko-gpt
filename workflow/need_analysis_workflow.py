@@ -30,6 +30,8 @@ from utils.token_tracker import TokenTracker
 class WorkflowState(TypedDict):
     """État du workflow LangGraph"""
     messages: Annotated[List[BaseMessage], add_messages]
+    # Input du workflow
+    input: Dict[str, Any]
     # Fichiers d'entrée
     workshop_files: List[str]
     transcript_files: List[str]
@@ -55,6 +57,8 @@ class WorkflowState(TypedDict):
     iteration_count: int
     max_iterations: int
     workflow_paused: bool
+    regenerate: bool
+    force_use_case_generation: bool
     # Résultats de l'analyse des use cases
     proposed_quick_wins: List[Dict[str, Any]]
     proposed_structuration_ia: List[Dict[str, Any]]
@@ -91,7 +95,7 @@ class NeedAnalysisWorkflow:
         self.api_key = api_key
         self.dev_mode = dev_mode
         self.debug_mode = debug_mode
-        model = os.getenv('OPENAI_MODEL', 'gpt-5-nano')
+        model = os.getenv('OPENAI_MODEL', 'gpt-4o-mini')
         self.llm = ChatOpenAI(
             model=model,
             api_key=api_key
@@ -183,6 +187,8 @@ class NeedAnalysisWorkflow:
         workflow = StateGraph(WorkflowState)
         
         # Ajout des nœuds - Phase 1 : Analyse des besoins
+        # NOUVEAU: Handler d'input pour traiter les paramètres d'entrée
+        workflow.add_node("input_handler", self._input_handler_node)
         # NOUVEAU: Dispatcher et agents parallèles
         workflow.add_node("dispatcher", self._dispatcher_node)
         workflow.add_node("workshop_agent", self._workshop_agent_node)
@@ -204,7 +210,10 @@ class NeedAnalysisWorkflow:
         if self.dev_mode:
             workflow.set_entry_point("collect_data")
         else:
-            workflow.set_entry_point("dispatcher")
+            workflow.set_entry_point("input_handler")
+        
+        # NOUVEAU: Flux avec input handler
+        workflow.add_edge("input_handler", "dispatcher")
         
         # NOUVEAU: Flux parallèle - Phase 1 : Collecte de données
         # Dispatcher → 3 agents en parallèle → collect_data
@@ -265,6 +274,80 @@ class NeedAnalysisWorkflow:
     
     # ==================== NOUVEAUX NŒUDS POUR LA PARALLÉLISATION ====================
     
+    def _input_handler_node(self, state: WorkflowState) -> WorkflowState:
+        """
+        Nœud pour traiter les inputs du workflow.
+        Traite les paramètres comme validated_needs, regenerate, etc.
+        """
+        print(f"\n🔍 [DEBUG] _input_handler_node - DÉBUT")
+        
+        # Les inputs sont passés directement dans l'état initial par LangGraph Studio
+        # Nous devons traiter les inputs qui sont déjà dans l'état
+        print(f"📊 [DEBUG] État reçu: {list(state.keys())}")
+        
+        # Traiter les paramètres d'input qui sont déjà dans l'état
+        validated_needs = state.get("validated_needs", [])
+        if validated_needs and len(validated_needs) > 0:
+            print(f"✅ [DEBUG] Besoins validés fournis: {len(validated_needs)}")
+        
+        rejected_needs = state.get("rejected_needs", [])
+        if rejected_needs and len(rejected_needs) > 0:
+            print(f"❌ [DEBUG] Besoins rejetés fournis: {len(rejected_needs)}")
+        
+        user_feedback = state.get("user_feedback", "")
+        if user_feedback:
+            print(f"💬 [DEBUG] Feedback utilisateur fourni: {user_feedback[:100]}...")
+        
+        regenerate = state.get("regenerate", False)
+        if regenerate:
+            print(f"🔄 [DEBUG] Régénération demandée")
+        
+        # Traiter les fichiers d'entrée
+        workshop_files = state.get("workshop_files", [])
+        if workshop_files:
+            print(f"📊 [DEBUG] Fichiers workshop fournis: {len(workshop_files)}")
+        
+        transcript_files = state.get("transcript_files", [])
+        if transcript_files:
+            print(f"📄 [DEBUG] Fichiers transcript fournis: {len(transcript_files)}")
+        
+        company_info = state.get("company_info", {})
+        if company_info:
+            print(f"🏢 [DEBUG] Info entreprise fournie: {company_info}")
+        
+        # NOUVEAU: Si des besoins validés sont fournis et qu'on n'est pas en régénération,
+        # passer directement aux use cases
+        validated_needs = state.get("validated_needs", [])
+        regenerate = state.get("regenerate", False)
+        force_use_case_generation = state.get("force_use_case_generation", False)
+        
+        if (validated_needs and len(validated_needs) >= 5 and not regenerate) or force_use_case_generation:
+            if force_use_case_generation:
+                print(f"🚀 [DEBUG] Génération forcée des use cases déclenchée")
+            else:
+                print(f"🚀 [DEBUG] Besoins validés fournis ({len(validated_needs)}) - Passage direct aux use cases")
+            
+            # Charger les données de contexte si nécessaire
+            if not state.get("workshop_results") or not state.get("transcript_results"):
+                print(f"📊 [DEBUG] Chargement des données de contexte...")
+                state = self._collect_data_node(state)
+            
+            # Définir les besoins finaux et marquer comme succès
+            state["final_needs"] = validated_needs
+            state["success"] = True
+            
+            # Analyser les use cases
+            print(f"🤖 [DEBUG] Analyse des use cases...")
+            state = self._analyze_use_cases_node(state)
+            
+            # Afficher l'interface de validation des use cases
+            state = self._validate_use_cases_node(state)
+            
+            print(f"⏸️ [DEBUG] Workflow en pause - en attente de validation des use cases")
+        
+        print(f"✅ [DEBUG] _input_handler_node - FIN")
+        return state
+
     def _dispatcher_node(self, state: WorkflowState) -> WorkflowState:
         """
         Nœud dispatcher qui prépare et distribue le travail aux 3 agents en parallèle.
@@ -661,7 +744,13 @@ class NeedAnalysisWorkflow:
             validated_count = len(state.get("validated_needs", []))
             remaining_needs = max(0, 10 - validated_count)
             
-            if remaining_needs <= 0:
+            # 🔄 NOUVEAU: En cas de régénération, générer toujours 10 nouveaux besoins
+            if state.get("regenerate", False):
+                print(f"🔄 [REGENERATE] Régénération demandée - Génération de 10 nouveaux besoins")
+                remaining_needs = 10
+                state["regenerate"] = False  # Reset le flag
+            
+            if remaining_needs <= 0 and not state.get("regenerate", False):
                 # Tous les besoins sont validés
                 print(f"✅ [DEBUG] Tous les besoins sont déjà validés ({validated_count})")
                 state["identified_needs"] = []
@@ -747,11 +836,35 @@ class NeedAnalysisWorkflow:
             if len(identified_needs) > remaining_needs:
                 identified_needs = identified_needs[:remaining_needs]
             
+            # 🔄 NOUVEAU: En cas de régénération, ajouter les nouveaux besoins aux existants
+            if iteration > 1 and state.get("validated_needs"):
+                # Garder les besoins déjà validés
+                existing_validated = state.get("validated_needs", [])
+                print(f"🔄 [REGENERATE] Garde {len(existing_validated)} besoins déjà validés")
+                # Les nouveaux besoins s'ajoutent aux existants
+                print(f"🔄 [REGENERATE] Ajoute {len(identified_needs)} nouveaux besoins")
+            
             state["identified_needs"] = identified_needs
+            
+            # 🛑 NOUVEAU: Forcer l'arrêt du workflow après l'analyse des besoins
+            # pour permettre la validation humaine
+            state["workflow_paused"] = True
+            state["pause_reason"] = "needs_analysis_complete"
             
             print(f"✅ [DEBUG] _analyze_needs_node - FIN")
             print(f"📊 Besoins identifiés: {len(identified_needs)}")
             print(f"🎯 Besoins validés total: {len(state.get('validated_needs', []))}")
+            print(f"🛑 [PAUSE] Workflow en pause pour validation humaine")
+            
+            # 🔄 NOUVEAU: Si c'est une régénération, ne pas s'arrêter ici
+            if state.get("regenerate", False):
+                print(f"🔄 [REGENERATE] Régénération en cours - Continue vers human_validation")
+                state["workflow_paused"] = False  # 🔄 NOUVEAU: Dépauser pour la régénération
+                print(f"🔄 [REGENERATE] Workflow dépausé pour régénération")
+            else:
+                # 🔄 NOUVEAU: Forcer la reprise du workflow après l'analyse
+                print(f"🔄 [RESUME] Forcer la reprise du workflow vers human_validation")
+                state["workflow_paused"] = False  # 🔄 NOUVEAU: Dépauser pour continuer
             
             # Affichage des coûts après l'analyse des besoins
             self._print_tracker_stats(agent_name="need_analysis")
@@ -818,9 +931,52 @@ class NeedAnalysisWorkflow:
                 # Récupérer le feedback du dernier résultat
                 if validation_results:
                     state["user_feedback"] = validation_results[-1].get("user_feedback", "")
+                    regenerate_flag = validation_results[-1].get("regenerate", False)
+                else:
+                    regenerate_flag = False
                 
                 # Nettoyer le flag
                 state["validation_result"] = []
+                
+                # 🔄 NOUVEAU: Gérer la régénération
+                if regenerate_flag:
+                    print(f"🔄 [REGENERATE] Régénération demandée - Retour à l'analyse des besoins")
+                    print(f"🔄 [REGENERATE] DEBUG - État avant régénération:")
+                    print(f"   - validated_needs: {len(state.get('validated_needs', []))}")
+                    print(f"   - identified_needs: {len(state.get('identified_needs', []))}")
+                    print(f"   - iteration_count: {state.get('iteration_count', 0)}")
+                    
+                    state["success"] = False
+                    state["iteration_count"] = state.get("iteration_count", 0) + 1
+                    state["regenerate"] = True  # Flag pour forcer la régénération
+                    # 🔄 NOUVEAU: Réinitialiser les besoins identifiés pour forcer une nouvelle génération
+                    state["identified_needs"] = []
+                    state["workflow_paused"] = False  # 🔄 NOUVEAU: Dépauser le workflow
+                    
+                    print(f"🔄 [REGENERATE] Itération {state['iteration_count']}/{state.get('max_iterations', 3)}")
+                    print(f"🔄 [REGENERATE] Besoins identifiés réinitialisés pour nouvelle génération")
+                    print(f"🔄 [REGENERATE] Workflow dépausé pour continuer")
+                else:
+                    # 🔄 NOUVEAU: Forcer la reprise du workflow après la validation
+                    print(f"🔄 [RESUME] Validation terminée - Forcer la reprise du workflow")
+                    state["workflow_paused"] = False  # 🔄 NOUVEAU: Dépauser pour continuer
+                    # 🚀 NOUVEAU: Définir automatiquement le succès si on a des besoins validés
+                    validated_count = len(state["validated_needs"])
+                    print(f"🔍 [VALIDATION] DEBUG - État de validation:")
+                    print(f"   - validated_needs: {validated_count}")
+                    print(f"   - success actuel: {state.get('success', False)}")
+                    print(f"   - workflow_paused: {state.get('workflow_paused', False)}")
+                    
+                    if validated_count >= 5:
+                        state["success"] = True
+                        state["workflow_paused"] = False  # 🔄 NOUVEAU: Dépauser pour continuer
+                        print(f"✅ [AUTO-SUCCESS] {validated_count} besoins validés - Passage automatique à l'analyse des cas d'usage")
+                        print(f"✅ [AUTO-SUCCESS] Workflow dépausé pour continuer vers les cas d'usage")
+                    else:
+                        state["success"] = False
+                        state["workflow_paused"] = False  # 🔄 NOUVEAU: Dépauser pour continuer
+                        print(f"⚠️ [AUTO-SUCCESS] Seulement {validated_count} besoins validés - Continuer l'analyse")
+                        print(f"🔄 [RESUME] Workflow dépausé pour continuer l'analyse")
                 
                 print(f"📊 [RESUME] Besoins nouvellement validés: {len([need for validation_data in validation_results for need in validation_data.get('validated_needs', [])])}")
                 print(f"📊 [RESUME] Total besoins validés: {len(state['validated_needs'])}")
@@ -831,6 +987,10 @@ class NeedAnalysisWorkflow:
                 # Première fois : le workflow va s'arrêter ici (interrupt_before)
                 print(f"⏸️ [INTERRUPT] Aucun feedback - le workflow va s'arrêter")
                 print(f"💡 [INTERRUPT] L'API détectera cet arrêt et Streamlit affichera l'interface")
+                
+                # 🔄 NOUVEAU: Forcer la reprise du workflow même sans feedback
+                print(f"🔄 [RESUME] Forcer la reprise du workflow vers check_success")
+                state["workflow_paused"] = False  # 🔄 NOUVEAU: Dépauser pour continuer
                 
                 # Juste retourner l'état
                 # Le workflow s'arrête automatiquement car interrupt_before
@@ -957,6 +1117,33 @@ class NeedAnalysisWorkflow:
             # Sauvegarde des résultats
             self._save_results(state)
             
+            # 🚀 NOUVEAU: Préparer l'état pour l'analyse des cas d'usage
+            print(f"🚀 [TRANSITION] Préparation pour l'analyse des cas d'usage...")
+            
+            # Initialiser les champs pour l'analyse des cas d'usage
+            state["proposed_quick_wins"] = []
+            state["proposed_structuration_ia"] = []
+            state["validated_quick_wins"] = []
+            state["validated_structuration_ia"] = []
+            state["rejected_quick_wins"] = []
+            state["rejected_structuration_ia"] = []
+            state["use_case_user_feedback"] = ""
+            state["use_case_validation_result"] = []
+            state["final_quick_wins"] = []
+            state["final_structuration_ia"] = []
+            state["use_case_success"] = False
+            state["use_case_iteration"] = 0
+            state["max_use_case_iterations"] = 3
+            state["use_case_workflow_paused"] = False
+            
+            # 🔄 NOUVEAU: Forcer la transition vers l'analyse des cas d'usage
+            state["workflow_paused"] = False
+            state["pause_reason"] = "use_case_analysis_ready"
+            
+            print(f"✅ [TRANSITION] État préparé pour l'analyse des cas d'usage")
+            print(f"📊 [TRANSITION] Besoins finaux: {len(state.get('final_needs', []))}")
+            print(f"🚀 [TRANSITION] Workflow prêt pour l'analyse des cas d'usage")
+            
             print(f"✅ [DEBUG] _finalize_results_node - FIN")
             return state
             
@@ -975,12 +1162,30 @@ class NeedAnalysisWorkflow:
         Returns:
             Direction à prendre
         """
+        print(f"🔍 [SHOULD_CONTINUE] DEBUG - État de décision:")
+        print(f"   - success: {state.get('success', False)}")
+        print(f"   - iteration_count: {state.get('iteration_count', 0)}")
+        print(f"   - max_iterations: {state.get('max_iterations', 3)}")
+        print(f"   - workflow_paused: {state.get('workflow_paused', False)}")
+        print(f"   - regenerate: {state.get('regenerate', False)}")
+        
         if state.get("success", False):
+            print(f"✅ [SHOULD_CONTINUE] Success = True → success")
             return "success"
         
         if state.get("iteration_count", 0) >= state.get("max_iterations", 3):
+            print(f"⚠️ [SHOULD_CONTINUE] Max iterations atteint → max_iterations")
             return "max_iterations"
         
+        if state.get("workflow_paused", False):
+            print(f"⏸️ [SHOULD_CONTINUE] Workflow en pause → continue")
+            return "continue"
+        
+        if state.get("regenerate", False):
+            print(f"🔄 [SHOULD_CONTINUE] Régénération demandée → continue")
+            return "continue"
+        
+        print(f"🔄 [SHOULD_CONTINUE] Par défaut → continue")
         return "continue"
     
     def _save_results(self, state: WorkflowState) -> None:
@@ -1029,7 +1234,8 @@ class NeedAnalysisWorkflow:
     
     def run(self, workshop_files: List[str] = None, transcript_files: List[str] = None, company_info: Dict[str, Any] = None, 
             workshop_results: Dict[str, Any] = None, transcript_results: List[Dict[str, Any]] = None, web_search_results: Dict[str, Any] = None,
-            thread_id: str = None) -> Dict[str, Any]:
+            thread_id: str = None, validated_needs: List[Dict[str, Any]] = None, rejected_needs: List[Dict[str, Any]] = None, 
+            user_feedback: str = None, regenerate: bool = False) -> Dict[str, Any]:
         """
         Exécute le workflow complet.
         NOUVELLE ARCHITECTURE: Exécution MANUELLE des nœuds jusqu'à human_validation.
@@ -1043,6 +1249,10 @@ class NeedAnalysisWorkflow:
             transcript_results: Résultats pré-calculés du transcript agent (NOUVEAU)
             web_search_results: Résultats pré-calculés du web search agent (NOUVEAU)
             thread_id: ID du thread pour le checkpointer (optionnel, généré automatiquement si non fourni)
+            validated_needs: Besoins validés par l'utilisateur (pour reprise de workflow)
+            rejected_needs: Besoins rejetés par l'utilisateur (pour reprise de workflow)
+            user_feedback: Commentaires de l'utilisateur (pour reprise de workflow)
+            regenerate: Flag pour régénérer les besoins
             
         Returns:
             Résultats du workflow
@@ -1051,11 +1261,33 @@ class NeedAnalysisWorkflow:
         print(f"🔧 [DEBUG] Mode dev: {self.dev_mode}")
         print(f"📊 [DEBUG] Résultats pré-calculés: workshop={bool(workshop_results)}, transcript={bool(transcript_results)}, web_search={bool(web_search_results)}")
         print(f"🔑 [DEBUG] Thread ID fourni: {thread_id}")
+        print(f"🔄 [DEBUG] Régénération demandée: {regenerate}")
+        print(f"✅ [DEBUG] Besoins validés fournis: {len(validated_needs) if validated_needs else 0}")
+        print(f"❌ [DEBUG] Besoins rejetés fournis: {len(rejected_needs) if rejected_needs else 0}")
         
         try:
             # État initial avec les fichiers d'entrée ET les résultats pré-calculés
+            # Préparer les inputs pour le workflow
+            input_data = {}
+            if workshop_files:
+                input_data["workshop_files"] = workshop_files
+            if transcript_files:
+                input_data["transcript_files"] = transcript_files
+            if company_info:
+                input_data["company_info"] = company_info
+            if validated_needs:
+                input_data["validated_needs"] = validated_needs
+            if rejected_needs:
+                input_data["rejected_needs"] = rejected_needs
+            if user_feedback:
+                input_data["user_feedback"] = user_feedback
+            if regenerate:
+                input_data["regenerate"] = regenerate
+            
             state = WorkflowState(
                 messages=[],
+                # Input du workflow
+                input=input_data,
                 # Fichiers d'entrée (legacy)
                 workshop_files=workshop_files or [],
                 transcript_files=transcript_files or [],
@@ -1071,9 +1303,9 @@ class NeedAnalysisWorkflow:
                 # Résultats de l'analyse des besoins
                 identified_needs=[],
                 # Validation humaine des besoins
-                validated_needs=[],
-                rejected_needs=[],
-                user_feedback="",
+                validated_needs=validated_needs or [],
+                rejected_needs=rejected_needs or [],
+                user_feedback=user_feedback or "",
                 validation_result=[],
                 # État du workflow des besoins
                 final_needs=[],
@@ -1081,6 +1313,8 @@ class NeedAnalysisWorkflow:
                 iteration_count=0,
                 max_iterations=3,
                 workflow_paused=False,
+                # Flag de régénération
+                regenerate=regenerate,
                 # Résultats de l'analyse des use cases
                 proposed_quick_wins=[],
                 proposed_structuration_ia=[],
@@ -1099,6 +1333,44 @@ class NeedAnalysisWorkflow:
                 max_use_case_iterations=3,
                 use_case_workflow_paused=False
             )
+            
+            # NOUVEAU: Si des besoins validés sont fournis en input, passer directement aux use cases
+            # SAUF si c'est une régénération demandée
+            if validated_needs and len(validated_needs) >= 5 and not regenerate:
+                print(f"🚀 [DEBUG] Besoins validés fournis ({len(validated_needs)}) - Passage direct aux use cases")
+                
+                # Charger les données de contexte si nécessaire
+                if not state.get("workshop_results") or not state.get("transcript_results"):
+                    print(f"📊 [DEBUG] Chargement des données de contexte...")
+                    state = self._collect_data_node(state)
+                
+                # Définir les besoins finaux et marquer comme succès
+                state["final_needs"] = validated_needs
+                state["success"] = True
+                
+                # Analyser les use cases
+                print(f"🤖 [DEBUG] Analyse des use cases...")
+                state = self._analyze_use_cases_node(state)
+                
+                # Afficher l'interface de validation des use cases
+                state = self._validate_use_cases_node(state)
+                
+                print(f"⏸️ [DEBUG] Workflow en pause - en attente de validation des use cases")
+                
+                # Retourner un état "en pause" pour les use cases
+                return {
+                    "success": False,
+                    "final_needs": validated_needs,
+                    "summary": {
+                        "total_needs": len(validated_needs),
+                        "themes": [need.get("theme", "") for need in validated_needs],
+                    },
+                    "iteration_count": state.get("iteration_count", 0),
+                    "workshop_results": state.get("workshop_results", {}),
+                    "transcript_results": state.get("transcript_results", []),
+                    "web_search_results": state.get("web_search_results", {}),
+                    "messages": ["Workflow en pause - en attente de validation des use cases"]
+                }
             
             # MODE DEV: Vérifier si need_analysis_results.json existe
             if self.dev_mode:
@@ -1441,6 +1713,10 @@ class NeedAnalysisWorkflow:
                 # Première fois : le workflow va s'arrêter ici (interrupt_before)
                 print(f"⏸️ [INTERRUPT] Aucun feedback - le workflow va s'arrêter")
                 print(f"💡 [INTERRUPT] L'API détectera cet arrêt et Streamlit affichera l'interface")
+                
+                # 🔄 NOUVEAU: Forcer la reprise du workflow même sans feedback
+                print(f"🔄 [RESUME] Forcer la reprise du workflow vers check_success")
+                state["workflow_paused"] = False  # 🔄 NOUVEAU: Dépauser pour continuer
                 
                 # Juste retourner l'état
                 # Le workflow s'arrête automatiquement car interrupt_before
