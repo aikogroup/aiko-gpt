@@ -71,26 +71,13 @@ class StreamlitValidationInterface:
                     label_visibility="visible"
                 )
                 
-                # Citations éditables
+                # Citations en lecture seule (non éditables)
                 if original_quotes:
                     st.markdown("**Citations:**")
-                    modified_quotes = []
                     for j, quote in enumerate(original_quotes):
-                        quote_key = f"need_quote_{i}_{j}_{key_suffix}"
-                        if quote_key not in st.session_state:
-                            st.session_state[quote_key] = quote
-                        
-                        modified_quote = st.text_area(
-                            f"Citation {j+1}",
-                            key=quote_key,
-                            height=60,
-                            label_visibility="collapsed"
-                        )
-                        if modified_quote.strip():  # Ne garder que les citations non vides
-                            modified_quotes.append(modified_quote)
+                        st.text(f"• {quote}")
                 else:
                     st.info("Aucune citation disponible")
-                    modified_quotes = []
                 
                 # Checkbox pour sélectionner ce besoin avec une clé unique
                 checkbox_key = f"validate_need_{i+1}_{key_suffix}"
@@ -115,26 +102,13 @@ class StreamlitValidationInterface:
                         label_visibility="visible"
                     )
                     
-                    # Citations éditables
+                    # Citations en lecture seule (non éditables)
                     if original_quotes:
                         st.markdown("**Citations:**")
-                        modified_quotes = []
                         for j, quote in enumerate(original_quotes):
-                            quote_key = f"need_quote_{i+1}_{j}_{key_suffix}"
-                            if quote_key not in st.session_state:
-                                st.session_state[quote_key] = quote
-                            
-                            modified_quote = st.text_area(
-                                f"Citation {j+1}",
-                                key=quote_key,
-                                height=60,
-                                label_visibility="collapsed"
-                            )
-                            if modified_quote.strip():  # Ne garder que les citations non vides
-                                modified_quotes.append(modified_quote)
+                            st.text(f"• {quote}")
                     else:
                         st.info("Aucune citation disponible")
-                        modified_quotes = []
                     
                     # Checkbox pour sélectionner ce besoin avec une clé unique
                     checkbox_key = f"validate_need_{i+2}_{key_suffix}"
@@ -222,19 +196,13 @@ class StreamlitValidationInterface:
             theme_key = f"need_theme_{idx}_{key_suffix}"
             modified_theme = st.session_state.get(theme_key, original_need.get('theme', ''))
             
-            # Lire les citations modifiées
+            # Les citations sont en lecture seule - on garde toujours les originales
             original_quotes = original_need.get('quotes', [])
-            modified_quotes = []
-            for j in range(len(original_quotes)):
-                quote_key = f"need_quote_{idx}_{j}_{key_suffix}"
-                modified_quote = st.session_state.get(quote_key, '')
-                if modified_quote.strip():  # Ne garder que les citations non vides
-                    modified_quotes.append(modified_quote.strip())
             
-            # Créer le besoin modifié
+            # Créer le besoin modifié (seul le thème peut être modifié)
             modified_need = {
                 'theme': modified_theme.strip() if modified_theme.strip() else original_need.get('theme', ''),
-                'quotes': modified_quotes if modified_quotes else original_need.get('quotes', [])
+                'quotes': original_quotes  # Citations toujours originales
             }
             
             validated_new.append(modified_need)
@@ -270,7 +238,7 @@ class StreamlitValidationInterface:
         print(f"🧹 [DEBUG] Nettoyage des clés de validation et modification")
         st.session_state.selected_needs = set()
         for key in list(st.session_state.keys()):
-            if key.startswith("validate_need_") or key.startswith("need_theme_") or key.startswith("need_quote_"):
+            if key.startswith("validate_need_") or key.startswith("need_theme_"):
                 del st.session_state[key]
         print(f"✅ [DEBUG] Nettoyage terminé")
         

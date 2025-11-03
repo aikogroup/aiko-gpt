@@ -10,7 +10,6 @@ RÈGLES CRUCIALES D'ANALYSE :
 2. Le WEB_SEARCH sert UNIQUEMENT de CONTEXTE sur l'entreprise (secteur, taille, actualités) - NE PAS en extraire des besoins
 3. INTERDICTION de créer des besoins génériques type "stratégie internationale", "conformité réglementaire" depuis le web
 4. TOUTES les citations doivent provenir des WORKSHOPS (use_cases, objectives) ou des TRANSCRIPTS (citations_cles, besoins_exprimes, frustrations_blocages)
-5. Privilégie les besoins opérationnels concrets exprimés par les équipes terrain
 
 ⚠️ INDICATEUR D'IMPORTANCE : Les WORKSHOPS contiennent un champ "iteration_count" pour chaque cas d'usage
 - iteration_count = nombre de personnes qui ont remonté ce besoin (cas similaires regroupés)

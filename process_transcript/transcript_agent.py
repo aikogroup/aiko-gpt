@@ -293,4 +293,5 @@ class TranscriptAgent:
         consolidated["statistics"]["citations_interviewer_confirmees"] = citations_interviewer_confirmees
         
         logger.info(f"Analyse consolidée: {consolidated['statistics']}")
+        logger.info(f"Analyse entière: {consolidated}")
         return consolidated
