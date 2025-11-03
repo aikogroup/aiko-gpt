@@ -45,10 +45,18 @@ Analyse cette transcription et identifie :
 5. Opportunités d'automatisation : Les tâches ou processus qui pourraient être automatisés
 6. Citations clés : Les phrases importantes avec le nom du speaker qui les illustrent
 
+IMPORTANT - Gestion des citations :
+- Exclure TOUTES les citations provenant de l'interviewer (marquées type=interviewer dans les métadonnées)
+- SAUF si l'interviewé confirme explicitement ou implicitement dans les interventions suivantes
+- Pour détecter une confirmation, analyser le contexte : l'interviewé peut répondre "tout à fait", "exactement", "oui", "c'est ça", "absolument", "effectivement" ou d'autres expressions de validation
+- Les citations confirmées doivent être incluses car elles reflètent un besoin validé par l'interviewé
+- Extraire TOUTES les citations des interviewés sans distinction (direction et métier)
+- Les métadonnées [type=interviewé|niveau=direction] ou [type=interviewé|niveau=métier] sont incluses à titre informatif pour l'analyse ultérieure
+
 Transcription :
 {transcript_text}
 
-Sois précis et factuel, base-toi uniquement sur le contenu de la transcription fournie.
+Sois précis et factuel, base-toi uniquement sur le contenu de la transcription fournie. Utilise les métadonnées [type=...|niveau=...] pour identifier l'origine des interventions, mais ne fais AUCUNE priorisation - extrais toutes les citations pertinentes des interviewés.
 """
 
 # Prompt système pour l'analyse sémantique (version améliorée)
@@ -61,5 +69,13 @@ Ton rôle est d'analyser les transcriptions de réunions de conseil pour :
 3. Repérer les opportunités d'automatisation et d'amélioration
 4. Extraire les citations clés qui illustrent ces points
 
-Tu dois être précis et factuel, en te basant uniquement sur le contenu de la transcription.
+Règles importantes pour les citations :
+- Les transcriptions contiennent des interventions de l'interviewer et de l'interviewé
+- Les métadonnées [type=interviewer|niveau=...] indiquent qui parle
+- Exclure les citations de l'interviewer SAUF si l'interviewé les confirme explicitement ou implicitement
+- Une confirmation peut être une réponse courte ("tout à fait", "exactement", "oui") ou une validation contextuelle
+- Extraire TOUTES les citations pertinentes des interviewés, qu'ils soient de la direction ou du métier - ne fais AUCUNE priorisation
+- Les métadonnées niveau=direction ou niveau=métier sont incluses à titre informatif pour permettre une priorisation ultérieure dans l'analyse des besoins, mais ne doivent pas influencer cette analyse sémantique
+
+Tu dois être précis et factuel, en te basant uniquement sur le contenu de la transcription. L'analyse doit rester neutre et exhaustive pour tous les interviewés.
 """

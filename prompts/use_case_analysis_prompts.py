@@ -27,6 +27,13 @@ IMPORTANT :
 - La description doit être actionnable et technique
 - ⚠️ RÈGLE CRITIQUE : Les TITRES de cas d'usage doivent être DISTINCTS et VARIÉS - éviter les doublons sémantiques ou thématiques
 
+⚠️ INDICATEUR D'IMPORTANCE DES BESOINS :
+- Les WORKSHOPS contiennent un champ "iteration_count" pour chaque cas d'usage
+- iteration_count = nombre de personnes qui ont remonté ce besoin (cas similaires regroupés)
+- Un besoin avec iteration_count élevé (ex: 5) a été exprimé par plusieurs personnes, donc c'est un besoin critique
+- PRIORISE les cas d'usage qui répondent aux besoins avec un iteration_count élevé dans les WORKSHOPS
+- Les besoins remontés par plusieurs personnes (high iteration_count) doivent générer des cas d'usage prioritaires
+
 Structure attendue :
 - quick_wins : Liste de 6 à 10 cas d'usage, chacun avec id, titre UNIQUE, ia_utilisee et description
 - structuration_ia : Liste de 8 à 12 cas d'usage, chacun avec id, titre UNIQUE, ia_utilisee et description
@@ -61,6 +68,12 @@ USE_CASE_ANALYSIS_USER_PROMPT = """
 🎤 DONNÉES TRANSCRIPT (Contexte des entretiens collaborateurs) :
 {transcript_data}
 
+⚠️ PRIORISATION STRATÉGIQUE IMPORTANTE : Les transcriptions contiennent des extraits de personnes de la direction et du métier (identifiables via les métadonnées speaker_level).
+- PRIORISE les besoins exprimés par la direction pour aligner les cas d'usage avec la stratégie de l'entreprise
+- ABSOLUMENT ESSENTIEL : Si un besoin est exprimé à la fois par la direction ET par le métier, c'est un besoin CRITIQUE - les cas d'usage qui y répondent doivent être prioritaires
+- Utilise aussi les besoins exprimés uniquement par le métier pour contextualiser les solutions techniques et opérationnelles
+- Pour prioriser, utilise les métadonnées speaker_level dans les données transcript : les citations avec niveau=direction doivent avoir plus de poids que celles avec niveau=métier
+
 🌐 DONNÉES WEB SEARCH (Contexte marché et entreprise) :
 {web_search_data}
 
@@ -69,11 +82,14 @@ INSTRUCTIONS :
 2. Propose 10 cas d'usage STRUCTURATION IA (solutions avancées, ROI moyen/long terme)
 3. Chaque cas d'usage doit répondre à un ou plusieurs besoins validés
 4. Utilise les données workshops et transcripts pour contextualiser les cas d'usage avec des détails techniques/métier concrets
+   ⚠️ IMPORTANT : Considère le champ "iteration_count" des use_cases dans les WORKSHOPS
+   - iteration_count indique combien de personnes ont remonté ce besoin
+   - PRIORISE les cas d'usage qui répondent aux besoins avec iteration_count élevé (besoins critiques remontés par plusieurs personnes)
 5. Utilise des technologies IA concrètes et appropriées
 6. Sois spécifique au contexte de l'entreprise (processus, outils, contraintes mentionnés dans les workshops/transcripts)
 7. ⚠️ VÉRIFIE L'UNICITÉ DES THÈMES : Assure-toi que les titres/thèmes des cas d'usage sont tous distincts et ne se répètent pas
 
-Génère les cas d'usage en respectant la structure attendue. VÉRIFIE qu'il n'y a pas de doublons thématiques.
+Génère les cas d'usage en respectant la structure attendue. VÉRIFIE qu'il n'y a pas de doublons thématiques. PRIORISE les besoins avec un iteration_count élevé dans les WORKSHOPS.
 """
 
 USE_CASE_REGENERATION_PROMPT = """
@@ -103,6 +119,12 @@ RÉSUMÉ DE LA VALIDATION :
 🎤 DONNÉES TRANSCRIPT (Contexte des entretiens collaborateurs - pour t'inspirer) :
 {transcript_data}
 
+⚠️ PRIORISATION STRATÉGIQUE IMPORTANTE : Les transcriptions contiennent des extraits de personnes de la direction et du métier (identifiables via les métadonnées speaker_level).
+- PRIORISE les besoins exprimés par la direction pour aligner les cas d'usage avec la stratégie de l'entreprise
+- ABSOLUMENT ESSENTIEL : Si un besoin est exprimé à la fois par la direction ET par le métier, c'est un besoin CRITIQUE - les cas d'usage qui y répondent doivent être prioritaires
+- Utilise aussi les besoins exprimés uniquement par le métier pour contextualiser les solutions techniques et opérationnelles
+- Pour prioriser, utilise les métadonnées speaker_level dans les données transcript : les citations avec niveau=direction doivent avoir plus de poids que celles avec niveau=métier
+
 🌐 DONNÉES WEB SEARCH (Contexte marché et entreprise - pour t'inspirer) :
 {web_search_data}
 
@@ -115,6 +137,9 @@ INSTRUCTIONS POUR LA NOUVELLE ITÉRATION :
 6. Varier les thématiques et les approches techniques
 7. Rester aligné avec le contexte et les contraintes de l'entreprise
 8. Utilise les données workshops et transcripts pour contextualiser avec des détails techniques/métier concrets
+   ⚠️ IMPORTANT : Considère le champ "iteration_count" des use_cases dans les WORKSHOPS
+   - iteration_count indique combien de personnes ont remonté ce besoin
+   - PRIORISE les cas d'usage qui répondent aux besoins avec iteration_count élevé (besoins critiques remontés par plusieurs personnes)
 9. ⚠️ VÉRIFIE L'UNICITÉ DES THÈMES : Assure-toi qu'aucun titre/thème de cas d'usage n'est utilisé deux fois
 
 ⚠️ RÈGLE CRITIQUE - GÉNÉRATION INTELLIGENTE :

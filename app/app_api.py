@@ -74,7 +74,7 @@ def upload_files_to_api(files: List[Any]) -> Dict[str, List[str]]:
         st.error(f"❌ Erreur lors de l'upload: {str(e)}")
         return {"workshop": [], "transcript": []}
 
-def start_workflow_api_call(workshop_files: List[str], transcript_files: List[str], company_name: str, result_queue: queue.Queue):
+def start_workflow_api_call(workshop_files: List[str], transcript_files: List[str], company_name: str, interviewer_names: List[str], result_queue: queue.Queue):
     """
     Fait l'appel API dans un thread séparé.
     Met le résultat dans la queue : (success: bool, thread_id: str, error_msg: str)
@@ -89,7 +89,8 @@ def start_workflow_api_call(workshop_files: List[str], transcript_files: List[st
             json={
                 "workshop_files": workshop_files,
                 "transcript_files": transcript_files,
-                "company_name": company_name if company_name else None
+                "company_name": company_name if company_name else None,
+                "interviewer_names": interviewer_names
             },
             timeout=900  # 5 minutes pour le traitement initial
         )
@@ -261,7 +262,47 @@ def display_upload_interface():
             key="pdf_uploader"
         )
     
-    # Zone 3 : Nom de l'entreprise
+    # Zone 3 : Configuration des interviewers
+    st.header("👥 Configuration des Interviewers")
+    st.info("💡 Par défaut : Christella Umuhoza et Adrien Fabry. Vous pouvez ajouter d'autres noms d'interviewers.")
+    
+    # Initialiser la liste des interviewers dans session_state si nécessaire
+    if 'interviewer_names' not in st.session_state:
+        st.session_state.interviewer_names = ["Christella Umuhoza", "Adrien Fabry"]
+    
+    # Interface pour gérer les interviewers
+    col_interviewers_1, col_interviewers_2 = st.columns([3, 1])
+    
+    with col_interviewers_1:
+        new_interviewer = st.text_input(
+            "Ajouter un nom d'interviewer",
+            placeholder="Ex: Jean Dupont",
+            key="new_interviewer_input"
+        )
+    
+    with col_interviewers_2:
+        if st.button("➕ Ajouter", key="add_interviewer_btn"):
+            if new_interviewer and new_interviewer.strip() and new_interviewer.strip() not in st.session_state.interviewer_names:
+                st.session_state.interviewer_names.append(new_interviewer.strip())
+                st.success(f"✅ {new_interviewer.strip()} ajouté")
+                st.rerun()
+            elif new_interviewer and new_interviewer.strip() in st.session_state.interviewer_names:
+                st.warning("⚠️ Ce nom est déjà dans la liste")
+    
+    # Afficher la liste actuelle avec possibilité de suppression
+    if st.session_state.interviewer_names:
+        st.markdown("**Interviewers configurés :**")
+        for idx, interviewer in enumerate(st.session_state.interviewer_names):
+            col_display, col_delete = st.columns([4, 1])
+            with col_display:
+                st.text(f"• {interviewer}")
+            with col_delete:
+                if st.button("🗑️", key=f"delete_interviewer_{idx}"):
+                    st.session_state.interviewer_names.remove(interviewer)
+                    st.success(f"✅ {interviewer} retiré")
+                    st.rerun()
+    
+    # Zone 4 : Nom de l'entreprise
     st.header("🏢 Informations Entreprise")
     company_name = st.text_input(
         "Nom de l'entreprise",
@@ -286,6 +327,9 @@ def display_upload_interface():
             # Créer une queue pour récupérer le résultat
             result_queue = queue.Queue()
             
+            # Récupérer les interviewer_names depuis session_state
+            interviewer_names = st.session_state.get("interviewer_names", ["Christella Umuhoza", "Adrien Fabry"])
+            
             # Lancer l'appel API dans un thread
             with ThreadPoolExecutor(max_workers=1) as executor:
                 future = executor.submit(
@@ -293,6 +337,7 @@ def display_upload_interface():
                     file_types.get("workshop", []),
                     file_types.get("transcript", []),
                     company_name,
+                    interviewer_names,
                     result_queue
                 )
                 

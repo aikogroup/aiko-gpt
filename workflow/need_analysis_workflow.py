@@ -1015,7 +1015,7 @@ class NeedAnalysisWorkflow:
     
     def run(self, workshop_files: List[str] = None, transcript_files: List[str] = None, company_info: Dict[str, Any] = None, 
             workshop_results: Dict[str, Any] = None, transcript_results: List[Dict[str, Any]] = None, web_search_results: Dict[str, Any] = None,
-            thread_id: str = None) -> Dict[str, Any]:
+            interviewer_names: List[str] = None, thread_id: str = None) -> Dict[str, Any]:
         """
         Exécute le workflow complet.
         NOUVELLE ARCHITECTURE: Exécution MANUELLE des nœuds jusqu'à human_validation.
@@ -1037,6 +1037,11 @@ class NeedAnalysisWorkflow:
         print(f"🔧 [DEBUG] Mode dev: {self.dev_mode}")
         print(f"📊 [DEBUG] Résultats pré-calculés: workshop={bool(workshop_results)}, transcript={bool(transcript_results)}, web_search={bool(web_search_results)}")
         print(f"🔑 [DEBUG] Thread ID fourni: {thread_id}")
+        
+        # Configurer les interviewer_names si fournis
+        if interviewer_names:
+            print(f"👥 [DEBUG] Configuration des interviewers: {interviewer_names}")
+            self.transcript_agent.speaker_classifier.set_interviewer_names(interviewer_names)
         
         try:
             # État initial avec les fichiers d'entrée ET les résultats pré-calculés

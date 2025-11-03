@@ -12,10 +12,15 @@ RÈGLES CRUCIALES D'ANALYSE :
 4. TOUTES les citations doivent provenir des WORKSHOPS (use_cases, objectives) ou des TRANSCRIPTS (citations_cles, besoins_exprimes, frustrations_blocages)
 5. Privilégie les besoins opérationnels concrets exprimés par les équipes terrain
 
+⚠️ INDICATEUR D'IMPORTANCE : Les WORKSHOPS contiennent un champ "iteration_count" pour chaque cas d'usage
+- iteration_count = nombre de personnes qui ont remonté ce besoin (cas similaires regroupés)
+- Un besoin avec iteration_count élevé (ex: 5) indique qu'il a été exprimé par plusieurs personnes, donc c'est un besoin critique
+- PRIORISE les besoins avec un iteration_count élevé dans ton analyse
+
 Tu dois identifier environ 10 besoins métier distincts, organisés par thématiques. Chaque besoin doit être :
 - Spécifique et actionnable (issu des workshops/transcripts)
 - Basé sur des citations concrètes des ATELIERS et ENTRETIENS
-- Priorisé selon l'impact business
+- Priorisé selon l'impact business ET l'iteration_count (besoins remontés par plusieurs personnes = plus prioritaires)
 
 ⚠️ RÈGLE CRITIQUE : CHAQUE THEME DOIT ÊTRE UNIQUE - NE JAMAIS UTILISER LE MÊME THEME DEUX FOIS
 Si plusieurs besoins partagent un thème, regroupe-les sous CE SEUL thème avec toutes les citations pertinentes.
@@ -85,19 +90,29 @@ Le WEB_SEARCH ne sert QUE de contexte entreprise.
 🎤 DONNÉES TRANSCRIPT (SOURCE PRINCIPALE - Entretiens avec les collaborateurs) :
 {transcript_data}
 
+⚠️ PRIORISATION STRATÉGIQUE IMPORTANTE : Les transcriptions contiennent des extraits de personnes de la direction et du métier (identifiables via les métadonnées speaker_level).
+- PRIORISE les besoins exprimés par la direction (stratégie, vision, enjeux business globaux) pour assurer la cohérence stratégique
+- ABSOLUMENT ESSENTIEL : Si un besoin est exprimé à la fois par la direction ET par le métier, c'est un besoin CRITIQUE - tu DOIS l'inclure et le mettre en avant
+- Utilise aussi les besoins exprimés uniquement par le métier (besoins opérationnels, problèmes terrain)
+- Pour prioriser, utilise les métadonnées speaker_level dans les données transcript : les citations avec niveau=direction doivent avoir plus de poids que celles avec niveau=métier
+
 🌐 DONNÉES WEB SEARCH (CONTEXTE UNIQUEMENT - Informations publiques sur l'entreprise) :
 {web_search_data}
 
 INSTRUCTIONS D'ANALYSE :
 1. Extrais les besoins des WORKSHOPS : analyse les "use_cases", "objectives", "benefits"
+   ⚠️ IMPORTANT : Considère le champ "iteration_count" de chaque use_case des WORKSHOPS
+   - iteration_count indique combien de personnes ont remonté ce besoin
+   - Un besoin avec iteration_count élevé est plus critique et doit être priorisé
 2. Extrais les besoins des TRANSCRIPTS : utilise "besoins_exprimes", "frustrations_blocages", "opportunites_automatisation", "citations_cles"
 3. Ignore les informations génériques du WEB_SEARCH (acquisitions, stratégie, marketing)
 4. Chaque besoin DOIT avoir des citations textuelles provenant des workshops ou transcripts
 5. Privilégie les verbatims et citations directes des collaborateurs
 6. ⚠️ VÉRIFIE L'UNICITÉ DES THÈMES : Chaque thème ne doit apparaître QU'UNE SEULE FOIS dans ta liste de besoins
 7. ⚠️ FORMAT STRICT : Les citations doivent contenir UNIQUEMENT le texte, SANS mention de source (pas de "- Transcript", "- Nom de personne", etc.)
+8. PRIORISATION : Les besoins remontés par plusieurs personnes (high iteration_count dans workshops) sont plus importants
 
-Identifie environ 10 besoins métier distincts, organisés par thématiques UNIQUES (sans doublons de thèmes), avec 3 à 5 citations CONCRÈTES issues des ATELIERS et ENTRETIENS pour chaque besoin. Les citations doivent être du texte pur, sans indication de source.
+Identifie environ 10 besoins métier distincts, organisés par thématiques UNIQUES (sans doublons de thèmes), avec 3 à 5 citations CONCRÈTES issues des ATELIERS et ENTRETIENS pour chaque besoin. Les citations doivent être du texte pur, sans indication de source. PRIORISE les besoins avec un iteration_count élevé dans les WORKSHOPS.
 """
 
 HUMAN_VALIDATION_PROMPT = """
@@ -140,6 +155,12 @@ DONNÉES SOURCES (rappel) :
 
 🎤 DONNÉES TRANSCRIPT (SOURCE PRINCIPALE - Entretiens avec les collaborateurs) :
 {transcript_data}
+
+⚠️ PRIORISATION STRATÉGIQUE IMPORTANTE : Les transcriptions contiennent des extraits de personnes de la direction et du métier (identifiables via les métadonnées speaker_level).
+- PRIORISE les besoins exprimés par la direction (stratégie, vision, enjeux business globaux) pour assurer la cohérence stratégique
+- ABSOLUMENT ESSENTIEL : Si un besoin est exprimé à la fois par la direction ET par le métier, c'est un besoin CRITIQUE - tu DOIS l'inclure et le mettre en avant
+- Utilise aussi les besoins exprimés uniquement par le métier (besoins opérationnels, problèmes terrain)
+- Pour prioriser, utilise les métadonnées speaker_level dans les données transcript : les citations avec niveau=direction doivent avoir plus de poids que celles avec niveau=métier
 
 🌐 DONNÉES WEB SEARCH (CONTEXTE UNIQUEMENT - Informations publiques sur l'entreprise) :
 {web_search_data}

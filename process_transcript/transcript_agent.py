@@ -8,17 +8,19 @@ from .pdf_parser import PDFParser
 from .json_parser import JSONParser
 from .interesting_parts_agent import InterestingPartsAgent
 from .semantic_filter_agent import SemanticFilterAgent
+from .speaker_classifier import SpeakerClassifier
 
 logger = logging.getLogger(__name__)
 
 class TranscriptAgent:
     """Agent principal pour traiter les transcriptions (PDF ou JSON)"""
     
-    def __init__(self, openai_api_key: str = None):
+    def __init__(self, openai_api_key: str = None, interviewer_names: List[str] = None):
         self.pdf_parser = PDFParser()
         self.json_parser = JSONParser()
         self.interesting_parts_agent = InterestingPartsAgent(openai_api_key)
         self.semantic_filter_agent = SemanticFilterAgent(openai_api_key)
+        self.speaker_classifier = SpeakerClassifier(openai_api_key, interviewer_names)
         
         # Configuration du logging
         logging.basicConfig(
@@ -56,9 +58,14 @@ class TranscriptAgent:
             
             logger.info(f"✓ {len(interventions)} interventions extraites")
             
-            # Étape 2: Filtrage des parties intéressantes (sur les données déjà parsées)
+            # Étape 1.5: Classification des speakers (interviewer/interviewé, direction/métier)
+            logger.info("Étape 1.5: Classification des speakers")
+            enriched_interventions = self.speaker_classifier.classify_speakers(interventions)
+            logger.info(f"✓ {len(enriched_interventions)} interventions classifiées")
+            
+            # Étape 2: Filtrage des parties intéressantes (sur les données déjà parsées et classifiées)
             logger.info("Étape 2: Filtrage des parties intéressantes")
-            interesting_interventions = self.interesting_parts_agent._filter_interesting_parts(interventions)
+            interesting_interventions = self.interesting_parts_agent._filter_interesting_parts(enriched_interventions)
             logger.info(f"✓ {len(interesting_interventions)} interventions intéressantes identifiées")
             
             # Étape 3: Analyse sémantique (sur les données déjà filtrées)
@@ -76,7 +83,7 @@ class TranscriptAgent:
                 "parsing": {
                     "total_interventions": len(interventions),
                     "speakers": parser_used.get_speakers(interventions),
-                    "interventions": interventions  # Garder les interventions originales
+                    "interventions": enriched_interventions  # Garder les interventions enrichies avec métadonnées
                 },
                 "interesting_parts": {
                     "count": len(interesting_interventions),
@@ -213,6 +220,50 @@ class TranscriptAgent:
                 "total_citations": len(set(all_citations))
             }
         }
+        
+        # Compter les citations par niveau de speaker (si métadonnées disponibles)
+        citations_direction = 0
+        citations_metier = 0
+        citations_interviewer_confirmees = 0
+        
+        for result in results:
+            if result["status"] == "success":
+                # Analyser les interventions pour compter par niveau
+                parsing_data = result.get("parsing", {})
+                interventions_data = parsing_data.get("interventions", [])
+                
+                for intervention in interventions_data:
+                    speaker_level = intervention.get("speaker_level")
+                    speaker_type = intervention.get("speaker_type")
+                    
+                    # Pour les citations, on compte si l'intervention est dans les parties intéressantes
+                    interesting_interventions = result.get("interesting_parts", {}).get("interventions", [])
+                    if any(
+                        intv.get("speaker") == intervention.get("speaker") and
+                        intv.get("text") == intervention.get("text")
+                        for intv in interesting_interventions
+                    ):
+                        if speaker_level == "direction":
+                            citations_direction += 1
+                        elif speaker_level == "métier":
+                            citations_metier += 1
+                        
+                        # Détection approximative des citations interviewer confirmées
+                        # (basée sur la présence d'une citation de l'interviewer suivie d'une confirmation)
+                        if speaker_type == "interviewer":
+                            # Vérifier les interventions suivantes pour une confirmation
+                            idx = interventions_data.index(intervention) if intervention in interventions_data else -1
+                            if idx >= 0 and idx + 1 < len(interventions_data):
+                                next_intervention = interventions_data[idx + 1]
+                                if next_intervention.get("speaker_type") == "interviewé":
+                                    text_lower = next_intervention.get("text", "").lower()
+                                    confirmations = ["tout à fait", "exactement", "oui", "c'est ça", "absolument", "effectivement"]
+                                    if any(conf in text_lower for conf in confirmations):
+                                        citations_interviewer_confirmees += 1
+        
+        consolidated["statistics"]["citations_direction"] = citations_direction
+        consolidated["statistics"]["citations_metier"] = citations_metier
+        consolidated["statistics"]["citations_interviewer_confirmees"] = citations_interviewer_confirmees
         
         logger.info(f"Analyse consolidée: {consolidated['statistics']}")
         return consolidated

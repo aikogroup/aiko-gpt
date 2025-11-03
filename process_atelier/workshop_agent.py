@@ -28,6 +28,11 @@ class UseCase(BaseModel):
     title: str = Field(description="Titre du cas d'usage")
     objective: str = Field(description="Objectif ou gain attendu")
     benefits: List[str] = Field(default_factory=list, description="Liste des bénéfices")
+    iteration_count: int = Field(
+        description="Nombre de fois que ce besoin a été remonté par différentes personnes (nombre de cas similaires regroupés)",
+        ge=1,
+        default=1
+    )
 
 class WorkshopAnalysisResponse(BaseModel):
     """Modèle pour la réponse d'analyse d'un atelier"""
@@ -299,6 +304,7 @@ def main():
             for i, use_case in enumerate(result.use_cases, 1):
                 print(f"  {i}. {use_case.title}")
                 print(f"     Objectif: {use_case.objective}")
+                print(f"     Nombre de personnes ayant remonté ce besoin: {use_case.iteration_count}")
                 if use_case.benefits:
                     print(f"     Bénéfices: {', '.join(use_case.benefits)}")
         

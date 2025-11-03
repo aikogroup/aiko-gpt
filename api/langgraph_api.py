@@ -46,6 +46,7 @@ class WorkflowInput(BaseModel):
     workshop_files: List[str] = []
     transcript_files: List[str] = []
     company_name: Optional[str] = None
+    interviewer_names: Optional[List[str]] = None
 
 class ValidationFeedback(BaseModel):
     """Feedback de validation utilisateur"""
@@ -106,7 +107,7 @@ async def upload_files(files: List[UploadFile] = File(...)):
             # Classifier par type
             if file_extension == ".xlsx":
                 workshop_files.append(str(file_path))
-            elif file_extension == ".pdf":
+            elif file_extension in [".pdf", ".json"]:
                 transcript_files.append(str(file_path))
         
         return {
@@ -162,12 +163,14 @@ async def create_run(thread_id: str, workflow_input: WorkflowInput):
         print(f"📁 Workshop files: {workflow_input.workshop_files}")
         print(f"📁 Transcript files: {workflow_input.transcript_files}")
         print(f"🏢 Company: {workflow_input.company_name}")
+        print(f"👥 Interviewers: {workflow_input.interviewer_names}")
         
         # Exécuter le workflow (mode asynchrone géré par LangGraph)
         result = workflow.run(
             workshop_files=workflow_input.workshop_files,
             transcript_files=workflow_input.transcript_files,
             company_info={"company_name": workflow_input.company_name} if workflow_input.company_name else {},
+            interviewer_names=workflow_input.interviewer_names,
             thread_id=thread_id
         )
         

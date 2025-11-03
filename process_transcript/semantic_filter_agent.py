@@ -61,19 +61,29 @@ class SemanticFilterAgent:
         return result
     
     def _prepare_text_for_analysis(self, interventions: List[Dict[str, Any]]) -> str:
-        """Prépare le texte pour l'analyse sémantique"""
+        """Prépare le texte pour l'analyse sémantique avec métadonnées"""
         text_parts = []
         
         for intervention in interventions:
             speaker = intervention["speaker"]
             timestamp = intervention.get("timestamp", "")
             text = intervention["text"]
+            speaker_type = intervention.get("speaker_type", "inconnu")
+            speaker_level = intervention.get("speaker_level")
             
-            # Formater l'intervention
+            # Formater l'intervention avec métadonnées
+            metadata_parts = []
+            if speaker_type:
+                metadata_parts.append(f"type={speaker_type}")
+            if speaker_level:
+                metadata_parts.append(f"niveau={speaker_level}")
+            
+            metadata_str = f"[{'|'.join(metadata_parts)}]" if metadata_parts else ""
+            
             if timestamp:
-                text_parts.append(f"[{timestamp}] {speaker}: {text}")
+                text_parts.append(f"{metadata_str} [{timestamp}] {speaker}: {text}")
             else:
-                text_parts.append(f"{speaker}: {text}")
+                text_parts.append(f"{metadata_str} {speaker}: {text}")
         
         return "\n".join(text_parts)
     
