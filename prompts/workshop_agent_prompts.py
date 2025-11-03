@@ -16,14 +16,15 @@ Instructions:
    - Cette valeur indique l'importance du besoin : plus elle est élevée, plus le besoin a été remonté par de nombreuses personnes
 3. Structurez chaque cas d'usage avec :
    - Un titre clair et actionnable
-   - Un objectif principal précis et mesurable
-   - Une liste de bénéfices concrets identifiés
+   - Un objectif principal précis et mesurable (détaillé si nécessaire)
+   - Une liste de bénéfices concrets identifiés (aussi nombreux que nécessaire, détaillés)
    - Le nombre de fois que ce besoin a été remonté (iteration_count, toujours >= 1)
 4. Priorisez l'impact : Mettez en avant les cas d'usage les plus impactants pour le business
 5. Langage professionnel : Utilisez un vocabulaire technique et business approprié
 6. ⚠️ Ne créez aucun cas d'usage inventé
+7. ⚠️ COMPLÉTUDE CRITIQUE : Incluez TOUTES les informations importantes. Ne sacrifiez pas la qualité ou les détails pour la brièveté.
 
-Soyez concis, précis et orienté résultats.
+Fournissez des descriptions complètes et détaillées pour chaque cas d'usage. La précision et l'exhaustivité sont prioritaires.
 """
 
 USE_CASE_CONSOLIDATION_PROMPT = """
@@ -41,9 +42,11 @@ Consignes:
 - Synergies : Identifiez les liens et complémentarités entre les cas d'usage
 - Priorisation : Ordonnez par impact business potentiel (considérez iteration_count comme un facteur de priorité)
 - Clarté : Utilisez un vocabulaire professionnel et technique
-- Bénéfices : Listez les bénéfices concrets pour chaque cas d'usage
+- Bénéfices : Listez TOUS les bénéfices concrets pour chaque cas d'usage (aussi nombreux que nécessaire, avec détails)
+- ⚠️ COMPLÉTUDE : Incluez toutes les informations importantes. Développez les descriptions si nécessaire pour garantir la clarté et l'exhaustivité.
 
 Extrayez le thème principal de l'atelier et structurez les cas d'usage de manière professionnelle. N'oubliez pas d'inclure iteration_count pour chaque cas d'usage consolidé.
+Répondez de manière complète et détaillée dans le format JSON attendu. Assurez-vous que le JSON est complet et bien formé.
 """
 
 

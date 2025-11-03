@@ -4,6 +4,7 @@ Agent principal pour le traitement des transcriptions (PDF ou JSON)
 import logging
 from typing import List, Dict, Any, Optional
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from .pdf_parser import PDFParser
 from .json_parser import JSONParser
 from .interesting_parts_agent import InterestingPartsAgent
@@ -117,21 +118,47 @@ class TranscriptAgent:
     def process_multiple_files(self, file_paths: List[str]) -> Dict[str, Any]:
         """
         Traite plusieurs fichiers de transcriptions (PDF ou JSON)
+        PARALLÉLISÉ : Traite tous les fichiers en parallèle pour gagner du temps
         """
-        logger.info(f"=== Début du traitement de {len(file_paths)} fichiers ===")
+        logger.info(f"=== Début du traitement de {len(file_paths)} fichiers (PARALLÉLISÉ) ===")
         
         results = []
         successful = 0
         failed = 0
         
-        for file_path in file_paths:
-            result = self.process_single_file(file_path)
-            results.append(result)
+        # 🚀 PARALLÉLISATION : Traiter tous les fichiers en même temps
+        # Limiter le nombre de workers pour éviter de surcharger le système
+        # Avec beaucoup de fichiers, on limite à un nombre raisonnable de threads
+        max_workers = min(len(file_paths), 10)  # Maximum 10 threads en parallèle
+        logger.info(f"Parallélisation avec {max_workers} workers pour {len(file_paths)} fichiers")
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Soumettre tous les fichiers pour traitement parallèle
+            future_to_file = {}
+            for file_path in file_paths:
+                future = executor.submit(self.process_single_file, file_path)
+                future_to_file[future] = file_path
             
-            if result["status"] == "success":
-                successful += 1
-            else:
-                failed += 1
+            # Récupérer les résultats au fur et à mesure
+            for future in as_completed(future_to_file):
+                file_path = future_to_file[future]
+                try:
+                    result = future.result()
+                    results.append(result)
+                    
+                    if result["status"] == "success":
+                        successful += 1
+                    else:
+                        failed += 1
+                    
+                    logger.info(f"✓ Fichier '{file_path}' terminé: {result['status']}")
+                except Exception as e:
+                    logger.error(f"❌ Erreur lors du traitement de '{file_path}': {e}")
+                    failed += 1
+                    results.append({
+                        "file_path": file_path,
+                        "status": "error",
+                        "error": str(e)
+                    })
         
         # Résumé global
         summary = {

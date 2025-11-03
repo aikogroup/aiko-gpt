@@ -147,6 +147,7 @@ class WorkshopAgent:
             use_cases_text=chr(10).join(use_cases_text)
         )
         
+        response = None
         try:
             # Appel à l'API OpenAI Responses avec structured output
             # Utilisation du paramètre 'instructions' pour le system prompt
@@ -159,7 +160,7 @@ class WorkshopAgent:
                         "content": user_prompt
                     }
                 ],
-                text_format=WorkshopAnalysisResponse
+                text_format=WorkshopAnalysisResponse,
             )
             
             # Extraction de la réponse structurée
@@ -181,7 +182,84 @@ class WorkshopAgent:
             
         except Exception as e:
             logger.error(f"Erreur lors du traitement LLM pour {atelier_name}: {e}", exc_info=True)
+            
+            # Tentative de récupération de la réponse brute pour diagnostic et réparation
+            if response is not None:
+                try:
+                    # Accéder à la réponse brute
+                    raw_text = getattr(response, 'output_text', None)
+                    if not raw_text:
+                        # Essayer d'autres attributs possibles
+                        raw_text = getattr(response, 'text', None)
+                    
+                    if raw_text:
+                        logger.error(f"Réponse brute reçue (longueur: {len(raw_text)} caractères)")
+                        logger.error(f"Réponse brute (premiers 1000 caractères): {raw_text[:1000]}")
+                        logger.error(f"Réponse brute (derniers 500 caractères): {raw_text[-500:]}")
+                        
+                        # Tentative de parsing manuel du JSON tronqué
+                        import json
+                        import re
+                        
+                        # Chercher le JSON dans la réponse (éventuellement tronqué)
+                        json_match = re.search(r'\{.*', raw_text, re.DOTALL)
+                        if json_match:
+                            json_str = json_match.group(0)
+                            logger.info(f"Tentative de réparation du JSON...")
+                            
+                            # Tenter de fermer les chaînes et objets JSON ouverts
+                            try:
+                                # Compter les guillemets pour fermer les chaînes non fermées
+                                quote_count = json_str.count('"')
+                                if quote_count % 2 != 0:
+                                    # Trouver la dernière position où on peut fermer la chaîne
+                                    last_quote_pos = json_str.rfind('"')
+                                    if last_quote_pos != -1:
+                                        # Vérifier si c'est une échappement
+                                        escape_count = 0
+                                        pos = last_quote_pos - 1
+                                        while pos >= 0 and json_str[pos] == '\\':
+                                            escape_count += 1
+                                            pos -= 1
+                                        # Si nombre pair d'échappements, c'est une vraie quote de fermeture
+                                        if escape_count % 2 == 0:
+                                            json_str += '"'
+                                
+                                # Fermer les objets/tableaux non fermés
+                                open_braces = json_str.count('{') - json_str.count('}')
+                                open_brackets = json_str.count('[') - json_str.count(']')
+                                
+                                # Fermer d'abord les tableaux, puis les objets
+                                if open_brackets > 0:
+                                    json_str += ']' * open_brackets
+                                if open_braces > 0:
+                                    json_str += '}' * open_braces
+                                
+                                # Tenter de parser le JSON réparé
+                                repaired_data = json.loads(json_str)
+                                
+                                # Tenter de créer l'objet WorkshopAnalysisResponse
+                                try:
+                                    repaired_response = WorkshopAnalysisResponse(**repaired_data)
+                                    workshop_result = WorkshopData(
+                                        workshop_id=workshop_id,
+                                        theme=repaired_response.theme,
+                                        use_cases=repaired_response.use_cases
+                                    )
+                                    logger.warning(f"✅ JSON réparé avec succès pour {atelier_name}")
+                                    return workshop_result
+                                except Exception as repair_error:
+                                    logger.error(f"❌ Impossible de créer l'objet depuis le JSON réparé: {repair_error}")
+                            except json.JSONDecodeError as json_error:
+                                logger.error(f"❌ JSON non réparable: {json_error}")
+                                logger.error(f"JSON partiel (premiers 2000 caractères): {json_str[:2000]}")
+                    else:
+                        logger.warning("Impossible d'accéder à la réponse brute pour diagnostic")
+                except Exception as diagnostic_error:
+                    logger.error(f"Erreur lors du diagnostic: {diagnostic_error}", exc_info=True)
+            
             # Fallback: création d'un atelier basique
+            logger.warning(f"⚠️ Utilisation du fallback pour {atelier_name}")
             workshop_result = WorkshopData(
                 workshop_id=workshop_id,
                 theme=atelier_name,
