@@ -47,7 +47,8 @@ class NeedAnalysisAgent:
         previous_needs: Optional[List[Dict]] = None,
         rejected_needs: Optional[List[Dict]] = None,
         user_feedback: str = "",
-        validated_needs_count: int = 0
+        validated_needs_count: int = 0,
+        additional_context: str = ""
     ) -> Dict[str, Any]:
         """
         Analyse les besoins métier à partir des données d'entrée.
@@ -95,7 +96,8 @@ class NeedAnalysisAgent:
                 user_prompt = NEED_ANALYSIS_USER_PROMPT.format(
                     workshop_data=workshop_str,
                     transcript_data=transcript_str,
-                    web_search_data=web_search_str
+                    web_search_data=web_search_str,
+                    additional_context=additional_context if additional_context else "Aucune information supplémentaire fournie."
                 )
             else:
                 # Itération suivante - régénération avec feedback
@@ -115,7 +117,8 @@ class NeedAnalysisAgent:
                     web_search_data=web_search_str,
                     remaining_needs_count=remaining_needs_count,
                     current_iteration=iteration,
-                    max_iterations=3
+                    max_iterations=3,
+                    additional_context=additional_context if additional_context else "Aucune information supplémentaire fournie."
                 )
             
             # Appel à l'API OpenAI Responses avec structured output

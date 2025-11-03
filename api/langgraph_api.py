@@ -47,6 +47,7 @@ class WorkflowInput(BaseModel):
     transcript_files: List[str] = []
     company_name: Optional[str] = None
     interviewer_names: Optional[List[str]] = None
+    additional_context: Optional[str] = ""
 
 class ValidationFeedback(BaseModel):
     """Feedback de validation utilisateur"""
@@ -164,6 +165,7 @@ async def create_run(thread_id: str, workflow_input: WorkflowInput):
         print(f"📁 Transcript files: {workflow_input.transcript_files}")
         print(f"🏢 Company: {workflow_input.company_name}")
         print(f"👥 Interviewers: {workflow_input.interviewer_names}")
+        print(f"📝 Additional context: {len(workflow_input.additional_context or '')} caractères")
         
         # Exécuter le workflow (mode asynchrone géré par LangGraph)
         result = workflow.run(
@@ -171,7 +173,8 @@ async def create_run(thread_id: str, workflow_input: WorkflowInput):
             transcript_files=workflow_input.transcript_files,
             company_info={"company_name": workflow_input.company_name} if workflow_input.company_name else {},
             interviewer_names=workflow_input.interviewer_names,
-            thread_id=thread_id
+            thread_id=thread_id,
+            additional_context=workflow_input.additional_context or ""
         )
         
         # Mettre à jour l'état

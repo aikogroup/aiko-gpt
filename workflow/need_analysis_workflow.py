@@ -33,6 +33,8 @@ class WorkflowState(TypedDict):
     workshop_files: List[str]
     transcript_files: List[str]
     company_info: Dict[str, Any]
+    # Informations supplémentaires fournies par l'utilisateur
+    additional_context: str
     # Résultats des agents
     workshop_results: Dict[str, Any]
     transcript_results: List[Dict[str, Any]]
@@ -733,7 +735,8 @@ class NeedAnalysisWorkflow:
                 previous_needs=previous_needs_light,
                 rejected_needs=rejected_needs_light,
                 user_feedback=user_feedback,
-                validated_needs_count=validated_count
+                validated_needs_count=validated_count,
+                additional_context=state.get("additional_context", "")
             )
             
             if "error" in analysis_result:
@@ -1015,7 +1018,7 @@ class NeedAnalysisWorkflow:
     
     def run(self, workshop_files: List[str] = None, transcript_files: List[str] = None, company_info: Dict[str, Any] = None, 
             workshop_results: Dict[str, Any] = None, transcript_results: List[Dict[str, Any]] = None, web_search_results: Dict[str, Any] = None,
-            interviewer_names: List[str] = None, thread_id: str = None) -> Dict[str, Any]:
+            interviewer_names: List[str] = None, thread_id: str = None, additional_context: str = "") -> Dict[str, Any]:
         """
         Exécute le workflow complet.
         NOUVELLE ARCHITECTURE: Exécution MANUELLE des nœuds jusqu'à human_validation.
@@ -1051,6 +1054,8 @@ class NeedAnalysisWorkflow:
                 workshop_files=workshop_files or [],
                 transcript_files=transcript_files or [],
                 company_info=company_info or {},
+                # Informations supplémentaires fournies par l'utilisateur
+                additional_context=additional_context or "",
                 # Résultats des agents (pré-calculés OU vides)
                 workshop_results=workshop_results or {},
                 transcript_results=transcript_results or [],
@@ -1481,7 +1486,8 @@ class NeedAnalysisWorkflow:
                 rejected_structuration_ia=rejected_structuration_ia if iteration > 1 else None,
                 user_feedback=user_feedback,
                 validated_quick_wins_count=validated_qw_count,
-                validated_structuration_ia_count=validated_sia_count
+                validated_structuration_ia_count=validated_sia_count,
+                additional_context=state.get("additional_context", "")
             )
             
             if "error" in result:

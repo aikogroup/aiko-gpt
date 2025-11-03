@@ -99,6 +99,9 @@ Le WEB_SEARCH ne sert QUE de contexte entreprise.
 🌐 DONNÉES WEB SEARCH (CONTEXTE UNIQUEMENT - Informations publiques sur l'entreprise) :
 {web_search_data}
 
+💡 INFORMATIONS SUPPLÉMENTAIRES FOURNIES PAR L'UTILISATEUR :
+{additional_context}
+
 INSTRUCTIONS D'ANALYSE :
 1. Extrais les besoins des WORKSHOPS : analyse les "use_cases", "objectives", "benefits"
    ⚠️ IMPORTANT : Considère le champ "iteration_count" de chaque use_case des WORKSHOPS
@@ -164,6 +167,9 @@ DONNÉES SOURCES (rappel) :
 
 🌐 DONNÉES WEB SEARCH (CONTEXTE UNIQUEMENT - Informations publiques sur l'entreprise) :
 {web_search_data}
+
+💡 INFORMATIONS SUPPLÉMENTAIRES FOURNIES PAR L'UTILISATEUR :
+{additional_context}
 
 🎯 INSTRUCTIONS CRITIQUES POUR LA NOUVELLE ITÉRATION :
 

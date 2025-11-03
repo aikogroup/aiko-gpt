@@ -56,7 +56,8 @@ class UseCaseAnalysisAgent:
         rejected_structuration_ia: Optional[List[Dict]] = None,
         user_feedback: str = "",
         validated_quick_wins_count: int = 0,
-        validated_structuration_ia_count: int = 0
+        validated_structuration_ia_count: int = 0,
+        additional_context: str = ""
     ) -> Dict[str, Any]:
         """
         Analyse les besoins validés et identifie les cas d'usage IA pertinents.
@@ -125,7 +126,8 @@ class UseCaseAnalysisAgent:
                     validated_needs=validated_needs_str,
                     workshop_data=workshop_str,
                     transcript_data=transcript_str,
-                    web_search_data=web_search_str
+                    web_search_data=web_search_str,
+                    additional_context=additional_context if additional_context else "Aucune information supplémentaire fournie."
                 )
             else:
                 logger.info(f"Itération {iteration} - Régénération avec feedback")
@@ -170,7 +172,8 @@ class UseCaseAnalysisAgent:
                     transcript_data=transcript_str,
                     web_search_data=web_search_str,
                     current_iteration=iteration,
-                    max_iterations=3
+                    max_iterations=3,
+                    additional_context=additional_context if additional_context else "Aucune information supplémentaire fournie."
                 )
             
             logger.info("Appel à l'API OpenAI Response avec structured output...")

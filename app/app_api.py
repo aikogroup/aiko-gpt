@@ -74,7 +74,7 @@ def upload_files_to_api(files: List[Any]) -> Dict[str, List[str]]:
         st.error(f"❌ Erreur lors de l'upload: {str(e)}")
         return {"workshop": [], "transcript": []}
 
-def start_workflow_api_call(workshop_files: List[str], transcript_files: List[str], company_name: str, interviewer_names: List[str], result_queue: queue.Queue):
+def start_workflow_api_call(workshop_files: List[str], transcript_files: List[str], company_name: str, interviewer_names: List[str], additional_context: str, result_queue: queue.Queue):
     """
     Fait l'appel API dans un thread séparé.
     Met le résultat dans la queue : (success: bool, thread_id: str, error_msg: str)
@@ -90,7 +90,8 @@ def start_workflow_api_call(workshop_files: List[str], transcript_files: List[st
                 "workshop_files": workshop_files,
                 "transcript_files": transcript_files,
                 "company_name": company_name if company_name else None,
-                "interviewer_names": interviewer_names
+                "interviewer_names": interviewer_names,
+                "additional_context": additional_context if additional_context else ""
             },
             timeout=900  # 5 minutes pour le traitement initial
         )
@@ -309,6 +310,16 @@ def display_upload_interface():
         placeholder="Ex: Cousin Surgery"
     )
     
+    # Zone 5 : Informations supplémentaires
+    st.header("💡 Informations Supplémentaires")
+    st.info("💡 Vous pouvez ajouter ici des informations complémentaires qui ne sont pas présentes dans les transcriptions ou les ateliers, mais qui sont nécessaires pour la génération des besoins et des cas d'usage.")
+    additional_context = st.text_area(
+        "Informations supplémentaires",
+        placeholder="Ex: L'entreprise souhaite prioriser les solutions IA pour la R&D. Il y a également un projet de fusion prévu pour 2025 qui impacte la stratégie.",
+        height=150,
+        key="additional_context_input"
+    )
+    
     # Bouton de démarrage
     st.markdown("---")
     
@@ -338,6 +349,7 @@ def display_upload_interface():
                     file_types.get("transcript", []),
                     company_name,
                     interviewer_names,
+                    additional_context or "",
                     result_queue
                 )
                 

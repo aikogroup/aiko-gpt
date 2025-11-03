@@ -77,6 +77,9 @@ USE_CASE_ANALYSIS_USER_PROMPT = """
 🌐 DONNÉES WEB SEARCH (Contexte marché et entreprise) :
 {web_search_data}
 
+💡 INFORMATIONS SUPPLÉMENTAIRES FOURNIES PAR L'UTILISATEUR :
+{additional_context}
+
 INSTRUCTIONS :
 1. Propose 8 cas d'usage QUICK WINS (automatisation rapide, ROI immédiat)
 2. Propose 10 cas d'usage STRUCTURATION IA (solutions avancées, ROI moyen/long terme)
@@ -127,6 +130,9 @@ RÉSUMÉ DE LA VALIDATION :
 
 🌐 DONNÉES WEB SEARCH (Contexte marché et entreprise - pour t'inspirer) :
 {web_search_data}
+
+💡 INFORMATIONS SUPPLÉMENTAIRES FOURNIES PAR L'UTILISATEUR :
+{additional_context}
 
 INSTRUCTIONS POUR LA NOUVELLE ITÉRATION :
 1. NE PAS reproposer les cas d'usage qui ont été rejetés
