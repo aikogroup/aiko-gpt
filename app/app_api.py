@@ -704,7 +704,6 @@ def display_final_results():
         with st.expander("⚡ Voir les Quick Wins validés", expanded=True):
             for i, uc in enumerate(final_qw, 1):
                 st.markdown(f"### {i}. {uc.get('titre', 'N/A')}")
-                st.markdown(f"**IA utilisée :** {uc.get('ia_utilisee', 'N/A')}")
                 st.markdown(f"**Description :** {uc.get('description', 'N/A')}")
                 st.markdown("---")
     
@@ -713,7 +712,6 @@ def display_final_results():
         with st.expander("🏗️ Voir les Structuration IA validés", expanded=True):
             for i, uc in enumerate(final_sia, 1):
                 st.markdown(f"### {i}. {uc.get('titre', 'N/A')}")
-                st.markdown(f"**IA utilisée :** {uc.get('ia_utilisee', 'N/A')}")
                 st.markdown(f"**Description :** {uc.get('description', 'N/A')}")
                 st.markdown("---")
     

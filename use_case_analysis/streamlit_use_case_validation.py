@@ -75,17 +75,39 @@ class StreamlitUseCaseValidation:
         st.header("⚡ Quick Wins - Automatisation & assistance intelligente")
         st.caption("Solutions à faible complexité technique, mise en œuvre rapide (< 3 mois), ROI immédiat")
         
-        # Afficher les Quick Wins - 2 par ligne
+        # Afficher les Quick Wins avec champs éditables - 2 par ligne
         for i in range(0, len(quick_wins), 2):
             col1, col2 = st.columns(2, gap="large")
             
             # Premier Quick Win de la ligne
             with col1:
                 use_case = quick_wins[i]
-                st.markdown(f"#### {use_case.get('titre', 'Titre non défini')}")
-                st.markdown(f"**IA utilisée :** {use_case.get('ia_utilisee', 'Non spécifié')}")
-                st.markdown(f"**Description :**")
-                st.markdown(use_case.get('description', 'Description non disponible'))
+                original_titre = use_case.get('titre', 'Titre non défini')
+                original_description = use_case.get('description', 'Description non disponible')
+                
+                # Initialiser les valeurs dans session_state si nécessaire
+                titre_key = f"uc_qw_titre_{i}_{key_suffix}"
+                desc_key = f"uc_qw_desc_{i}_{key_suffix}"
+                if titre_key not in st.session_state:
+                    st.session_state[titre_key] = original_titre
+                if desc_key not in st.session_state:
+                    st.session_state[desc_key] = original_description
+                
+                # Champ éditable pour le titre (ne pas passer value pour éviter le warning)
+                modified_titre = st.text_input(
+                    "**Titre**",
+                    key=titre_key,
+                    label_visibility="visible"
+                )
+                
+                # Champ éditable pour la description
+                st.markdown("**Description :**")
+                modified_description = st.text_area(
+                    "",
+                    key=desc_key,
+                    height=120,
+                    label_visibility="collapsed"
+                )
                 
                 # Checkbox pour sélectionner ce Quick Win
                 checkbox_key = f"validate_qw_{i+1}_{key_suffix}"
@@ -95,10 +117,32 @@ class StreamlitUseCaseValidation:
             if i + 1 < len(quick_wins):
                 with col2:
                     use_case = quick_wins[i + 1]
-                    st.markdown(f"#### {use_case.get('titre', 'Titre non défini')}")
-                    st.markdown(f"**IA utilisée :** {use_case.get('ia_utilisee', 'Non spécifié')}")
-                    st.markdown(f"**Description :**")
-                    st.markdown(use_case.get('description', 'Description non disponible'))
+                    original_titre = use_case.get('titre', 'Titre non défini')
+                    original_description = use_case.get('description', 'Description non disponible')
+                    
+                    # Initialiser les valeurs dans session_state si nécessaire
+                    titre_key = f"uc_qw_titre_{i+1}_{key_suffix}"
+                    desc_key = f"uc_qw_desc_{i+1}_{key_suffix}"
+                    if titre_key not in st.session_state:
+                        st.session_state[titre_key] = original_titre
+                    if desc_key not in st.session_state:
+                        st.session_state[desc_key] = original_description
+                    
+                    # Champ éditable pour le titre (ne pas passer value pour éviter le warning)
+                    modified_titre = st.text_input(
+                        "**Titre**",
+                        key=titre_key,
+                        label_visibility="visible"
+                    )
+                    
+                    # Champ éditable pour la description
+                    st.markdown("**Description :**")
+                    modified_description = st.text_area(
+                        "",
+                        key=desc_key,
+                        height=120,
+                        label_visibility="collapsed"
+                    )
                     
                     # Checkbox pour sélectionner ce Quick Win
                     checkbox_key = f"validate_qw_{i+2}_{key_suffix}"
@@ -115,17 +159,39 @@ class StreamlitUseCaseValidation:
         st.header("🔬 Structuration IA à moyen et long terme - Scalabilité & qualité prédictive")
         st.caption("Solutions à complexité moyenne/élevée, mise en œuvre progressive (3-12 mois), ROI moyen/long terme")
         
-        # Afficher les Structuration IA - 2 par ligne
+        # Afficher les Structuration IA avec champs éditables - 2 par ligne
         for i in range(0, len(structuration_ia), 2):
             col1, col2 = st.columns(2, gap="large")
             
             # Premier Structuration IA de la ligne
             with col1:
                 use_case = structuration_ia[i]
-                st.markdown(f"#### {use_case.get('titre', 'Titre non défini')}")
-                st.markdown(f"**IA utilisée :** {use_case.get('ia_utilisee', 'Non spécifié')}")
-                st.markdown(f"**Description :**")
-                st.markdown(use_case.get('description', 'Description non disponible'))
+                original_titre = use_case.get('titre', 'Titre non défini')
+                original_description = use_case.get('description', 'Description non disponible')
+                
+                # Initialiser les valeurs dans session_state si nécessaire
+                titre_key = f"uc_sia_titre_{i}_{key_suffix}"
+                desc_key = f"uc_sia_desc_{i}_{key_suffix}"
+                if titre_key not in st.session_state:
+                    st.session_state[titre_key] = original_titre
+                if desc_key not in st.session_state:
+                    st.session_state[desc_key] = original_description
+                
+                # Champ éditable pour le titre (ne pas passer value pour éviter le warning)
+                modified_titre = st.text_input(
+                    "**Titre**",
+                    key=titre_key,
+                    label_visibility="visible"
+                )
+                
+                # Champ éditable pour la description
+                st.markdown("**Description :**")
+                modified_description = st.text_area(
+                    "",
+                    key=desc_key,
+                    height=120,
+                    label_visibility="collapsed"
+                )
                 
                 # Checkbox pour sélectionner cette Structuration IA
                 checkbox_key = f"validate_sia_{i+1}_{key_suffix}"
@@ -135,10 +201,32 @@ class StreamlitUseCaseValidation:
             if i + 1 < len(structuration_ia):
                 with col2:
                     use_case = structuration_ia[i + 1]
-                    st.markdown(f"#### {use_case.get('titre', 'Titre non défini')}")
-                    st.markdown(f"**IA utilisée :** {use_case.get('ia_utilisee', 'Non spécifié')}")
-                    st.markdown(f"**Description :**")
-                    st.markdown(use_case.get('description', 'Description non disponible'))
+                    original_titre = use_case.get('titre', 'Titre non défini')
+                    original_description = use_case.get('description', 'Description non disponible')
+                    
+                    # Initialiser les valeurs dans session_state si nécessaire
+                    titre_key = f"uc_sia_titre_{i+1}_{key_suffix}"
+                    desc_key = f"uc_sia_desc_{i+1}_{key_suffix}"
+                    if titre_key not in st.session_state:
+                        st.session_state[titre_key] = original_titre
+                    if desc_key not in st.session_state:
+                        st.session_state[desc_key] = original_description
+                    
+                    # Champ éditable pour le titre (ne pas passer value pour éviter le warning)
+                    modified_titre = st.text_input(
+                        "**Titre**",
+                        key=titre_key,
+                        label_visibility="visible"
+                    )
+                    
+                    # Champ éditable pour la description
+                    st.markdown("**Description :**")
+                    modified_description = st.text_area(
+                        "",
+                        key=desc_key,
+                        height=120,
+                        label_visibility="collapsed"
+                    )
                     
                     # Checkbox pour sélectionner cette Structuration IA
                     checkbox_key = f"validate_sia_{i+2}_{key_suffix}"
@@ -202,7 +290,8 @@ class StreamlitUseCaseValidation:
                     selected_sia_indices,
                     comments,
                     validated_qw_count,
-                    validated_sia_count
+                    validated_sia_count,
+                    key_suffix
                 )
                 return result  # Retourner le résultat pour que app_api.py puisse l'envoyer à l'API
         
@@ -217,7 +306,8 @@ class StreamlitUseCaseValidation:
         selected_sia_indices: List[int],
         comments: str,
         validated_qw_count: int,
-        validated_sia_count: int
+        validated_sia_count: int,
+        key_suffix: str = None
     ) -> Dict[str, Any]:
         """
         Traite la validation de l'utilisateur.
@@ -241,12 +331,53 @@ class StreamlitUseCaseValidation:
         print(f"📊 [DEBUG UC] validated_qw_count: {validated_qw_count}")
         print(f"📊 [DEBUG UC] validated_sia_count: {validated_sia_count}")
         
-        # Extraire les cas d'usage validés et rejetés
-        validated_qw = [quick_wins[i-1] for i in selected_qw_indices]
+        # Extraire les Quick Wins validés avec les modifications de l'utilisateur
+        validated_qw = []
+        for selected_idx in selected_qw_indices:
+            idx = selected_idx - 1  # Convertir en index 0-based
+            original_uc = quick_wins[idx]
+            
+            # Lire les valeurs modifiées depuis session_state
+            titre_key = f"uc_qw_titre_{idx}_{key_suffix}"
+            desc_key = f"uc_qw_desc_{idx}_{key_suffix}"
+            modified_titre = st.session_state.get(titre_key, original_uc.get('titre', ''))
+            modified_description = st.session_state.get(desc_key, original_uc.get('description', ''))
+            
+            # Créer le use case modifié (conserver l'id et ia_utilisee originaux)
+            modified_uc = {
+                'id': original_uc.get('id', ''),
+                'titre': modified_titre.strip() if modified_titre.strip() else original_uc.get('titre', ''),
+                'description': modified_description.strip() if modified_description.strip() else original_uc.get('description', ''),
+                'ia_utilisee': original_uc.get('ia_utilisee', '')  # Conserver l'original
+            }
+            validated_qw.append(modified_uc)
+        
+        # Pour les rejetés, on garde les originaux
         rejected_qw_indices = [i for i in range(1, len(quick_wins) + 1) if i not in selected_qw_indices]
         rejected_qw = [quick_wins[i-1] for i in rejected_qw_indices]
         
-        validated_sia = [structuration_ia[i-1] for i in selected_sia_indices]
+        # Extraire les Structuration IA validées avec les modifications de l'utilisateur
+        validated_sia = []
+        for selected_idx in selected_sia_indices:
+            idx = selected_idx - 1  # Convertir en index 0-based
+            original_uc = structuration_ia[idx]
+            
+            # Lire les valeurs modifiées depuis session_state
+            titre_key = f"uc_sia_titre_{idx}_{key_suffix}"
+            desc_key = f"uc_sia_desc_{idx}_{key_suffix}"
+            modified_titre = st.session_state.get(titre_key, original_uc.get('titre', ''))
+            modified_description = st.session_state.get(desc_key, original_uc.get('description', ''))
+            
+            # Créer le use case modifié (conserver l'id et ia_utilisee originaux)
+            modified_uc = {
+                'id': original_uc.get('id', ''),
+                'titre': modified_titre.strip() if modified_titre.strip() else original_uc.get('titre', ''),
+                'description': modified_description.strip() if modified_description.strip() else original_uc.get('description', ''),
+                'ia_utilisee': original_uc.get('ia_utilisee', '')  # Conserver l'original
+            }
+            validated_sia.append(modified_uc)
+        
+        # Pour les rejetés, on garde les originaux
         rejected_sia_indices = [i for i in range(1, len(structuration_ia) + 1) if i not in selected_sia_indices]
         rejected_sia = [structuration_ia[i-1] for i in rejected_sia_indices]
         
@@ -277,10 +408,11 @@ class StreamlitUseCaseValidation:
         print(f"💾 [DEBUG UC] Préparation du résultat")
         print(f"✅ [DEBUG UC] Résultat préparé - success={result['success']}, QW={result['total_validated_qw']}, SIA={result['total_validated_sia']}")
         
-        # Nettoyer les clés de validation
-        print(f"🧹 [DEBUG UC] Nettoyage des clés de validation")
+        # Nettoyer les clés de validation et modification
+        print(f"🧹 [DEBUG UC] Nettoyage des clés de validation et modification")
         for key in list(st.session_state.keys()):
-            if key.startswith("validate_qw_") or key.startswith("validate_sia_"):
+            if (key.startswith("validate_qw_") or key.startswith("validate_sia_") or 
+                key.startswith("uc_qw_") or key.startswith("uc_sia_")):
                 del st.session_state[key]
         print(f"✅ [DEBUG UC] Nettoyage terminé")
         

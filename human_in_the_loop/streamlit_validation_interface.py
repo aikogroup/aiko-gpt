@@ -49,24 +49,48 @@ class StreamlitValidationInterface:
         # Ne pas nettoyer les clés ici pour éviter les conflits de timing
         # Les clés seront nettoyées après validation
         
-        # Afficher les besoins avec des checkboxes - 2 par ligne
+        # Afficher les besoins avec des champs éditables - 2 par ligne
         for i in range(0, len(identified_needs), 2):
             col1, col2 = st.columns(2, gap="large")
             
             # Premier besoin de la ligne
             with col1:
                 need = identified_needs[i]
-                theme = need.get('theme', 'Thème non défini')
-                quotes = need.get('quotes', [])
+                original_theme = need.get('theme', 'Thème non défini')
+                original_quotes = need.get('quotes', [])
                 
-                st.markdown(f"#### {theme}")
+                # Initialiser les valeurs dans session_state si nécessaire
+                theme_key = f"need_theme_{i}_{key_suffix}"
+                if theme_key not in st.session_state:
+                    st.session_state[theme_key] = original_theme
                 
-                if quotes:
+                # Champ éditable pour le thème (ne pas passer value pour éviter le warning)
+                modified_theme = st.text_input(
+                    "**Thème**",
+                    key=theme_key,
+                    label_visibility="visible"
+                )
+                
+                # Citations éditables
+                if original_quotes:
                     st.markdown("**Citations:**")
-                    for j, quote in enumerate(quotes, 1):
-                        st.markdown(f"• {quote}")
+                    modified_quotes = []
+                    for j, quote in enumerate(original_quotes):
+                        quote_key = f"need_quote_{i}_{j}_{key_suffix}"
+                        if quote_key not in st.session_state:
+                            st.session_state[quote_key] = quote
+                        
+                        modified_quote = st.text_area(
+                            f"Citation {j+1}",
+                            key=quote_key,
+                            height=60,
+                            label_visibility="collapsed"
+                        )
+                        if modified_quote.strip():  # Ne garder que les citations non vides
+                            modified_quotes.append(modified_quote)
                 else:
                     st.info("Aucune citation disponible")
+                    modified_quotes = []
                 
                 # Checkbox pour sélectionner ce besoin avec une clé unique
                 checkbox_key = f"validate_need_{i+1}_{key_suffix}"
@@ -76,17 +100,41 @@ class StreamlitValidationInterface:
             if i + 1 < len(identified_needs):
                 with col2:
                     need = identified_needs[i + 1]
-                    theme = need.get('theme', 'Thème non défini')
-                    quotes = need.get('quotes', [])
+                    original_theme = need.get('theme', 'Thème non défini')
+                    original_quotes = need.get('quotes', [])
                     
-                    st.markdown(f"#### {theme}")
+                    # Initialiser les valeurs dans session_state si nécessaire
+                    theme_key = f"need_theme_{i+1}_{key_suffix}"
+                    if theme_key not in st.session_state:
+                        st.session_state[theme_key] = original_theme
                     
-                    if quotes:
+                    # Champ éditable pour le thème (ne pas passer value pour éviter le warning)
+                    modified_theme = st.text_input(
+                        "**Thème**",
+                        key=theme_key,
+                        label_visibility="visible"
+                    )
+                    
+                    # Citations éditables
+                    if original_quotes:
                         st.markdown("**Citations:**")
-                        for j, quote in enumerate(quotes, 1):
-                            st.markdown(f"• {quote}")
+                        modified_quotes = []
+                        for j, quote in enumerate(original_quotes):
+                            quote_key = f"need_quote_{i+1}_{j}_{key_suffix}"
+                            if quote_key not in st.session_state:
+                                st.session_state[quote_key] = quote
+                            
+                            modified_quote = st.text_area(
+                                f"Citation {j+1}",
+                                key=quote_key,
+                                height=60,
+                                label_visibility="collapsed"
+                            )
+                            if modified_quote.strip():  # Ne garder que les citations non vides
+                                modified_quotes.append(modified_quote)
                     else:
                         st.info("Aucune citation disponible")
+                        modified_quotes = []
                     
                     # Checkbox pour sélectionner ce besoin avec une clé unique
                     checkbox_key = f"validate_need_{i+2}_{key_suffix}"
@@ -133,13 +181,13 @@ class StreamlitValidationInterface:
                         selected_needs.append(i)
                 
                 # Traiter la validation et retourner le résultat
-                result = self._process_validation(identified_needs, selected_needs, comments, validated_count)
+                result = self._process_validation(identified_needs, selected_needs, comments, validated_count, key_suffix)
                 return result  # Retourner le résultat pour que app_api.py puisse l'envoyer à l'API
         
         # Retour par défaut (en attente de validation)
         return None
     
-    def _process_validation(self, identified_needs: List[Dict[str, Any]], selected_numbers: List[int], comments: str, validated_count: int) -> Dict[str, Any]:
+    def _process_validation(self, identified_needs: List[Dict[str, Any]], selected_numbers: List[int], comments: str, validated_count: int, key_suffix: str = None) -> Dict[str, Any]:
         """
         Traite la validation de l'utilisateur.
         VERSION CORRIGÉE: Gère correctement l'état et les messages.
@@ -164,8 +212,34 @@ class StreamlitValidationInterface:
             st.error("Vous devez sélectionner au moins un besoin à valider")
             return None
         
-        # Extraire les besoins validés et rejetés
-        validated_new = [identified_needs[i-1] for i in selected_numbers]
+        # Extraire les besoins validés avec les modifications de l'utilisateur
+        validated_new = []
+        for selected_num in selected_numbers:
+            idx = selected_num - 1  # Convertir en index 0-based
+            original_need = identified_needs[idx]
+            
+            # Lire les valeurs modifiées depuis session_state
+            theme_key = f"need_theme_{idx}_{key_suffix}"
+            modified_theme = st.session_state.get(theme_key, original_need.get('theme', ''))
+            
+            # Lire les citations modifiées
+            original_quotes = original_need.get('quotes', [])
+            modified_quotes = []
+            for j in range(len(original_quotes)):
+                quote_key = f"need_quote_{idx}_{j}_{key_suffix}"
+                modified_quote = st.session_state.get(quote_key, '')
+                if modified_quote.strip():  # Ne garder que les citations non vides
+                    modified_quotes.append(modified_quote.strip())
+            
+            # Créer le besoin modifié
+            modified_need = {
+                'theme': modified_theme.strip() if modified_theme.strip() else original_need.get('theme', ''),
+                'quotes': modified_quotes if modified_quotes else original_need.get('quotes', [])
+            }
+            
+            validated_new.append(modified_need)
+        
+        # Pour les rejetés, on garde les originaux (pas besoin de modifications)
         rejected_numbers = [i for i in range(1, len(identified_needs) + 1) if i not in selected_numbers]
         rejected_new = [identified_needs[i-1] for i in rejected_numbers]
         
@@ -192,11 +266,11 @@ class StreamlitValidationInterface:
         print(f"💾 [DEBUG] Préparation du résultat")
         print(f"✅ [DEBUG] Résultat préparé - success={result['success']}, total_validated={result['total_validated']}")
         
-        # Nettoyer l'état des sélections et les clés de validation
-        print(f"🧹 [DEBUG] Nettoyage des clés de validation")
+        # Nettoyer l'état des sélections et les clés de validation + modification
+        print(f"🧹 [DEBUG] Nettoyage des clés de validation et modification")
         st.session_state.selected_needs = set()
         for key in list(st.session_state.keys()):
-            if key.startswith("validate_need_"):
+            if key.startswith("validate_need_") or key.startswith("need_theme_") or key.startswith("need_quote_"):
                 del st.session_state[key]
         print(f"✅ [DEBUG] Nettoyage terminé")
         

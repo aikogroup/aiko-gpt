@@ -214,12 +214,7 @@ class ReportGenerator:
                 # Titre du cas d'usage
                 paragraph = doc.add_paragraph(uc.get('titre', 'N/A'), style='List Paragraph')
                 
-                # IA utilisée
-                ia_para = doc.add_paragraph(style='List Paragraph')
-                ia_run = ia_para.add_run(f"IA : {uc.get('ia_utilisee', 'N/A')}")
-                ia_run.italic = True
-                
-                # Description
+                # Description (qui intègre maintenant la description vulgarisée des IA)
                 desc_para = doc.add_paragraph(style='List Paragraph')
                 desc_run = desc_para.add_run(f"Description : {uc.get('description', 'N/A')}")
         
@@ -234,12 +229,7 @@ class ReportGenerator:
                 # Titre du cas d'usage
                 paragraph = doc.add_paragraph(uc.get('titre', 'N/A'), style='List Paragraph')
                 
-                # IA utilisée
-                ia_para = doc.add_paragraph(style='List Paragraph')
-                ia_run = ia_para.add_run(f"IA : {uc.get('ia_utilisee', 'N/A')}")
-                ia_run.italic = True
-                
-                # Description
+                # Description (qui intègre maintenant la description vulgarisée des IA)
                 desc_para = doc.add_paragraph(style='List Paragraph')
                 desc_run = desc_para.add_run(f"Description : {uc.get('description', 'N/A')}")
     

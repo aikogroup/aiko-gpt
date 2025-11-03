@@ -26,6 +26,9 @@ IMPORTANT :
 - Utilise des technologies IA concrètes et pertinentes
 - La description doit être actionnable et technique
 - ⚠️ RÈGLE CRITIQUE : Les TITRES de cas d'usage doivent être DISTINCTS et VARIÉS - éviter les doublons sémantiques ou thématiques
+- ⚠️ DESCRIPTION VULGARISÉE DES IA : La description du use case doit INTÉGRER une explication vulgarisée des technologies IA utilisées. 
+  Au lieu d'afficher simplement "LLM + RAG", expliquez de manière accessible ce que ces technologies apportent (ex: "utilisation de modèles de langage capables de comprendre et générer du texte naturel, combinés à un système de recherche dans une base de connaissances permettant d'enrichir les réponses avec les informations internes de l'entreprise").
+  La description vulgarisée doit être intégrée naturellement dans le texte de description, pas comme une section séparée.
 
 ⚠️ INDICATEUR D'IMPORTANCE DES BESOINS :
 - Les WORKSHOPS contiennent un champ "iteration_count" pour chaque cas d'usage
@@ -35,8 +38,8 @@ IMPORTANT :
 - Les besoins remontés par plusieurs personnes (high iteration_count) doivent générer des cas d'usage prioritaires
 
 Structure attendue :
-- quick_wins : Liste de 6 à 10 cas d'usage, chacun avec id, titre UNIQUE, ia_utilisee et description
-- structuration_ia : Liste de 8 à 12 cas d'usage, chacun avec id, titre UNIQUE, ia_utilisee et description
+- quick_wins : Liste de 6 à 10 cas d'usage, chacun avec id, titre UNIQUE, ia_utilisee (pour référence interne) et description (qui doit INTÉGRER la description vulgarisée des technologies IA utilisées)
+- structuration_ia : Liste de 8 à 12 cas d'usage, chacun avec id, titre UNIQUE, ia_utilisee (pour référence interne) et description (qui doit INTÉGRER la description vulgarisée des technologies IA utilisées)
 - summary : Résumé avec total_quick_wins, total_structuration_ia, total_use_cases et main_themes (liste SANS DOUBLONS)
 
 EXEMPLES DE QUICK WINS :
@@ -91,6 +94,9 @@ INSTRUCTIONS :
 5. Utilise des technologies IA concrètes et appropriées
 6. Sois spécifique au contexte de l'entreprise (processus, outils, contraintes mentionnés dans les workshops/transcripts)
 7. ⚠️ VÉRIFIE L'UNICITÉ DES THÈMES : Assure-toi que les titres/thèmes des cas d'usage sont tous distincts et ne se répètent pas
+8. ⚠️ DESCRIPTION VULGARISÉE DES IA : Dans chaque description, INTÉGRE de manière naturelle une explication vulgarisée des technologies IA utilisées.
+   Expliquez ce que ces technologies apportent de manière accessible et compréhensible, sans jargon technique excessif.
+   La vulgarisation doit être intégrée dans le flux narratif de la description du use case.
 
 Génère les cas d'usage en respectant la structure attendue. VÉRIFIE qu'il n'y a pas de doublons thématiques. PRIORISE les besoins avec un iteration_count élevé dans les WORKSHOPS.
 """
@@ -147,6 +153,9 @@ INSTRUCTIONS POUR LA NOUVELLE ITÉRATION :
    - iteration_count indique combien de personnes ont remonté ce besoin
    - PRIORISE les cas d'usage qui répondent aux besoins avec iteration_count élevé (besoins critiques remontés par plusieurs personnes)
 9. ⚠️ VÉRIFIE L'UNICITÉ DES THÈMES : Assure-toi qu'aucun titre/thème de cas d'usage n'est utilisé deux fois
+10. ⚠️ DESCRIPTION VULGARISÉE DES IA : Dans chaque description, INTÉGRE de manière naturelle une explication vulgarisée des technologies IA utilisées.
+    Expliquez ce que ces technologies apportent de manière accessible et compréhensible, sans jargon technique excessif.
+    La vulgarisation doit être intégrée dans le flux narratif de la description du use case.
 
 ⚠️ RÈGLE CRITIQUE - GÉNÉRATION INTELLIGENTE :
 - Si Quick Wins validés >= 5 : NE GÉNÈRE AUCUN nouveau Quick Win (retourne une liste vide [])
