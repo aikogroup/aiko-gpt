@@ -367,6 +367,10 @@ def display_upload_interface():
                     if success:
                         st.session_state.thread_id = thread_id
                         st.session_state.workflow_status = status
+                        # Sauvegarder le nom de l'entreprise dans session_state pour récupération ultérieure
+                        if company_name and company_name.strip():
+                            st.session_state.company_name_input = company_name.strip()
+                            print(f"💾 [APP] Nom d'entreprise sauvegardé dans session_state: {company_name.strip()}")
                         status_placeholder.success(f"✅ Workflow démarré ! Thread ID: {thread_id[:8]}...")
                         time.sleep(1)
                         st.rerun()
@@ -610,16 +614,29 @@ def generate_word_report():
             
             workflow_state = st.session_state.workflow_state
             
-            # Essayer depuis web_search_results dans workflow_state
-            if workflow_state.get('web_search_results'):
-                web_search = workflow_state['web_search_results']
-                company_name = web_search.get('company_name', 'Entreprise')
-                print(f"🏢 [REPORT] Nom d'entreprise trouvé dans workflow_state.web_search_results: {company_name}")
-            # Essayer depuis company_info dans workflow_state
-            elif workflow_state.get('company_info'):
+            # Essayer plusieurs sources dans l'ordre de priorité
+            # 1. D'abord vérifier company_info directement (source principale du workflow)
+            if workflow_state.get('company_info'):
                 company_info = workflow_state['company_info']
-                company_name = company_info.get('company_name', 'Entreprise')
-                print(f"🏢 [REPORT] Nom d'entreprise trouvé dans workflow_state.company_info: {company_name}")
+                potential_name = company_info.get('company_name', '')
+                if potential_name and potential_name.strip():
+                    company_name = potential_name.strip()
+                    print(f"🏢 [REPORT] Nom d'entreprise trouvé dans workflow_state.company_info: {company_name}")
+            
+            # 2. Ensuite vérifier web_search_results (peut contenir le nom enrichi)
+            if (company_name == "Entreprise" and workflow_state.get('web_search_results')):
+                web_search = workflow_state['web_search_results']
+                potential_name = web_search.get('company_name', '')
+                if potential_name and potential_name.strip():
+                    company_name = potential_name.strip()
+                    print(f"🏢 [REPORT] Nom d'entreprise trouvé dans workflow_state.web_search_results: {company_name}")
+            
+            # 3. Vérifier aussi dans session_state si le nom a été saisi directement (fallback)
+            if company_name == "Entreprise":
+                potential_name = st.session_state.get('company_name_input', '')
+                if potential_name and potential_name.strip():
+                    company_name = potential_name.strip()
+                    print(f"🏢 [REPORT] Nom d'entreprise trouvé dans session_state.company_name_input: {company_name}")
             
             # Formater le nom de l'entreprise (première lettre en majuscule pour chaque mot)
             if company_name and company_name != "Entreprise":

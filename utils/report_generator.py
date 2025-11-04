@@ -8,7 +8,7 @@ from typing import Dict, List, Any
 from docx import Document
 from docx.shared import Inches, Pt, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.oxml.ns import qn
+from docx.oxml.ns import qn, nsdecls
 from docx.oxml import OxmlElement
 
 
@@ -28,6 +28,20 @@ class ReportGenerator:
         if not logo_path:
             # Chemin par défaut pour le logo Aiko
             self.logo_path = "/home/addeche/aiko/aikoGPT/assets/aiko_logo.png"
+
+    def _remove_numbering_from_paragraph(self, paragraph):
+        """
+        Supprime un éventuel <w:numPr> (numérotation automatique) du paragraphe
+        pour éviter les numéros automatiques doublés.
+        """
+        # namespace mapping
+        ns = {'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}
+        # trouver tous les éléments numPr sous le <w:p>
+        num_pr_nodes = paragraph._p.xpath('.//w:numPr', namespaces=ns)
+        for num_pr in num_pr_nodes:
+            parent = num_pr.getparent()
+            if parent is not None:
+                parent.remove(num_pr)
     
     def generate_report(
         self,
@@ -175,8 +189,15 @@ class ReportGenerator:
                     if not cleaned_quote.endswith('»'):
                         cleaned_quote = f"{cleaned_quote} »"
                     
-                    # Ajouter comme élément de liste
-                    paragraph = doc.add_paragraph(cleaned_quote, style='List Paragraph')
+                    # OPTION B (robuste): puce manuelle + indentation
+                    paragraph = doc.add_paragraph(style='Normal')
+                    paragraph.paragraph_format.left_indent = Inches(0.6)
+                    paragraph.paragraph_format.space_after = Pt(6)
+                    # ajouter la puce manuelle pour éviter les comportements de style Word
+                    run = paragraph.add_run("• ")
+                    run.bold = False
+                    run_quote = paragraph.add_run(cleaned_quote)
+
     
     def _add_use_cases_section(
         self,
@@ -206,32 +227,54 @@ class ReportGenerator:
         )
         doc.add_paragraph(intro_text)
         
-        # Section Quick Wins
+        # Quick Wins
         if quick_wins:
             doc.add_heading('Famille "Quick Wins" – Automatisation & assistance intelligente', level=2)
-            
-            for uc in quick_wins:
-                # Titre du cas d'usage
-                paragraph = doc.add_paragraph(uc.get('titre', 'N/A'), style='List Paragraph')
-                
-                # Description (qui intègre maintenant la description vulgarisée des IA)
-                desc_para = doc.add_paragraph(style='List Paragraph')
-                desc_run = desc_para.add_run(f"Description : {uc.get('description', 'N/A')}")
+            for i, uc in enumerate(quick_wins, start=1):
+                title = uc.get('titre', 'N/A')
+                description = uc.get('description', 'N/A')
+
+                # titre : on force style Normal pour éviter héritage
+                title_para = doc.add_paragraph(style='Normal')
+                run_title = title_para.add_run(f"{i}. {title}")
+                run_title.bold = True
+
+                # retirer toute numérotation automatique cachée
+                self._remove_numbering_from_paragraph(title_para)
+
+                # saut de ligne visuel (optionnel) -- ici on laisse une ligne entre titre et description
+                # description : run 1 en gras pour "Description : ", run 2 pour le texte
+                desc_para = doc.add_paragraph(style='Normal')
+                desc_para.paragraph_format.left_indent = Inches(0.4)
+                desc_para.paragraph_format.space_after = Pt(12)
+
+                run_desc_label = desc_para.add_run("Description : ")
+                run_desc_label.bold = True
+                run_desc = desc_para.add_run(description)
         
-        # Section Structuration IA
+        # Structuration IA (même logique)
         if structuration_ia:
             doc.add_heading(
-                'Famille "Structuration IA à moyen et long terme" Scalabilité & qualité prédictive',
+                'Famille "Structuration IA à moyen et long terme" – Scalabilité & qualité prédictive',
                 level=2
             )
-            
-            for uc in structuration_ia:
-                # Titre du cas d'usage
-                paragraph = doc.add_paragraph(uc.get('titre', 'N/A'), style='List Paragraph')
-                
-                # Description (qui intègre maintenant la description vulgarisée des IA)
-                desc_para = doc.add_paragraph(style='List Paragraph')
-                desc_run = desc_para.add_run(f"Description : {uc.get('description', 'N/A')}")
+            for i, uc in enumerate(structuration_ia, start=1):
+                title = uc.get('titre', 'N/A')
+                description = uc.get('description', 'N/A')
+
+                title_para = doc.add_paragraph(style='Normal')
+                run_title = title_para.add_run(f"{i}. {title}")
+                run_title.bold = True
+
+                self._remove_numbering_from_paragraph(title_para)
+
+                desc_para = doc.add_paragraph(style='Normal')
+                desc_para.paragraph_format.left_indent = Inches(0.4)
+                desc_para.paragraph_format.space_after = Pt(12)
+
+                run_desc_label = desc_para.add_run("Description : ")
+                run_desc_label.bold = True
+                run_desc = desc_para.add_run(description)
     
     def generate_report_from_json_files(
         self,

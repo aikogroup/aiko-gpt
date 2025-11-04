@@ -138,10 +138,10 @@ class StreamlitUseCaseValidation:
                     # Champ éditable pour la description
                     st.markdown("**Description :**")
                     modified_description = st.text_area(
-                        "",
+                        "Description",
                         key=desc_key,
                         height=120,
-                        label_visibility="collapsed"
+                        label_visibility="hidden"
                     )
                     
                     # Checkbox pour sélectionner ce Quick Win
@@ -222,10 +222,10 @@ class StreamlitUseCaseValidation:
                     # Champ éditable pour la description
                     st.markdown("**Description :**")
                     modified_description = st.text_area(
-                        "",
+                        "Description",
                         key=desc_key,
                         height=120,
-                        label_visibility="collapsed"
+                        label_visibility="hidden"
                     )
                     
                     # Checkbox pour sélectionner cette Structuration IA
