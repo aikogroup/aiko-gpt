@@ -17,10 +17,11 @@ from dotenv import load_dotenv
 # Charger les variables d'environnement
 load_dotenv()
 
-# Importer le workflow
+# Importer les workflows
 import sys
 sys.path.append(str(Path(__file__).parent.parent))
 from workflow.need_analysis_workflow import NeedAnalysisWorkflow
+from executive_summary.executive_summary_workflow import ExecutiveSummaryWorkflow
 from langgraph.checkpoint.memory import MemorySaver
 
 # Initialisation de l'API
@@ -32,6 +33,7 @@ app = FastAPI(
 
 # Stockage en mémoire des workflows (en production, utiliser Redis ou DB)
 workflows: Dict[str, Any] = {}
+executive_workflows: Dict[str, Any] = {}  # Workflows Executive Summary
 checkpointer = MemorySaver()
 
 # Dossier temporaire pour les fichiers uploadés
@@ -62,6 +64,19 @@ class UseCaseValidationFeedback(BaseModel):
     rejected_quick_wins: List[Dict[str, Any]]
     rejected_structuration_ia: List[Dict[str, Any]]
     user_feedback: str = ""
+
+class ExecutiveSummaryInput(BaseModel):
+    """Input pour démarrer un workflow Executive Summary"""
+    word_report_path: str
+    transcript_files: List[str] = []
+    workshop_files: List[str] = []
+    company_name: str
+    interviewer_note: str = ""
+
+class ExecutiveValidationFeedback(BaseModel):
+    """Feedback de validation Executive Summary"""
+    validation_type: str  # "challenges" ou "recommendations"
+    validation_result: Dict[str, Any]
 
 
 # ==================== ENDPOINTS ====================
@@ -110,6 +125,9 @@ async def upload_files(files: List[UploadFile] = File(...)):
                 workshop_files.append(str(file_path))
             elif file_extension in [".pdf", ".json"]:
                 transcript_files.append(str(file_path))
+            elif file_extension == ".docx":
+                # Fichier Word pour Executive Summary
+                workshop_files.append(str(file_path))  # Pour l'instant, on le met dans workshop_files
         
         return {
             "file_paths": file_paths,
@@ -367,6 +385,217 @@ if __name__ == "__main__":
     print("📖 Documentation: http://localhost:2025/docs")
     print("ℹ️  LangGraph Studio utilise le port 2024")
     
+# ==================== ENDPOINTS EXECUTIVE SUMMARY ====================
+
+@app.post("/executive-summary/threads/{thread_id}/runs")
+async def create_executive_run(thread_id: str, workflow_input: ExecutiveSummaryInput):
+    """Démarre un workflow Executive Summary"""
+    try:
+        # Créer ou récupérer le workflow
+        if thread_id not in executive_workflows:
+            api_key = os.getenv("OPENAI_API_KEY")
+            workflow = ExecutiveSummaryWorkflow(
+                api_key=api_key,
+                dev_mode=False,
+                debug_mode=False
+            )
+            executive_workflows[thread_id] = {
+                "workflow": workflow,
+                "state": None,
+                "status": "created"
+            }
+        
+        workflow_data = executive_workflows[thread_id]
+        workflow = workflow_data["workflow"]
+        
+        print(f"\n🚀 [API] Démarrage workflow Executive Summary pour thread {thread_id}")
+        
+        # Exécuter le workflow
+        result = workflow.run(
+            word_report_path=workflow_input.word_report_path,
+            transcript_files=workflow_input.transcript_files,
+            workshop_files=workflow_input.workshop_files,
+            company_name=workflow_input.company_name,
+            interviewer_note=workflow_input.interviewer_note,
+            thread_id=thread_id
+        )
+        
+        # Mettre à jour l'état
+        workflow_data["state"] = result
+        
+        # Déterminer le statut
+        if result.get("workflow_paused"):
+            validation_type = result.get("validation_type", "")
+            if validation_type == "challenges":
+                workflow_data["status"] = "waiting_validation_challenges"
+            elif validation_type == "recommendations":
+                workflow_data["status"] = "waiting_validation_recommendations"
+            else:
+                workflow_data["status"] = "paused"
+        elif result.get("challenges_success") and result.get("recommendations_success"):
+            workflow_data["status"] = "completed"
+        else:
+            workflow_data["status"] = "running"
+        
+        return {
+            "run_id": str(uuid.uuid4()),
+            "thread_id": thread_id,
+            "status": workflow_data["status"]
+        }
+    
+    except Exception as e:
+        print(f"❌ [API] Erreur Executive Summary: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Erreur workflow: {str(e)}")
+
+
+@app.get("/executive-summary/threads/{thread_id}/status")
+async def get_executive_status(thread_id: str):
+    """Récupère le statut du workflow Executive Summary"""
+    if thread_id not in executive_workflows:
+        raise HTTPException(status_code=404, detail="Thread non trouvé")
+    
+    workflow_data = executive_workflows[thread_id]
+    workflow = workflow_data["workflow"]
+    
+    # Récupérer l'état actuel depuis le checkpointer
+    config = {"configurable": {"thread_id": thread_id}}
+    snapshot = workflow.graph.get_state(config)
+    
+    if snapshot and snapshot.values:
+        state = snapshot.values
+        
+        # Vérifier si on est à un interrupt en regardant snapshot.next
+        next_nodes = []
+        if snapshot.next:
+            if isinstance(snapshot.next, (list, tuple)):
+                next_nodes = list(snapshot.next)
+            else:
+                next_nodes = [snapshot.next]
+        
+        # Si le prochain nœud est une validation, mettre à jour les flags
+        if "human_validation_enjeux" in next_nodes:
+            state["workflow_paused"] = True
+            state["validation_type"] = "challenges"
+            workflow.graph.update_state(config, state)
+            workflow_data["state"] = state
+            workflow_data["status"] = "waiting_validation_challenges"
+        elif "human_validation_recommendations" in next_nodes:
+            state["workflow_paused"] = True
+            state["validation_type"] = "recommendations"
+            workflow.graph.update_state(config, state)
+            workflow_data["state"] = state
+            workflow_data["status"] = "waiting_validation_recommendations"
+        # Sinon, déterminer le statut en fonction de l'état actuel
+        elif state.get("workflow_paused"):
+            validation_type = state.get("validation_type", "")
+            if validation_type == "challenges":
+                workflow_data["status"] = "waiting_validation_challenges"
+            elif validation_type == "recommendations":
+                workflow_data["status"] = "waiting_validation_recommendations"
+            else:
+                workflow_data["status"] = "paused"
+        elif state.get("challenges_success") and state.get("recommendations_success"):
+            workflow_data["status"] = "completed"
+        elif next_nodes:
+            # Il y a des nœuds suivants, le workflow est en cours
+            workflow_data["status"] = "running"
+        else:
+            # Pas de nœuds suivants et pas de pause, donc terminé
+            workflow_data["status"] = "completed"
+    
+    return {"status": workflow_data["status"]}
+
+
+@app.get("/executive-summary/threads/{thread_id}/state")
+async def get_executive_state(thread_id: str):
+    """Récupère l'état du workflow Executive Summary"""
+    if thread_id not in executive_workflows:
+        raise HTTPException(status_code=404, detail="Thread non trouvé")
+    
+    workflow_data = executive_workflows[thread_id]
+    workflow = workflow_data["workflow"]
+    
+    # Récupérer l'état actuel depuis le checkpointer
+    config = {"configurable": {"thread_id": thread_id}}
+    snapshot = workflow.graph.get_state(config)
+    
+    if snapshot and snapshot.values:
+        state = snapshot.values
+    else:
+        # Fallback vers l'état stocké
+        state = workflow_data.get("state", {})
+    
+    # Convertir en format JSON-serializable
+    return {
+        "identified_challenges": state.get("identified_challenges", []),
+        "validated_challenges": state.get("validated_challenges", []),
+        "extracted_needs": state.get("extracted_needs", []),
+        "challenges_iteration_count": state.get("challenges_iteration_count", 0),
+        "maturity_score": state.get("maturity_score", 3),
+        "maturity_summary": state.get("maturity_summary", ""),
+        "recommendations": state.get("recommendations", []),
+        "validated_recommendations": state.get("validated_recommendations", []),
+        "workflow_paused": state.get("workflow_paused", False),
+        "validation_type": state.get("validation_type", "")
+    }
+
+
+@app.post("/executive-summary/threads/{thread_id}/validate")
+async def validate_executive(thread_id: str, feedback: ExecutiveValidationFeedback):
+    """Valide les enjeux ou recommandations"""
+    if thread_id not in executive_workflows:
+        raise HTTPException(status_code=404, detail="Thread non trouvé")
+    
+    workflow_data = executive_workflows[thread_id]
+    workflow = workflow_data["workflow"]
+    
+    # Injecter le feedback dans l'état
+    config = {"configurable": {"thread_id": thread_id}}
+    current_state = workflow.graph.get_state(config)
+    
+    # Mettre à jour avec le feedback
+    updated_state = current_state.values.copy()
+    updated_state["validation_result"] = feedback.validation_result
+    updated_state["validation_type"] = feedback.validation_type
+    
+    # Reprendre le workflow
+    workflow.graph.update_state(config, updated_state)
+    
+    # Continuer l'exécution
+    final_state = None
+    for chunk in workflow.graph.stream(None, config):
+        print(f"📊 [EXECUTIVE] Chunk reçu après validation: {list(chunk.keys())}")
+        for node_name, node_state in chunk.items():
+            print(f"  • Nœud '{node_name}' exécuté")
+            final_state = node_state
+    
+    # Récupérer l'état complet depuis le checkpointer après l'exécution
+    snapshot = workflow.graph.get_state(config)
+    if snapshot and snapshot.values:
+        state = snapshot.values
+        workflow_data["state"] = state
+        
+        # Mettre à jour le statut
+        if state.get("workflow_paused"):
+            validation_type = state.get("validation_type", "")
+            if validation_type == "challenges":
+                workflow_data["status"] = "waiting_validation_challenges"
+            elif validation_type == "recommendations":
+                workflow_data["status"] = "waiting_validation_recommendations"
+            else:
+                workflow_data["status"] = "paused"
+        elif state.get("challenges_success") and state.get("recommendations_success"):
+            workflow_data["status"] = "completed"
+        else:
+            workflow_data["status"] = "running"
+    elif final_state:
+        workflow_data["state"] = final_state
+        workflow_data["status"] = "running"
+    
+    return {"status": "success", "workflow_status": workflow_data["status"]}
+
+
+if __name__ == "__main__":
     uvicorn.run(
         app,
         host="0.0.0.0",

@@ -265,7 +265,7 @@ class StreamlitUseCaseValidation:
         st.markdown("---")
         
         can_validate = selected_qw_count > 0 or selected_sia_count > 0
-        if st.button("✅ Valider la sélection", type="primary", disabled=not can_validate, use_container_width=True):
+        if st.button("✅ Valider la sélection", type="primary", disabled=not can_validate, width="stretch"):
             if not can_validate:
                 st.warning("Veuillez sélectionner au moins un cas d'usage")
             else:

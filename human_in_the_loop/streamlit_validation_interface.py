@@ -143,7 +143,7 @@ class StreamlitValidationInterface:
         # Bouton de validation
         st.markdown("---")
         
-        if st.button("✅ Valider la sélection", type="primary", disabled=selected_count == 0, use_container_width=True):
+        if st.button("✅ Valider la sélection", type="primary", disabled=selected_count == 0, width="stretch"):
             if selected_count == 0:
                 st.warning("Veuillez sélectionner au moins un besoin")
             else:

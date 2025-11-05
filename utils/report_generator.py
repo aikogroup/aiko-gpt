@@ -34,14 +34,29 @@ class ReportGenerator:
         Supprime un éventuel <w:numPr> (numérotation automatique) du paragraphe
         pour éviter les numéros automatiques doublés.
         """
-        # namespace mapping
-        ns = {'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}
-        # trouver tous les éléments numPr sous le <w:p>
-        num_pr_nodes = paragraph._p.xpath('.//w:numPr', namespaces=ns)
-        for num_pr in num_pr_nodes:
-            parent = num_pr.getparent()
-            if parent is not None:
-                parent.remove(num_pr)
+        try:
+            # Accéder directement à l'élément XML du paragraphe
+            p_element = paragraph._p
+            
+            # Utiliser le qualified name pour le tag numPr
+            num_pr_qname = qn('w:numPr')
+            
+            # Parcourir tous les éléments du paragraphe et supprimer les numPr trouvés
+            # Cette approche évite l'utilisation de xpath avec namespaces qui peut poser problème
+            elements_to_remove = []
+            for elem in p_element.iter():
+                if elem.tag == num_pr_qname:
+                    elements_to_remove.append(elem)
+            
+            # Supprimer les éléments trouvés
+            for num_pr in elements_to_remove:
+                parent = num_pr.getparent()
+                if parent is not None:
+                    parent.remove(num_pr)
+        except Exception as e:
+            # Si une erreur survient, on continue sans supprimer la numérotation
+            # pour éviter de bloquer la génération du rapport
+            print(f"⚠️ [REPORT] Erreur lors de la suppression de la numérotation : {str(e)}")
     
     def generate_report(
         self,
