@@ -1,0 +1,59 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# LangGraph
+.langgraph_api/
+langgraph.json
+
+# Node (si frontend)
+node_modules/
+frontend/node_modules/
+
+# Outputs
+outputs/
+inputs/
+uploads/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+Dockerfile
+.dockerignore
+
+# Documentation
+*.md
+!README.md
+
+# Assets non nécessaires en production (mais on garde le logo)
+# assets/  # Commenté car on a besoin du logo aiko_logo.png
+deploy/
+

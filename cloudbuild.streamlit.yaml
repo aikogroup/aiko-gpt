@@ -1,0 +1,20 @@
+steps:
+  # Construire l'image Docker pour Streamlit
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-f'
+      - 'Dockerfile.streamlit'
+      - '-t'
+      - '${_IMAGE_NAME}:${_IMAGE_TAG}'
+      - '-t'
+      - '${_IMAGE_NAME}:latest'
+      - '.'
+
+images:
+  - '${_IMAGE_NAME}:${_IMAGE_TAG}'
+  - '${_IMAGE_NAME}:latest'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+

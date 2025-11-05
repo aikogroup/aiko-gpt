@@ -10,6 +10,7 @@ from docx.shared import Inches, Pt, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn, nsdecls
 from docx.oxml import OxmlElement
+import config
 
 
 class ReportGenerator:
@@ -26,8 +27,8 @@ class ReportGenerator:
         """
         self.logo_path = logo_path
         if not logo_path:
-            # Chemin par défaut pour le logo Aiko
-            self.logo_path = "/home/addeche/aiko/aikoGPT/assets/aiko_logo.png"
+            # Utiliser le chemin depuis config.py (détection automatique)
+            self.logo_path = str(config.get_logo_path())
 
     def _remove_numbering_from_paragraph(self, paragraph):
         """
@@ -64,7 +65,7 @@ class ReportGenerator:
         final_needs: List[Dict[str, Any]],
         final_quick_wins: List[Dict[str, Any]],
         final_structuration_ia: List[Dict[str, Any]],
-        output_dir: str = "/home/addeche/aiko/aikoGPT/outputs"
+        output_dir: str = None
     ) -> str:
         """
         Génère un rapport Word complet selon le template Cousin Surgery.
@@ -80,6 +81,10 @@ class ReportGenerator:
             Chemin vers le fichier généré
         """
         print(f"📝 [REPORT] Génération du rapport pour {company_name}")
+        
+        # Utiliser le dossier de sortie par défaut depuis config.py si non spécifié
+        if output_dir is None:
+            output_dir = str(config.ensure_outputs_dir())
         
         # Formater le nom de l'entreprise (première lettre de chaque mot en majuscule)
         company_name_formatted = company_name.title() if company_name else company_name
@@ -294,9 +299,9 @@ class ReportGenerator:
     def generate_report_from_json_files(
         self,
         company_name: str,
-        needs_json_path: str = "/home/addeche/aiko/aikoGPT/outputs/need_analysis_results.json",
-        use_cases_json_path: str = "/home/addeche/aiko/aikoGPT/outputs/use_case_analysis_results.json",
-        output_dir: str = "/home/addeche/aiko/aikoGPT/outputs"
+        needs_json_path: str = None,
+        use_cases_json_path: str = None,
+        output_dir: str = None
     ) -> str:
         """
         Génère un rapport à partir des fichiers JSON sauvegardés.
@@ -311,6 +316,14 @@ class ReportGenerator:
             Chemin vers le fichier généré
         """
         import json
+        
+        # Utiliser les chemins par défaut depuis config.py si non spécifiés
+        if needs_json_path is None:
+            needs_json_path = str(config.OUTPUTS_DIR / "need_analysis_results.json")
+        if use_cases_json_path is None:
+            use_cases_json_path = str(config.OUTPUTS_DIR / "use_case_analysis_results.json")
+        if output_dir is None:
+            output_dir = str(config.ensure_outputs_dir())
         
         print(f"📂 [REPORT] Chargement des données depuis les fichiers JSON")
         

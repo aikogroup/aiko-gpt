@@ -16,6 +16,7 @@ import streamlit as st
 # Import des agents
 import sys
 sys.path.append('/home/addeche/aiko/aikoGPT')
+import config as project_config
 from need_analysis.need_analysis_agent import NeedAnalysisAgent
 from process_atelier.workshop_agent import WorkshopAgent
 from process_transcript.transcript_agent import TranscriptAgent
@@ -990,7 +991,7 @@ class NeedAnalysisWorkflow:
             }
             
             # Sauvegarde en JSON
-            output_path = "/home/addeche/aiko/aikoGPT/outputs/need_analysis_results.json"
+            output_path = str(project_config.ensure_outputs_dir() / "need_analysis_results.json")
             with open(output_path, 'w', encoding='utf-8') as f:
                 json.dump(results, f, ensure_ascii=False, indent=2)
             
@@ -1009,7 +1010,7 @@ class NeedAnalysisWorkflow:
             png = self.graph.get_graph().draw_mermaid_png()
             
             # Sauvegarde du PNG
-            output_path = "/home/addeche/aiko/aikoGPT/outputs/workflow_graph.png"
+            output_path = str(project_config.ensure_outputs_dir() / "workflow_graph.png")
             with open(output_path, 'wb') as f:
                 f.write(png)
             
@@ -1100,7 +1101,11 @@ class NeedAnalysisWorkflow:
             if self.dev_mode:
                 try:
                     print(f"🔧 [DEBUG] Mode dev activé - tentative de chargement depuis need_analysis_results.json")
-                    with open('/home/addeche/aiko/aikoGPT/need_analysis_results.json', 'r', encoding='utf-8') as f:
+                    dev_json_path = str(project_config.OUTPUTS_DIR / "need_analysis_results.json")
+                    if not os.path.exists(dev_json_path):
+                        # Essayer aussi à la racine du projet (legacy)
+                        dev_json_path = str(project_config.PROJECT_ROOT / "need_analysis_results.json")
+                    with open(dev_json_path, 'r', encoding='utf-8') as f:
                         need_data = json.load(f)
                     
                     final_needs = need_data.get("final_needs", [])
@@ -1743,7 +1748,7 @@ class NeedAnalysisWorkflow:
             }
             
             # Sauvegarde en JSON
-            output_path = "/home/addeche/aiko/aikoGPT/outputs/use_case_analysis_results.json"
+            output_path = str(project_config.ensure_outputs_dir() / "use_case_analysis_results.json")
             with open(output_path, 'w', encoding='utf-8') as f:
                 json.dump(results, f, ensure_ascii=False, indent=2)
             

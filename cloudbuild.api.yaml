@@ -1,0 +1,21 @@
+steps:
+  # Construire l'image Docker pour l'API
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-f'
+      - 'Dockerfile.api'
+      - '-t'
+      - '${_IMAGE_NAME}:${_IMAGE_TAG}'
+      - '-t'
+      - '${_IMAGE_NAME}:latest'
+      - '.'
+
+# Pousser automatiquement les images vers Artifact Registry
+images:
+  - '${_IMAGE_NAME}:${_IMAGE_TAG}'
+  - '${_IMAGE_NAME}:latest'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+

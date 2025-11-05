@@ -23,7 +23,8 @@ from human_in_the_loop.streamlit_validation_interface import StreamlitValidation
 from use_case_analysis.streamlit_use_case_validation import StreamlitUseCaseValidation
 
 # Configuration de l'API
-API_URL = "http://localhost:2025"
+# Utiliser la variable d'environnement API_URL si disponible, sinon utiliser localhost pour le développement
+API_URL = os.getenv("API_URL", "http://localhost:2025")
 
 # Initialisation des interfaces de validation
 validation_interface = StreamlitValidationInterface()
@@ -334,8 +335,9 @@ def send_use_case_validation_feedback_api_call(validated_qw: List[Dict], validat
 
 def display_home_page():
     """Affiche la page d'accueil avec le logo et le message de bienvenue"""
-    # Charger le logo
-    logo_path = Path(__file__).parent.parent / "assets" / "aiko_logo.png"
+    # Charger le logo depuis config.py (détection automatique)
+    import config
+    logo_path = config.get_logo_path()
     
     # Centrer le contenu
     col1, col2, col3 = st.columns([1, 2, 1])

@@ -12,6 +12,7 @@ from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import MemorySaver
 import sys
 sys.path.append('/home/addeche/aiko/aikoGPT')
+import config as project_config
 
 from executive_summary.word_report_extractor import WordReportExtractor
 from executive_summary.transcript_enjeux_agent import TranscriptEnjeuxAgent
@@ -770,8 +771,7 @@ class ExecutiveSummaryWorkflow:
     def _save_results(self, state: ExecutiveSummaryState) -> None:
         """Sauvegarde les résultats dans un fichier JSON"""
         try:
-            output_dir = "/home/addeche/aiko/aikoGPT/outputs"
-            os.makedirs(output_dir, exist_ok=True)
+            output_dir = str(project_config.ensure_outputs_dir())
             
             results = {
                 "validated_challenges": state.get("validated_challenges", []),

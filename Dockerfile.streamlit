@@ -1,0 +1,44 @@
+# Dockerfile pour aikoGPT - Interface Streamlit
+FROM python:3.11-slim
+
+# Définir le répertoire de travail
+WORKDIR /app
+
+# Installer les dépendances système nécessaires
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+# Installer uv pour la gestion des dépendances
+RUN pip install --no-cache-dir uv
+
+# Copier les fichiers de configuration des dépendances
+COPY pyproject.toml uv.lock ./
+
+# Installer les dépendances avec uv
+RUN uv sync --frozen --no-dev
+
+# Copier le reste de l'application
+COPY . .
+
+# Exposer le port 8080 (Cloud Run utilise ce port par défaut)
+EXPOSE 8080
+
+# Variable d'environnement pour Python
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
+ENV BASE_DIR=/app
+
+# Créer les répertoires nécessaires
+RUN mkdir -p /app/outputs /app/assets /app/config
+
+# Utiliser le Python de l'environnement uv
+ENV PATH="/app/.venv/bin:$PATH"
+
+# Commande pour démarrer Streamlit
+# En production, on lance directement streamlit (contrairement à run_api.py qui fait un subprocess)
+# On utilise le port 8080 car Cloud Run attend ce port par défaut
+# API_URL sera configuré via variable d'environnement Cloud Run
+CMD ["streamlit", "run", "app/app_api.py", "--server.port=8080", "--server.address=0.0.0.0"]
+
