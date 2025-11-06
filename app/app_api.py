@@ -3,6 +3,7 @@ Application Streamlit PURE INTERFACE - communique avec l'API LangGraph
 Architecture propre : Streamlit = UI, API LangGraph = Logique métier
 """
 
+from datetime import date
 import streamlit as st
 import requests
 import time
@@ -243,6 +244,10 @@ def init_session_state():
         st.session_state.executive_workflow_status = None
     if 'executive_workflow_state' not in st.session_state:
         st.session_state.executive_workflow_state = {}
+    if 'rappel_mission' not in st.session_state:
+        st.session_state.rappel_mission = ""
+    if 'rappel_mission_company' not in st.session_state:
+        st.session_state.rappel_mission_company = ""
 
 def upload_files_to_api(files: List[Any]) -> Dict[str, Any]:
     """
@@ -607,7 +612,7 @@ def main():
         # Radio buttons pour la navigation
         page = st.radio(
             "Navigation",
-            ["Accueil", "Upload de documents", "Configuration des Intervieweurs", "Génération du Rapport", "Génération des Enjeux et Recommandations"],
+            ["Accueil", "Upload de documents", "Configuration des Intervieweurs", "Génération du Diag", "Génération des Enjeux et Recommandations", "Rappel de la mission"],
             key="navigation_radio"
         )
         
@@ -645,6 +650,8 @@ def main():
     elif page == "challenges_validation":
         # Page dédiée pour la validation des enjeux
         display_challenges_validation_page()
+    elif page == "Rappel de la mission":
+        display_rappel_mission()
 
 def display_diagnostic_section():
     """Affiche la section de génération du diagnostic (utilise fichiers depuis session_state)"""
@@ -1778,6 +1785,65 @@ def display_executive_results():
         mime="application/json",
         width="stretch"
     )
+
+def display_rappel_mission():
+    """Affiche le rappel de la mission"""
+    st.header("Rappel de la mission")
+    saved_company_name = (st.session_state.get("company_name") or "").strip()
+    if not saved_company_name:
+        saved_company_name = (st.session_state.get("company_name_input") or "").strip()
+
+    if saved_company_name:
+        st.info(f"Entreprise sélectionnée : {saved_company_name}")
+    else:
+        st.session_state.setdefault("rappel_mission_company_input", "")
+        st.text_input(
+            "Nom de l'entreprise",
+            key="rappel_mission_company_input",
+            placeholder="Ex : Cousin Surgery"
+        )
+
+    if st.button("📥 Télécharger le rappel de la mission", type="primary"):
+        company_to_use = saved_company_name or st.session_state.get("rappel_mission_company_input", "").strip()
+
+        if not company_to_use:
+            st.warning("Veuillez indiquer le nom de l'entreprise pour générer le rappel.")
+        else:
+            thread_id = str(uuid.uuid4())
+            try:
+                with st.spinner("Recherche des informations de l'entreprise..."):
+                    response = requests.post(
+                        f"{API_URL}/rappel-mission/threads/{thread_id}/runs",
+                        json={"company_name": company_to_use},
+                        timeout=120
+                    )
+                    response.raise_for_status()
+                    data = response.json()
+                    result = data.get("result", {})
+                    mission_markdown = result.get("mission_markdown", "")
+
+                if mission_markdown:
+                    st.session_state.rappel_mission = mission_markdown
+                    st.session_state.rappel_mission_company = company_to_use
+                    st.success("Rappel de la mission mis à jour.")
+                else:
+                    error_message = result.get("error") or "Aucun contenu retourné par le workflow."
+                    st.error(f"Impossible de générer le rappel : {error_message}")
+            except Exception as e:  # pragma: no cover - feedback utilisateur
+                st.error(f"Erreur lors de la génération du rappel : {str(e)}")
+
+    mission_content = st.session_state.get("rappel_mission", "")
+
+    if mission_content:
+        st.markdown(mission_content)
+    else:
+        st.info("Générez le rappel de la mission pour afficher les informations de l'entreprise.")
+
+    st.markdown("Elle a fait appel à aiko au travers du dispositif \"IA Booster\" de BPI France pour :​\
+            \n- faire le point sur les opportunités qui se présentent  pour son business model​\
+            \n- évaluer sa propre capacité à appréhender cette technologie​\
+            \n- définir, évaluer et prioriser les possibles cas d’usage​")
+    st.markdown("Nous allons démarré la mission en " + date.today().strftime("%B %Y"))
 
 if __name__ == "__main__":
     main()
