@@ -21,6 +21,7 @@ load_dotenv()
 import sys
 sys.path.append(str(Path(__file__).parent.parent))
 from workflow.need_analysis_workflow import NeedAnalysisWorkflow
+from workflow.rappel_mission_workflow import RappelMissionWorkflow
 from executive_summary.executive_summary_workflow import ExecutiveSummaryWorkflow
 from langgraph.checkpoint.memory import MemorySaver
 
@@ -34,6 +35,7 @@ app = FastAPI(
 # Stockage en mémoire des workflows (en production, utiliser Redis ou DB)
 workflows: Dict[str, Any] = {}
 executive_workflows: Dict[str, Any] = {}  # Workflows Executive Summary
+rappel_workflows: Dict[str, Any] = {}  # Workflows Rappel de la mission
 checkpointer = MemorySaver()
 
 # Dossier temporaire pour les fichiers uploadés
@@ -72,6 +74,12 @@ class ExecutiveSummaryInput(BaseModel):
     workshop_files: List[str] = []
     company_name: str
     interviewer_note: str = ""
+
+
+class RappelMissionInput(BaseModel):
+    """Input pour démarrer un workflow de rappel de mission"""
+
+    company_name: str
 
 class ExecutiveValidationFeedback(BaseModel):
     """Feedback de validation Executive Summary"""
@@ -362,6 +370,51 @@ async def send_use_case_validation(thread_id: str, feedback: UseCaseValidationFe
         raise HTTPException(status_code=500, detail=f"Erreur reprise workflow: {str(e)}")
 
 
+@app.post("/rappel-mission/threads/{thread_id}/runs")
+async def create_rappel_mission_run(thread_id: str, mission_input: RappelMissionInput):
+    """Démarre un workflow dédié au rappel de la mission."""
+
+    try:
+        if thread_id not in rappel_workflows:
+            workflow = RappelMissionWorkflow()
+            rappel_workflows[thread_id] = {
+                "workflow": workflow,
+                "state": None,
+                "status": "created",
+            }
+
+        workflow_data = rappel_workflows[thread_id]
+        workflow = workflow_data["workflow"]
+
+        result = workflow.run(company_name=mission_input.company_name, thread_id=thread_id)
+
+        workflow_data["state"] = result
+        workflow_data["status"] = "completed" if result.get("success") else "error"
+
+        return {
+            "thread_id": thread_id,
+            "status": workflow_data["status"],
+            "result": result,
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur rappel mission: {str(e)}")
+
+
+@app.get("/rappel-mission/threads/{thread_id}/state")
+async def get_rappel_mission_state(thread_id: str):
+    """Récupère l'état courant du workflow rappel de mission."""
+
+    if thread_id not in rappel_workflows:
+        raise HTTPException(status_code=404, detail="Thread non trouvé")
+
+    return {
+        "thread_id": thread_id,
+        "status": rappel_workflows[thread_id]["status"],
+        "state": rappel_workflows[thread_id]["state"],
+    }
+
+
 @app.delete("/threads/{thread_id}")
 async def delete_thread(thread_id: str):
     """
@@ -370,11 +423,24 @@ async def delete_thread(thread_id: str):
     Returns:
         {"status": "deleted"}
     """
+    deleted = False
+
     if thread_id in workflows:
         del workflows[thread_id]
+        deleted = True
+
+    if thread_id in executive_workflows:
+        del executive_workflows[thread_id]
+        deleted = True
+
+    if thread_id in rappel_workflows:
+        del rappel_workflows[thread_id]
+        deleted = True
+
+    if deleted:
         return {"status": "deleted", "thread_id": thread_id}
-    else:
-        raise HTTPException(status_code=404, detail="Thread non trouvé")
+
+    raise HTTPException(status_code=404, detail="Thread non trouvé")
 
 
 # ==================== DÉMARRAGE ====================
