@@ -9,7 +9,7 @@ import requests
 import time
 import uuid
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Set
 import json
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -119,6 +119,20 @@ def init_session_state():
         st.session_state.rappel_mission = ""
     if 'rappel_mission_company' not in st.session_state:
         st.session_state.rappel_mission_company = ""
+    if 'atouts_result' not in st.session_state:
+        st.session_state.atouts_result = None
+    if 'atouts_thread_id' not in st.session_state:
+        st.session_state.atouts_thread_id = None
+    if 'atouts_status' not in st.session_state:
+        st.session_state.atouts_status = None
+    if 'atouts_warnings' not in st.session_state:
+        st.session_state.atouts_warnings = []
+    if 'atouts_additional_context' not in st.session_state:
+        st.session_state.atouts_additional_context = ""
+    if 'atouts_transcript_names' not in st.session_state:
+        st.session_state.atouts_transcript_names = set()
+    if 'atouts_workshop_names' not in st.session_state:
+        st.session_state.atouts_workshop_names = set()
 
 def upload_files_to_api(files: List[Any]) -> Dict[str, Any]:
     """
@@ -443,7 +457,15 @@ def main():
         # Radio buttons pour la navigation
         page = st.radio(
             "Navigation",
-            ["Accueil", "Upload de documents", "Configuration des Intervieweurs", "Génération du Diag", "Génération des Enjeux et Recommandations", "Rappel de la mission"],
+            [
+                "Accueil",
+                "Upload de documents",
+                "Configuration des Intervieweurs",
+                "Génération du Diag",
+                "Génération des Enjeux et Recommandations",
+                "Rappel de la mission",
+                "Atouts",
+            ],
             key="navigation_radio"
         )
         
@@ -482,6 +504,8 @@ def main():
         display_challenges_validation_page()
     elif page == "Rappel de la mission":
         display_rappel_mission()
+    elif page == "Atouts":
+        display_atouts()
 
 def display_diagnostic_section():
     """Affiche la section de génération du diagnostic (utilise fichiers depuis session_state)"""
@@ -1491,6 +1515,218 @@ def display_executive_results():
         mime="application/json",
         width="stretch"
     )
+
+
+def display_atouts():
+    """Affiche la page d'analyse des atouts de l'entreprise."""
+
+    st.header("Atouts de l'entreprise")
+
+    saved_company_name = (st.session_state.get("company_name") or "").strip()
+    if not saved_company_name:
+        saved_company_name = (st.session_state.get("company_name_input") or "").strip()
+
+    company_input = st.text_input(
+        "Nom de l'entreprise",
+        value=saved_company_name,
+        key="atouts_company_input",
+        placeholder="Ex : Cousin Surgery"
+    ).strip()
+
+    if company_input:
+        st.session_state.atouts_company_name = company_input
+    else:
+        st.session_state.atouts_company_name = ""
+
+    transcripts = list(st.session_state.get("uploaded_transcripts", []))
+    workshops = list(st.session_state.get("uploaded_workshops", []))
+
+    transcript_seen: Set[str] = set()
+    transcripts_unique: List[str] = []
+    for path in transcripts:
+        name_key = os.path.basename(path).lower()
+        if name_key in transcript_seen:
+            continue
+        transcript_seen.add(name_key)
+        transcripts_unique.append(path)
+    transcripts = transcripts_unique
+    st.session_state.uploaded_transcripts = transcripts
+    st.session_state.atouts_transcript_names.update(transcript_seen)
+
+    workshop_seen: Set[str] = set()
+    workshops_unique: List[str] = []
+    for path in workshops:
+        name_key = os.path.basename(path).lower()
+        if name_key in workshop_seen:
+            continue
+        workshop_seen.add(name_key)
+        workshops_unique.append(path)
+    workshops = workshops_unique
+    st.session_state.uploaded_workshops = workshops
+    st.session_state.atouts_workshop_names.update(workshop_seen)
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric("Transcriptions disponibles", len(transcripts))
+        if transcripts:
+            with st.expander("Voir les transcriptions"):
+                for path in transcripts:
+                    st.text(f"• {os.path.basename(path)}")
+    with col2:
+        st.metric("Ateliers disponibles", len(workshops))
+        if workshops:
+            with st.expander("Voir les ateliers"):
+                for path in workshops:
+                    st.text(f"• {os.path.basename(path)}")
+
+    if not transcripts:
+        st.warning("Aucune transcription détectée depuis la page d'upload.")
+    if not workshops:
+        st.warning("Aucun atelier détecté depuis la page d'upload.")
+
+    st.markdown("---")
+    st.subheader("Ajouter des documents complémentaires (optionnel)")
+
+    new_transcripts = st.file_uploader(
+        "Ajouter des transcriptions (PDF ou JSON)",
+        type=["pdf", "json"],
+        accept_multiple_files=True,
+        key="atouts_transcripts_uploader"
+    )
+    if new_transcripts:
+        existing_names = set(st.session_state.atouts_transcript_names)
+        new_files = []
+        duplicates_names: Set[str] = set()
+        for uploaded_file in new_transcripts:
+            name_key = uploaded_file.name.lower()
+            if name_key in existing_names:
+                duplicates_names.add(uploaded_file.name)
+                continue
+            new_files.append(uploaded_file)
+            existing_names.add(name_key)
+        if new_files:
+            uploaded_paths = upload_files_to_api(new_files)
+            added = uploaded_paths.get("transcript", [])
+            if added:
+                transcripts.extend(added)
+                transcript_seen = set()
+                transcripts_deduped: List[str] = []
+                for path in transcripts:
+                    key = os.path.basename(path).lower()
+                    if key in transcript_seen:
+                        continue
+                    transcript_seen.add(key)
+                    transcripts_deduped.append(path)
+                transcripts = transcripts_deduped
+                st.session_state.uploaded_transcripts = transcripts
+                st.session_state.atouts_transcript_names = existing_names
+                st.success(f"✅ {len(added)} transcription(s) ajoutée(s)")
+
+    new_workshops = st.file_uploader(
+        "Ajouter des ateliers (Excel)",
+        type=["xlsx"],
+        accept_multiple_files=True,
+        key="atouts_workshops_uploader"
+    )
+    if new_workshops:
+        existing_names = set(st.session_state.atouts_workshop_names)
+        new_files = []
+        duplicates_names: Set[str] = set()
+        for uploaded_file in new_workshops:
+            name_key = uploaded_file.name.lower()
+            if name_key in existing_names:
+                duplicates_names.add(uploaded_file.name)
+                continue
+            new_files.append(uploaded_file)
+            existing_names.add(name_key)
+        if new_files:
+            uploaded_paths = upload_files_to_api(new_files)
+            added = uploaded_paths.get("workshop", [])
+            if added:
+                workshops.extend(added)
+                workshop_seen = set()
+                workshops_deduped: List[str] = []
+                for path in workshops:
+                    key = os.path.basename(path).lower()
+                    if key in workshop_seen:
+                        continue
+                    workshop_seen.add(key)
+                    workshops_deduped.append(path)
+                workshops = workshops_deduped
+                st.session_state.uploaded_workshops = workshops
+                st.session_state.atouts_workshop_names = existing_names
+                st.success(f"✅ {len(added)} atelier(s) ajouté(s)")
+
+    st.markdown("---")
+
+    st.session_state.atouts_additional_context = st.text_area(
+        "Informations supplémentaires (contexte stratégique, priorités IA, etc.)",
+        value=st.session_state.get("atouts_additional_context", ""),
+        height=150,
+        key="atouts_additional_context_input"
+    )
+
+    company_to_use = st.session_state.atouts_company_name or saved_company_name
+
+    if st.button("🔍 Analyser les atouts", type="primary"):
+        if not company_to_use:
+            st.warning("Veuillez renseigner le nom de l'entreprise avant de lancer l'analyse.")
+        elif not transcripts and not workshops:
+            st.warning("Veuillez fournir au moins un atelier ou une transcription.")
+        else:
+            thread_id = str(uuid.uuid4())
+            payload = {
+                "company_name": company_to_use,
+                "workshop_files": st.session_state.get("uploaded_workshops", []),
+                "transcript_files": st.session_state.get("uploaded_transcripts", []),
+                "additional_context": st.session_state.atouts_additional_context.strip(),
+            }
+
+            try:
+                with st.spinner("Analyse des documents et collecte d'informations en cours..."):
+                    response = requests.post(
+                        f"{API_URL}/atouts/threads/{thread_id}/runs",
+                        json=payload,
+                        timeout=600,
+                    )
+                    response.raise_for_status()
+                    data = response.json()
+
+                workflow_result = data.get("result", {})
+                payload = workflow_result.get("result", {})
+
+                st.session_state.atouts_thread_id = thread_id
+                st.session_state.atouts_status = data.get("status")
+                st.session_state.atouts_result = payload
+                st.session_state.atouts_warnings = payload.get("warnings", [])
+
+                if workflow_result.get("success"):
+                    st.success("Analyse des atouts réalisée avec succès.")
+                else:
+                    error_msg = payload.get("errors") or workflow_result.get("errors")
+                    st.error(error_msg or "L'analyse n'a pas abouti.")
+
+            except Exception as exc:  # pragma: no cover - dépend de l'API
+                st.error(f"❌ Erreur lors de l'analyse des atouts : {exc}")
+
+    st.markdown("---")
+
+    atouts_result = st.session_state.get("atouts_result") or {}
+    if atouts_result:
+        text_output = atouts_result.get("text", "").strip()
+        company_display = atouts_result.get("company_name") or company_to_use
+
+        if company_display:
+            st.subheader(f"Atouts identifiés pour {company_display}")
+
+        if text_output:
+            st.markdown(text_output)
+        else:
+            st.info("Aucun atout n'a pu être identifié à partir des données fournies.")
+
+    warnings = st.session_state.get("atouts_warnings") or []
+    if warnings:
+        st.warning("\n".join(warnings))
 
 def display_rappel_mission():
     """Affiche le rappel de la mission"""
