@@ -49,6 +49,7 @@ class ExecutiveSummaryState(TypedDict):
     challenges_iteration_count: int
     max_challenges_iterations: int
     challenges_success: bool
+    challenges_no_progress_count: int
     # Résultats Maturité
     maturity_score: int
     maturity_summary: str
@@ -230,6 +231,7 @@ class ExecutiveSummaryWorkflow:
             "challenges_iteration_count": 0,
             "max_challenges_iterations": 3,
             "challenges_success": False,
+            "challenges_no_progress_count": 0,
             "maturity_score": 3,
             "maturity_summary": "",
             "recommendations": [],
@@ -467,6 +469,8 @@ class ExecutiveSummaryWorkflow:
             rejected = state.get("rejected_challenges", [])
             validated = state.get("validated_challenges", [])
             feedback = state.get("challenges_feedback", "")
+            iteration_count = state.get("challenges_iteration_count", 0)
+            max_iterations = state.get("max_challenges_iterations", 3)
             
             result = self.executive_agent.identify_challenges(
                 transcript_content=transcript_content,
@@ -474,7 +478,9 @@ class ExecutiveSummaryWorkflow:
                 final_needs=final_needs,
                 rejected_challenges=rejected if rejected else None,
                 validated_challenges=validated if validated else None,
-                challenges_feedback=feedback
+                challenges_feedback=feedback,
+                challenges_iteration_count=iteration_count,
+                max_challenges_iterations=max_iterations
             )
             
             state["identified_challenges"] = result.get("challenges", [])
@@ -500,16 +506,33 @@ class ExecutiveSummaryWorkflow:
                 existing_validated = state.get("validated_challenges", [])
                 newly_validated = validation_data.get("validated_challenges", [])
                 
+                # Ajouter les nouveaux enjeux validés (garde-fou : éviter les doublons par ID)
                 existing_ids = [ch.get("id", "") for ch in existing_validated]
-                unique_newly_validated = [ch for ch in newly_validated if ch.get("id", "") not in existing_ids]
+                newly_validated_filtered = [ch for ch in newly_validated if ch.get("id", "") not in existing_ids]
                 
-                state["validated_challenges"] = existing_validated + unique_newly_validated
-                state["rejected_challenges"] = validation_data.get("rejected_challenges", [])
+                state["validated_challenges"] = existing_validated + newly_validated_filtered
+                
+                # Accumuler les rejetés (ne pas remplacer, mais ajouter)
+                existing_rejected = state.get("rejected_challenges", [])
+                newly_rejected = validation_data.get("rejected_challenges", [])
+                existing_rejected_ids = [ch.get("id", "") for ch in existing_rejected]
+                unique_newly_rejected = [ch for ch in newly_rejected if ch.get("id", "") not in existing_rejected_ids]
+                state["rejected_challenges"] = existing_rejected + unique_newly_rejected
+                
                 state["challenges_feedback"] = validation_data.get("challenges_feedback", "")
                 state["validation_result"] = {}
                 state["validation_type"] = ""
                 
-                print(f"📊 Enjeux nouvellement validés: {len(unique_newly_validated)}")
+                # Détecter si aucun nouveau enjeu n'a été validé (pas de progression)
+                if len(newly_validated_filtered) == 0:
+                    state["challenges_no_progress_count"] = state.get("challenges_no_progress_count", 0) + 1
+                    print(f"⚠️ Aucun nouveau enjeu validé - Compteur sans progression: {state['challenges_no_progress_count']}")
+                else:
+                    # Réinitialiser le compteur si un nouveau enjeu a été validé
+                    state["challenges_no_progress_count"] = 0
+                    print(f"✅ Progression détectée - Compteur sans progression réinitialisé")
+                
+                print(f"📊 Enjeux nouvellement validés: {len(newly_validated_filtered)}")
                 print(f"📊 Total enjeux validés: {len(state['validated_challenges'])}")
                 
                 return state
@@ -531,10 +554,21 @@ class ExecutiveSummaryWorkflow:
         validated_count = len(state.get("validated_challenges", []))
         success = validated_count >= 5
         
+        # Vérifier si on a trop de tentatives sans progression (boucle infinie)
+        no_progress_count = state.get("challenges_no_progress_count", 0)
+        max_no_progress = 2  # Arrêter après 2 tentatives sans progression
+        
+        if no_progress_count >= max_no_progress:
+            print(f"🛑 Arrêt de la boucle : {no_progress_count} tentatives sans progression (max: {max_no_progress})")
+            state["challenges_success"] = True  # Forcer le succès pour arrêter la boucle
+            print(f"⚠️ Forçage de l'arrêt - Enjeux validés: {validated_count}/5")
+            return state
+        
         state["challenges_success"] = success
         
         print(f"📊 Enjeux validés: {validated_count}/5")
         print(f"🎯 Succès: {success}")
+        print(f"📊 Tentatives sans progression: {no_progress_count}/{max_no_progress}")
         
         if not success:
             state["challenges_iteration_count"] = state.get("challenges_iteration_count", 0) + 1
@@ -594,6 +628,17 @@ class ExecutiveSummaryWorkflow:
             rejected = state.get("rejected_recommendations", [])
             validated = state.get("validated_recommendations", [])
             feedback = state.get("recommendations_feedback", "")
+            iteration_count = state.get("recommendations_iteration_count", 0)
+            max_iterations = state.get("max_recommendations_iterations", 3)
+            
+            # Logs avant la génération
+            print(f"📊 [REGENERATION] Recommandations validées ({len(validated)}):")
+            for i, rec in enumerate(validated, 1):
+                print(f"   {i}. {rec[:100]}..." if len(rec) > 100 else f"   {i}. {rec}")
+            
+            print(f"📊 [REGENERATION] Recommandations rejetées ({len(rejected)}):")
+            for i, rec in enumerate(rejected, 1):
+                print(f"   {i}. {rec[:100]}..." if len(rec) > 100 else f"   {i}. {rec}")
             
             result = self.executive_agent.generate_recommendations(
                 maturite_ia=maturite_ia,
@@ -602,11 +647,18 @@ class ExecutiveSummaryWorkflow:
                 final_structuration_ia=final_structuration_ia,
                 rejected_recommendations=rejected if rejected else None,
                 validated_recommendations=validated if validated else None,
-                recommendations_feedback=feedback
+                recommendations_feedback=feedback,
+                recommendations_iteration_count=iteration_count,
+                max_recommendations_iterations=max_iterations
             )
             
             state["recommendations"] = result.get("recommendations", [])
             print(f"✅ {len(state['recommendations'])} recommandations générées")
+            
+            # Logs après la génération
+            print(f"📊 [REGENERATION] Nouvelles recommandations générées ({len(state['recommendations'])}):")
+            for i, rec in enumerate(state["recommendations"], 1):
+                print(f"   {i}. {rec[:100]}..." if len(rec) > 100 else f"   {i}. {rec}")
             
             return state
             
@@ -628,16 +680,22 @@ class ExecutiveSummaryWorkflow:
                 existing_validated = state.get("validated_recommendations", [])
                 newly_validated = validation_data.get("validated_recommendations", [])
                 
-                # Éviter les doublons
-                unique_newly_validated = [r for r in newly_validated if r not in existing_validated]
+                # Ajouter les nouvelles recommandations validées (garde-fou : éviter les doublons)
+                newly_validated_filtered = [r for r in newly_validated if r not in existing_validated]
                 
-                state["validated_recommendations"] = existing_validated + unique_newly_validated
-                state["rejected_recommendations"] = validation_data.get("rejected_recommendations", [])
+                state["validated_recommendations"] = existing_validated + newly_validated_filtered
+                
+                # Accumuler les rejetées (ne pas remplacer, mais ajouter)
+                existing_rejected = state.get("rejected_recommendations", [])
+                newly_rejected = validation_data.get("rejected_recommendations", [])
+                newly_rejected_filtered = [r for r in newly_rejected if r not in existing_rejected]
+                state["rejected_recommendations"] = existing_rejected + newly_rejected_filtered
+                
                 state["recommendations_feedback"] = validation_data.get("recommendations_feedback", "")
                 state["validation_result"] = {}
                 state["validation_type"] = ""
                 
-                print(f"📊 Recommandations nouvellement validées: {len(unique_newly_validated)}")
+                print(f"📊 Recommandations nouvellement validées: {len(newly_validated_filtered)}")
                 print(f"📊 Total recommandations validées: {len(state['validated_recommendations'])}")
                 
                 return state

@@ -11,7 +11,7 @@ class Challenge(BaseModel):
     id: str = Field(description="ID unique de l'enjeu (E1, E2, E3, E4, E5)")
     titre: str = Field(description="Titre court et percutant (max 10 mots)")
     description: str = Field(description="Description détaillée en 3-5 lignes expliquant l'enjeu, son impact et sa valeur stratégique")
-    besoins_lies: List[str] = Field(description="IDs ou titres des besoins qui se rattachent à cet enjeu", default_factory=list)
+    besoins_lies: List[str] = Field(description="Titres EXACTS des besoins de la liste fournie qui se rattachent à cet enjeu", default_factory=list)
 
 
 class ChallengesResponse(BaseModel):
@@ -25,9 +25,15 @@ class MaturityResponse(BaseModel):
     phrase_resumant: str = Field(description="Phrase résumant la situation avec les données, les outils numériques")
 
 
+class Recommendation(BaseModel):
+    """Modèle pour une recommandation"""
+    id: str = Field(description="ID unique de la recommandation (R1, R2, R3, R4)")
+    text: str = Field(description="Texte de la recommandation personnalisée")
+
+
 class RecommendationsResponse(BaseModel):
     """Modèle pour les recommandations"""
-    recommendations: List[str] = Field(description="Liste des 4 recommandations personnalisées", min_length=4, max_length=4)
+    recommendations: List[Recommendation] = Field(description="Liste des 4 recommandations personnalisées", min_length=4, max_length=4)
 
 
 class NeedItem(BaseModel):

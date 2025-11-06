@@ -496,12 +496,16 @@ async def get_executive_status(thread_id: str):
                 workflow_data["status"] = "paused"
         elif state.get("challenges_success") and state.get("recommendations_success"):
             workflow_data["status"] = "completed"
+            # S'assurer que l'état est bien stocké dans workflow_data
+            workflow_data["state"] = state
         elif next_nodes:
             # Il y a des nœuds suivants, le workflow est en cours
             workflow_data["status"] = "running"
         else:
             # Pas de nœuds suivants et pas de pause, donc terminé
             workflow_data["status"] = "completed"
+            # S'assurer que l'état est bien stocké dans workflow_data
+            workflow_data["state"] = state
     
     return {"status": workflow_data["status"]}
 
@@ -519,11 +523,27 @@ async def get_executive_state(thread_id: str):
     config = {"configurable": {"thread_id": thread_id}}
     snapshot = workflow.graph.get_state(config)
     
+    # Prioriser l'état du checkpointer, mais utiliser aussi l'état stocké dans workflow_data
+    state_from_checkpointer = None
     if snapshot and snapshot.values:
-        state = snapshot.values
+        state_from_checkpointer = snapshot.values
+    
+    state_from_storage = workflow_data.get("state", {})
+    
+    # Fusionner les deux états (priorité au checkpointer, mais compléter avec storage)
+    if state_from_checkpointer:
+        state = state_from_checkpointer.copy()
+        # Compléter avec les données de storage si manquantes dans checkpointer
+        for key in ["validated_challenges", "validated_recommendations", "maturity_score", "maturity_summary"]:
+            if not state.get(key) and state_from_storage.get(key):
+                state[key] = state_from_storage[key]
     else:
-        # Fallback vers l'état stocké
-        state = workflow_data.get("state", {})
+        state = state_from_storage
+    
+    # Debug: afficher ce qui est retourné
+    print(f"📊 [API] État retourné pour thread {thread_id}:")
+    print(f"   - validated_challenges: {len(state.get('validated_challenges', []))}")
+    print(f"   - validated_recommendations: {len(state.get('validated_recommendations', []))}")
     
     # Convertir en format JSON-serializable
     return {
@@ -561,7 +581,7 @@ async def validate_executive(thread_id: str, feedback: ExecutiveValidationFeedba
     # Reprendre le workflow
     workflow.graph.update_state(config, updated_state)
     
-    # Continuer l'exécution
+    # Continuer l'exécution jusqu'au prochain interrupt
     final_state = None
     for chunk in workflow.graph.stream(None, config):
         print(f"📊 [EXECUTIVE] Chunk reçu après validation: {list(chunk.keys())}")
@@ -570,13 +590,29 @@ async def validate_executive(thread_id: str, feedback: ExecutiveValidationFeedba
             final_state = node_state
     
     # Récupérer l'état complet depuis le checkpointer après l'exécution
+    # IMPORTANT : Le workflow s'arrête à human_validation_enjeux grâce à interrupt_before
     snapshot = workflow.graph.get_state(config)
     if snapshot and snapshot.values:
         state = snapshot.values
         workflow_data["state"] = state
         
+        # Vérifier si on est à un interrupt (workflow_paused ou next contient human_validation)
+        is_at_interrupt = False
+        if snapshot.next:
+            next_nodes = list(snapshot.next) if hasattr(snapshot.next, '__iter__') else [snapshot.next]
+            if "human_validation_enjeux" in next_nodes or "human_validation_recommendations" in next_nodes:
+                is_at_interrupt = True
+                state["workflow_paused"] = True
+                if "human_validation_enjeux" in next_nodes:
+                    state["validation_type"] = "challenges"
+                elif "human_validation_recommendations" in next_nodes:
+                    state["validation_type"] = "recommendations"
+                # Mettre à jour l'état dans le checkpointer
+                workflow.graph.update_state(config, state)
+                print(f"🛑 [API] Workflow arrêté à l'interrupt: {next_nodes}")
+        
         # Mettre à jour le statut
-        if state.get("workflow_paused"):
+        if state.get("workflow_paused") or is_at_interrupt:
             validation_type = state.get("validation_type", "")
             if validation_type == "challenges":
                 workflow_data["status"] = "waiting_validation_challenges"

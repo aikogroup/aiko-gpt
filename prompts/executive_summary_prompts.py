@@ -22,8 +22,12 @@ DONNÉES TRANSCRIPTS (Entretiens avec les collaborateurs) :
 DONNÉES ATELIERS (Ateliers de co-création) :
 {workshop_content}
 
-BESOINS IDENTIFIÉS :
+BESOINS IDENTIFIÉS (liste des titres uniquement) :
 {final_needs}
+
+⚠️ RÈGLE CRITIQUE POUR LES BESOINS LIÉS :
+Les besoins liés que tu indiques DOIVENT correspondre EXACTEMENT aux titres listés ci-dessus.
+Tu ne peux PAS inventer de nouveaux besoins. Utilise UNIQUEMENT les titres de la liste fournie.
 
 CONTEXTE :
 Les enjeux de l'IA représentent les grands défis stratégiques que l'entreprise doit relever. Chaque enjeu doit être lié à au moins un besoin identifié lors des entretiens et ateliers.
@@ -35,15 +39,22 @@ INSTRUCTIONS :
    - Un ID unique (E1, E2, E3, E4, E5)
    - Un TITRE court et percutant (max 10 mots)
    - Une DESCRIPTION détaillée en 3-5 lignes expliquant l'enjeu, son impact et sa valeur stratégique
-   - Les BESOINS LIÉS (IDs ou titres des besoins qui se rattachent à cet enjeu)
+   - Les BESOINS LIÉS : liste des titres EXACTS des besoins de la liste ci-dessus qui se rattachent à cet enjeu
 4. Chaque enjeu doit être unique et spécifique au contexte de l'entreprise
 5. Les enjeux doivent couvrir différents aspects de la transformation IA
+6. ⚠️ IMPORTANT : Les besoins liés doivent être des titres EXACTS de la liste des besoins identifiés ci-dessus. Ne crée pas de nouveaux besoins.
 
 EXEMPLE D'ENJEU :
+Si la liste des besoins contient :
+1. Analyse des Données de Marché
+2. Optimisation du Pricing
+3. Veille Commerciale Proactive
+
+Alors un enjeu pourrait être :
 - ID: E1
 - TITRE: Capitalisation des connaissances internes
 - DESCRIPTION: Transformer le capital intellectuel actuellement dispersé de l'entreprise en avantage concurrentiel durable. L'enjeu est de créer un "cerveau collectif" organisationnel qui pourrait automatiser l'accès à l'expertise technique et clinique, faciliter le partage des bonnes pratiques entre équipes, et accélérer la formation des nouvelles recrues pour réduire les délais de montée en compétence tout en préservant le savoir-faire critique.
-- BESOINS_LIÉS: [B001, B002, "Centraliser les connaissances techniques"]
+- BESOINS_LIÉS: ["Analyse des Données de Marché", "Veille Commerciale Proactive"]
 
 La réponse sera automatiquement structurée selon le format attendu.
 """
@@ -51,14 +62,24 @@ La réponse sera automatiquement structurée selon le format attendu.
 REGENERATE_CHALLENGES_PROMPT = """
 Tu dois régénérer les enjeux stratégiques en tenant compte du feedback utilisateur.
 
-ENJEUX PRÉCÉDENTS (REJETÉS) :
+⚠️ ENJEUX DÉJÀ PROPOSÉS LORS DE L'ITÉRATION PRÉCÉDENTE (À NE JAMAIS REPROPOSER) :
+{previous_challenges}
+
+Note importante : La liste ci-dessus contient TOUS les enjeux proposés précédemment (validés ET rejetés).
+Tu dois générer des enjeux COMPLÈTEMENT DIFFÉRENTS de ces thèmes.
+
+🚫 ENJEUX EXPLICITEMENT REJETÉS PAR L'UTILISATEUR :
 {rejected_challenges}
 
-FEEDBACK UTILISATEUR :
+✅ ENJEUX VALIDÉS (À CONSERVER - NE PAS LES RÉGÉNÉRER) :
+{validated_challenges}
+
+💬 COMMENTAIRES DE L'UTILISATEUR :
 {challenges_feedback}
 
-ENJEUX VALIDÉS (À CONSERVER) :
-{validated_challenges}
+📊 RÉSUMÉ DE LA VALIDATION :
+- Enjeux validés : {validated_count} / 5 minimum requis
+- Enjeux rejetés : {rejected_count}
 
 DONNÉES TRANSCRIPTS :
 {transcript_content}
@@ -66,18 +87,47 @@ DONNÉES TRANSCRIPTS :
 DONNÉES ATELIERS :
 {workshop_content}
 
-BESOINS IDENTIFIÉS :
+BESOINS IDENTIFIÉS (liste des titres uniquement) :
 {final_needs}
 
-INSTRUCTIONS :
-1. Analyse le feedback utilisateur pour comprendre ce qui doit être modifié
-2. Conserve les enjeux validés (ne les régénère pas)
-3. Régénère uniquement les enjeux rejetés en tenant compte du feedback
-4. Assure-toi d'avoir exactement 5 enjeux au total (validés + nouveaux)
-5. Si le feedback indique qu'il manque des enjeux, génère-en de nouveaux
-6. Si le feedback indique que certains enjeux doivent être fusionnés ou séparés, adapte en conséquence
+⚠️ RÈGLE CRITIQUE POUR LES BESOINS LIÉS :
+Les besoins liés que tu indiques DOIVENT correspondre EXACTEMENT aux titres listés ci-dessus.
+Tu ne peux PAS inventer de nouveaux besoins. Utilise UNIQUEMENT les titres de la liste fournie.
 
-Génère 5 enjeux stratégiques au format structuré.
+🎯 INSTRUCTIONS CRITIQUES POUR LA NOUVELLE ITÉRATION :
+
+⛔ INTERDICTIONS ABSOLUES :
+1. NE JAMAIS reproposer un enjeu déjà proposé dans l'itération précédente (même avec un titre légèrement différent)
+2. NE PAS créer de variantes ou reformulations des enjeux déjà proposés
+3. Exemples à éviter :
+   - Si "Capitalisation des connaissances internes" a déjà été proposé
+   - NE PAS proposer "Gestion des connaissances" (trop similaire)
+   - NE PAS proposer "Partage des savoirs" (même domaine)
+   - PLUTÔT explorer d'autres domaines : transformation digitale, optimisation opérationnelle, innovation, stratégie commerciale, etc.
+
+✅ OBLIGATIONS :
+4. Explorer des DOMAINES STRATÉGIQUES COMPLÈTEMENT DIFFÉRENTS de ceux déjà proposés
+5. Identifier des ENJEUX NON ENCORE COUVERTS dans les données
+6. Proposer des enjeux plus concrets, actionnables et mieux sourcés depuis les transcripts et ateliers
+7. Générer EXACTEMENT 5 nouveaux enjeux DISTINCTS (toujours 5, indépendamment du nombre déjà validé)
+8. Chaque enjeu doit être unique et spécifique au contexte de l'entreprise
+
+📏 RÈGLES DE FORMAT :
+9. ⚠️ VÉRIFIE L'UNICITÉ DES THÈMES : Assure-toi qu'aucun thème n'est utilisé deux fois dans ta proposition ET qu'aucun thème ne ressemble aux enjeux déjà proposés
+10. Chaque enjeu doit avoir un ID unique (E1, E2, E3, E4, E5)
+11. Chaque enjeu doit avoir un TITRE court et percutant (max 10 mots)
+12. Chaque enjeu doit avoir une DESCRIPTION détaillée en 3-5 lignes
+13. Chaque enjeu doit avoir des BESOINS_LIÉS : liste des titres EXACTS des besoins de la liste fournie qui se rattachent à cet enjeu
+14. ⚠️ IMPORTANT : Les besoins liés doivent être des titres EXACTS de la liste des besoins identifiés. Ne crée pas de nouveaux besoins.
+
+💡 STRATÉGIE DE DIVERSIFICATION :
+- Analyse les enjeux déjà proposés pour identifier les domaines/processus déjà couverts
+- Cherche dans les TRANSCRIPTS et ATELIERS des aspects complètement différents
+- Si un domaine a déjà été exploré (ex: connaissances, qualité), passe à un autre domaine (ex: commercial, supply chain, R&D, formation, etc.)
+
+Itération actuelle : {current_iteration} / {max_iterations}
+
+🚀 OBJECTIF : Génère TOUJOURS 5 nouveaux enjeux avec des THÈMES VRAIMENT DIFFÉRENTS de tous les enjeux déjà proposés (validés ou rejetés). VÉRIFIE que chaque thème est UNIQUE et DISTINCT de TOUS les enjeux déjà proposés. Les enjeux validés sont conservés séparément, donc génère toujours 5 nouveaux enjeux à chaque itération.
 """
 
 EVALUATE_MATURITY_PROMPT = """
@@ -133,26 +183,33 @@ INSTRUCTIONS :
 2. Adapte les recommandations au niveau de maturité de l'entreprise
 3. Base-toi sur les besoins et cas d'usage identifiés
 4. Sois concret et actionnable
-5. Utilise le format : "1. [recommandation]", "2. [recommandation]", etc.
+5. Chaque recommandation doit avoir un ID unique (R1, R2, R3, R4) et un texte clair et actionnable
 
-Génère les 4 recommandations en suivant exactement ce format :
-1. [première recommandation personnalisée]
-2. [deuxième recommandation personnalisée]
-3. [troisième recommandation personnalisée]
-4. [quatrième recommandation personnalisée]
+Les recommandations seront automatiquement structurées selon le format attendu.
 """
 
 REGENERATE_RECOMMENDATIONS_PROMPT = """
 Tu dois régénérer les recommandations en tenant compte du feedback utilisateur.
 
-RECOMMANDATIONS PRÉCÉDENTES (REJETÉES) :
+⚠️ RECOMMANDATIONS DÉJÀ PROPOSÉES LORS DE L'ITÉRATION PRÉCÉDENTE (À NE JAMAIS REPROPOSER) :
+{previous_recommendations}
+
+Note importante : La liste ci-dessus contient TOUTES les recommandations proposées précédemment (validées ET rejetées).
+Tu dois générer des recommandations COMPLÈTEMENT DIFFÉRENTES de ces thèmes.
+
+🚫 RECOMMANDATIONS EXPLICITEMENT REJETÉES PAR L'UTILISATEUR :
 {rejected_recommendations}
 
-FEEDBACK UTILISATEUR :
+✅ RECOMMANDATIONS VALIDÉES (À CONSERVER - NE PAS LES RÉGÉNÉRER) :
+{validated_recommendations}
+
+💬 COMMENTAIRES DE L'UTILISATEUR :
 {recommendations_feedback}
 
-RECOMMANDATIONS VALIDÉES (À CONSERVER) :
-{validated_recommendations}
+📊 RÉSUMÉ DE LA VALIDATION :
+- Recommandations validées : {validated_count} / 4 minimum requis
+- Recommandations rejetées : {rejected_count}
+- Recommandations restantes à générer : {remaining_count}
 
 MATURITÉ IA ÉVALUÉE :
 {maturite_ia}
@@ -166,15 +223,39 @@ QUICK WINS PROPOSÉS :
 STRUCTURATION IA PROPOSÉE :
 {final_structuration_ia}
 
-INSTRUCTIONS :
-1. Analyse le feedback utilisateur pour comprendre ce qui doit être modifié
-2. Conserve les recommandations validées (ne les régénère pas)
-3. Régénère uniquement les recommandations rejetées en tenant compte du feedback
-4. Assure-toi d'avoir exactement 4 recommandations au total (validées + nouvelles)
-5. Si le feedback indique qu'il manque des recommandations, génère-en de nouvelles
-6. Adapte le ton et le contenu selon le feedback
+🎯 INSTRUCTIONS CRITIQUES POUR LA NOUVELLE ITÉRATION :
 
-Génère 4 recommandations au format structuré.
+⛔ INTERDICTIONS ABSOLUES :
+1. NE JAMAIS reproposer une recommandation déjà proposée dans l'itération précédente (même avec une formulation légèrement différente)
+2. NE PAS créer de variantes ou reformulations des recommandations déjà proposées
+3. Exemples à éviter :
+   - Si "Mettre en place un CRM" a déjà été proposé
+   - NE PAS proposer "Déployer un système CRM" (trop similaire)
+   - NE PAS proposer "Centraliser les données clients" (même domaine)
+   - PLUTÔT explorer d'autres domaines : formation, automatisation, analyse de données, innovation, etc.
+
+✅ OBLIGATIONS :
+4. Explorer des DOMAINES COMPLÈTEMENT DIFFÉRENTS de ceux déjà proposés
+5. Identifier des RECOMMANDATIONS NON ENCORE COUVERTS dans les données
+6. Proposer des recommandations plus concrètes, actionnables et mieux adaptées à la maturité IA
+7. Générer EXACTEMENT {remaining_count} nouvelles recommandations DISTINCTES pour atteindre l'objectif de 4 validations
+8. Chaque recommandation doit être unique et spécifique au contexte de l'entreprise
+
+📏 RÈGLES DE FORMAT :
+9. ⚠️ VÉRIFIE L'UNICITÉ DES THÈMES : Assure-toi qu'aucun thème n'est utilisé deux fois dans ta proposition ET qu'aucun thème ne ressemble aux recommandations déjà proposées
+10. Chaque recommandation doit avoir un ID unique (R1, R2, R3, R4) et un texte clair et actionnable
+11. Sois concret et actionnable
+12. Adapte les recommandations au niveau de maturité IA évalué
+13. Les recommandations seront automatiquement structurées selon le format attendu
+
+💡 STRATÉGIE DE DIVERSIFICATION :
+- Analyse les recommandations déjà proposées pour identifier les domaines/processus déjà couverts
+- Cherche dans les BESOINS, QUICK WINS et STRUCTURATION IA des aspects complètement différents
+- Si un domaine a déjà été exploré (ex: CRM, données), passe à un autre domaine (ex: formation, automatisation, innovation, etc.)
+
+Itération actuelle : {current_iteration} / {max_iterations}
+
+🚀 OBJECTIF : Génère {remaining_count} nouvelles recommandations avec des THÈMES VRAIMENT DIFFÉRENTS de toutes les recommandations déjà proposées (validées ou rejetées). VÉRIFIE que chaque thème est UNIQUE et DISTINCT de TOUTES les recommandations déjà proposées. Assure-toi d'avoir exactement 4 recommandations au total (validées + nouvelles).
 """
 
 EXTRACT_ENJEUX_CITATIONS_PROMPT = """

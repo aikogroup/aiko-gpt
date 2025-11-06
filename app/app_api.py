@@ -18,6 +18,36 @@ import sys
 
 # Ajouter le répertoire parent au path pour importer les modules
 sys.path.append(str(Path(__file__).parent.parent))
+
+# Charger les variables d'environnement depuis un fichier .env
+try:
+    from dotenv import load_dotenv
+    # Chercher le fichier .env dans plusieurs emplacements possibles
+    project_root = Path(__file__).parent.parent
+    env_files = [
+        project_root / "deploy" / ".env",  # Dans deploy/ (priorité pour compatibilité avec script de déploiement)
+        project_root / ".env",  # À la racine du projet
+        Path(__file__).parent / ".env",  # Dans app/
+    ]
+    env_loaded = False
+    for env_file in env_files:
+        if env_file.exists():
+            load_dotenv(env_file, override=False)  # override=False pour ne pas écraser les variables déjà définies
+            env_loaded = True
+            # Optionnel : afficher un message de debug (uniquement en dev)
+            if os.getenv("DEV_MODE") == "1":
+                print(f"✅ Fichier .env chargé depuis: {env_file}")
+            break
+    if not env_loaded and os.getenv("DEV_MODE") == "1":
+        print("⚠️ Aucun fichier .env trouvé")
+except ImportError:
+    # python-dotenv n'est pas installé, continuer sans
+    if os.getenv("DEV_MODE") == "1":
+        print("⚠️ python-dotenv n'est pas installé, les fichiers .env ne seront pas chargés")
+except Exception as e:
+    if os.getenv("DEV_MODE") == "1":
+        print(f"⚠️ Erreur lors du chargement du .env: {e}")
+
 from utils.report_generator import ReportGenerator
 from human_in_the_loop.streamlit_validation_interface import StreamlitValidationInterface
 from use_case_analysis.streamlit_use_case_validation import StreamlitUseCaseValidation
@@ -41,6 +71,102 @@ st.set_page_config(
 CONFIG_DIR = Path(__file__).parent.parent / "config"
 INTERVIEWERS_CONFIG_FILE = CONFIG_DIR / "interviewers.json"
 DEFAULT_INTERVIEWERS = ["Christella Umuhoza", "Adrien Fabry"]
+
+# ==================== AUTHENTIFICATION ====================
+
+def get_auth_username() -> str:
+    """Récupère le nom d'utilisateur depuis les variables d'environnement"""
+    return os.getenv("AUTH_USERNAME", "").strip()
+
+def get_auth_password() -> str:
+    """Récupère le mot de passe depuis les variables d'environnement"""
+    return os.getenv("AUTH_PASSWORD", "").strip()
+
+def is_auth_enabled() -> bool:
+    """Vérifie si l'authentification est activée (variables configurées)"""
+    username = get_auth_username()
+    password = get_auth_password()
+    return bool(username and password)
+
+def check_authentication() -> bool:
+    """
+    Vérifie si l'utilisateur est authentifié.
+    
+    Returns:
+        True si l'utilisateur est authentifié, False sinon
+    """
+    # Si l'authentification n'est pas configurée, autoriser l'accès
+    if not is_auth_enabled():
+        return True
+    
+    # Vérifier si l'utilisateur est authentifié dans la session
+    return st.session_state.get("authenticated", False)
+
+def verify_credentials(username: str, password: str) -> bool:
+    """
+    Vérifie les identifiants de l'utilisateur.
+    
+    Args:
+        username: Nom d'utilisateur
+        password: Mot de passe
+    
+    Returns:
+        True si les identifiants sont corrects, False sinon
+    """
+    # Si l'authentification n'est pas configurée, autoriser l'accès
+    if not is_auth_enabled():
+        return True
+    
+    auth_username = get_auth_username()
+    auth_password = get_auth_password()
+    return username.strip() == auth_username and password == auth_password
+
+def display_login_page():
+    """Affiche la page de connexion"""
+    # Centrer le contenu
+    col1, col2, col3 = st.columns([1, 2, 1])
+    
+    with col2:
+        st.markdown("<br><br>", unsafe_allow_html=True)
+        
+        # Logo si disponible
+        import config
+        logo_path = config.get_logo_path()
+        if logo_path.exists():
+            st.image(str(logo_path), width=300)
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("# 🔐 Connexion")
+        st.markdown("---")
+        
+        # Formulaire de connexion
+        with st.form("login_form"):
+            username = st.text_input("👤 Nom d'utilisateur", placeholder="Entrez votre nom d'utilisateur")
+            password = st.text_input("🔒 Mot de passe", type="password", placeholder="Entrez votre mot de passe")
+            
+            submitted = st.form_submit_button("🚀 Se connecter", type="primary", use_container_width=True)
+            
+            if submitted:
+                if not username or not password:
+                    st.error("❌ Veuillez remplir tous les champs")
+                elif verify_credentials(username, password):
+                    st.session_state.authenticated = True
+                    st.success("✅ Connexion réussie !")
+                    time.sleep(0.5)
+                    st.rerun()
+                else:
+                    st.error("❌ Identifiants incorrects")
+        
+        # Avertissement si l'authentification n'est pas configurée
+        if not is_auth_enabled():
+            st.warning("⚠️ L'authentification n'est pas configurée. Configurez AUTH_USERNAME et AUTH_PASSWORD pour activer la protection.")
+            
+            # Debug : afficher les valeurs pour diagnostiquer
+            if os.getenv("DEV_MODE") == "1":
+                st.write("🔍 Debug:")
+                st.write(f"- AUTH_USERNAME (from env): `{get_auth_username()}`")
+                st.write(f"- AUTH_PASSWORD (from env): `{'*' * len(get_auth_password()) if get_auth_password() else '(vide)'}`")
+                st.write(f"- is_auth_enabled(): `{is_auth_enabled()}`")
 
 def load_interviewers() -> List[str]:
     """
@@ -90,6 +216,9 @@ def save_interviewers(interviewers: List[str]) -> bool:
 
 def init_session_state():
     """Initialise l'état de session"""
+    # Authentification
+    if 'authenticated' not in st.session_state:
+        st.session_state.authenticated = False
     if 'thread_id' not in st.session_state:
         st.session_state.thread_id = None
     if 'workflow_status' not in st.session_state:
@@ -278,6 +407,9 @@ def poll_executive_workflow_status():
             "validation_type": state_data.get("validation_type", "")
         }
         
+        # Mettre à jour le statut dans session_state pour éviter de poller inutilement
+        st.session_state.executive_workflow_status = status
+        
         return status
     
     except Exception as e:
@@ -418,6 +550,21 @@ def display_interviewers_config():
         else:
             st.warning("⚠️ Veuillez saisir un nom")
 
+def display_work_in_progress():
+    """Affiche un message WORK IN PROGRESS pour la section de génération des recommandations"""
+    st.header("🎯 Génération des Enjeux et Recommandations")
+    
+    # Message WORK IN PROGRESS bien visible
+    st.markdown("---")
+    st.markdown("""
+    <div style="text-align: center; padding: 50px; background-color: #ffeb3b; border-radius: 10px; margin: 20px 0;">
+        <h1 style="color: #d32f2f; font-size: 72px; font-weight: bold; margin: 20px 0;">⚠️</h1>
+        <h1 style="color: #d32f2f; font-size: 48px; font-weight: bold; margin: 20px 0;">WORK IN PROGRESS</h1>
+        <p style="color: #424242; font-size: 24px; margin: 20px 0;">Cette fonctionnalité est en cours de développement</p>
+    </div>
+    """, unsafe_allow_html=True)
+    st.markdown("---")
+
 def display_recommendations_section():
     """Affiche la section de génération des recommandations (placeholder)"""
     st.header("📋 Génération des Enjeux et Recommandations")
@@ -430,15 +577,37 @@ def display_recommendations_section():
 def main():
     init_session_state()
     
+    # Debug : afficher si l'authentification est activée (uniquement en développement)
+    if os.getenv("DEV_MODE") == "1":
+        auth_enabled = is_auth_enabled()
+        auth_user = get_auth_username()
+        st.sidebar.write(f"🔐 Auth enabled: {auth_enabled}")
+        if auth_enabled:
+            st.sidebar.write(f"👤 User: {auth_user}")
+    
+    # Vérifier l'authentification avant d'afficher le contenu
+    if not check_authentication():
+        display_login_page()
+        return
+    
     # Sidebar avec navigation
     with st.sidebar:
         st.title("🤖 aikoGPT")
         st.markdown("---")
         
+        # Bouton de déconnexion
+        if st.button("🚪 Se déconnecter", use_container_width=True, key="logout_button"):
+            # Réinitialiser toutes les variables de session
+            for key in list(st.session_state.keys()):
+                del st.session_state[key]
+            st.rerun()
+        
+        st.markdown("---")
+        
         # Radio buttons pour la navigation
         page = st.radio(
             "Navigation",
-            ["Accueil", "Upload de documents", "Configuration des Intervieweurs", "Génération du Diag", "Génération des Enjeux et Recommandations"],
+            ["Accueil", "Upload de documents", "Configuration des Intervieweurs", "Génération du Rapport", "Génération des Enjeux et Recommandations"],
             key="navigation_radio"
         )
         
@@ -468,17 +637,18 @@ def main():
             st.markdown("**Liste actuelle des intervieweurs :**")
             for interviewer in interviewers:
                 st.text(f"• {interviewer}")
-    elif page == "Génération du Diag":
+    elif page == "Génération du Rapport":
         display_diagnostic_section()
     elif page == "Génération des Enjeux et Recommandations":
         display_recommendations_section()
+        # display_work_in_progress()
     elif page == "challenges_validation":
         # Page dédiée pour la validation des enjeux
         display_challenges_validation_page()
 
 def display_diagnostic_section():
     """Affiche la section de génération du diagnostic (utilise fichiers depuis session_state)"""
-    st.header("🔍 Génération du Diagnostic")
+    st.header("🔍 Génération du Rapport")
     
     # Si le workflow est en cours, afficher la progression
     if st.session_state.thread_id and st.session_state.workflow_status is not None:
@@ -1165,6 +1335,11 @@ def display_executive_workflow_progress():
     st.markdown("---")
     st.header("🔄 Progression du Workflow Executive Summary")
     
+    # Si le workflow est déjà terminé dans session_state, ne plus poller
+    if st.session_state.get("executive_workflow_status") == "completed":
+        display_executive_results()
+        return
+    
     # Poll le statut
     status = poll_executive_workflow_status()
     
@@ -1194,7 +1369,7 @@ def display_executive_workflow_progress():
         # Pas de rerun automatique ici, l'utilisateur doit valider
     
     elif status == "completed":
-        st.success("✅ **Workflow terminé avec succès !**")
+        # Ne plus faire de rerun automatique quand le workflow est terminé
         display_executive_results()
     
     elif status == "error":
@@ -1260,7 +1435,6 @@ def display_challenges_validation_interface():
     result = validation_interface.display_challenges_for_validation(
         identified_challenges=identified_challenges,
         validated_challenges=validated_challenges,
-        extracted_needs=extracted_needs,
         key_suffix=str(iteration_count)
     )
     
@@ -1323,26 +1497,59 @@ def display_recommendations_validation_interface():
     workflow_state = st.session_state.executive_workflow_state
     recommendations = workflow_state.get("recommendations", [])
     validated_recommendations = workflow_state.get("validated_recommendations", [])
+    iteration_count = workflow_state.get("recommendations_iteration_count", 0)
+    
+    # Nettoyer les anciennes clés de checkbox, texte et commentaires de l'itération précédente
+    if 'last_recommendations_iteration' not in st.session_state or st.session_state.last_recommendations_iteration != iteration_count:
+        # Nouvelle itération - nettoyer UNIQUEMENT les anciennes clés (avec l'ancien iteration_count)
+        if 'last_recommendations_iteration' in st.session_state:
+            old_iteration = st.session_state.last_recommendations_iteration
+            for key in list(st.session_state.keys()):
+                if (key.startswith("validate_recommendation_") or 
+                    key.startswith("recommendation_text_") or 
+                    key.startswith("recommendations_comments_")) and key.endswith(f"_{old_iteration}"):
+                    del st.session_state[key]
+        st.session_state.last_recommendations_iteration = iteration_count
+    
+    # Affichage du message de progression
+    remaining_to_validate = max(0, 4 - len(validated_recommendations))
+    
+    if iteration_count == 0:
+        st.info(f"💡 Validez au moins 4 recommandations parmi les {len(recommendations)} proposées.")
+    else:
+        st.warning(f"🔄 Itération {iteration_count + 1} : {remaining_to_validate} recommandation(s) supplémentaire(s) à valider.")
     
     result = validation_interface.display_recommendations_for_validation(
         recommendations=recommendations,
-        validated_recommendations=validated_recommendations
+        validated_recommendations=validated_recommendations,
+        key_suffix=str(iteration_count)
     )
     
     # Si un résultat est retourné, envoyer à l'API avec messages rotatifs
-    if result is not None and len(result.get("validated_recommendations", [])) >= 4:
+    if result is not None:
         thread_id = st.session_state.get("executive_thread_id")
         if not thread_id:
             st.error("❌ Aucun thread ID disponible")
             return
         
-        # Envoyer à l'API avec messages rotatifs
-        validation_messages = [
-            "📤 Envoi de votre validation finale...",
-            "🤖 L'IA finalise l'analyse...",
-            "📊 Génération du rapport final...",
-            "⚙️ Derniers ajustements..."
-        ]
+        # Vérifier si on a atteint le minimum requis
+        total_validated = result.get("total_validated", 0)
+        if total_validated < 4:
+            # Pas encore assez de recommandations validées - régénération nécessaire
+            validation_messages = [
+                "📤 Envoi de votre validation...",
+                "🔄 Régénération des recommandations...",
+                "🤖 L'IA analyse votre feedback...",
+                "💡 Génération de nouvelles recommandations..."
+            ]
+        else:
+            # Assez de recommandations validées - finalisation
+            validation_messages = [
+                "📤 Envoi de votre validation finale...",
+                "🤖 L'IA finalise l'analyse...",
+                "📊 Génération du rapport final...",
+                "⚙️ Derniers ajustements..."
+            ]
         
         status_placeholder = st.empty()
         result_queue = queue.Queue()
@@ -1369,8 +1576,12 @@ def display_recommendations_validation_interface():
                 success, error_msg = result_queue.get(timeout=1)
                 
                 if success:
-                    status_placeholder.success("✅ Validation envoyée ! Le workflow est terminé !")
-                    st.session_state.executive_workflow_status = "completed"
+                    if total_validated >= 4:
+                        status_placeholder.success("✅ Validation envoyée ! Le workflow est terminé !")
+                        st.session_state.executive_workflow_status = "completed"
+                    else:
+                        status_placeholder.success("✅ Validation envoyée ! Le workflow reprend...")
+                        st.session_state.executive_workflow_status = "running"
                     time.sleep(1)
                     st.rerun()
                 else:
@@ -1429,8 +1640,38 @@ def send_executive_validation(thread_id: str, validation_type: str, validation_r
         st.error(f"❌ Erreur: {str(e)}")
 
 def display_executive_results():
-    """Affiche les résultats finaux de l'Executive Summary"""
-    # Récupérer les données depuis session_state (pas d'appel API direct)
+    """Affiche les résultats finaux de l'Executive Summary avec un résumé clair"""
+    # Forcer une dernière récupération de l'état depuis l'API pour être sûr d'avoir les dernières données
+    thread_id = st.session_state.get("executive_thread_id")
+    if thread_id:
+        try:
+            # Récupérer l'état complet depuis l'API
+            state_response = requests.get(
+                f"{API_URL}/executive-summary/threads/{thread_id}/state",
+                timeout=60
+            )
+            state_response.raise_for_status()
+            state_data = state_response.json()
+            
+            # Mettre à jour session_state avec l'état complet
+            st.session_state.executive_workflow_state = {
+                "identified_challenges": state_data.get("identified_challenges", []),
+                "validated_challenges": state_data.get("validated_challenges", []),
+                "rejected_challenges": [],
+                "extracted_needs": state_data.get("extracted_needs", []),
+                "maturity_score": state_data.get("maturity_score", 3),
+                "maturity_summary": state_data.get("maturity_summary", ""),
+                "recommendations": state_data.get("recommendations", []),
+                "validated_recommendations": state_data.get("validated_recommendations", []),
+                "challenges_iteration_count": state_data.get("challenges_iteration_count", 0),
+                "workflow_paused": state_data.get("workflow_paused", False),
+                "validation_type": state_data.get("validation_type", "")
+            }
+        except Exception as e:
+            st.warning(f"⚠️ Impossible de récupérer l'état final depuis l'API: {str(e)}")
+            # Continuer avec l'état en cache
+    
+    # Récupérer les données depuis session_state
     workflow_state = st.session_state.executive_workflow_state
     
     validated_challenges = workflow_state.get("validated_challenges", [])
@@ -1438,39 +1679,92 @@ def display_executive_results():
     maturity_summary = workflow_state.get("maturity_summary", "")
     validated_recommendations = workflow_state.get("validated_recommendations", [])
     
-    st.subheader("📊 Résultats Executive Summary")
+    # Debug: afficher ce qui a été récupéré
+    if st.session_state.get("debug_mode", False):
+        with st.expander("🔍 Debug - État récupéré", expanded=False):
+            st.json({
+                "validated_challenges_count": len(validated_challenges),
+                "validated_recommendations_count": len(validated_recommendations),
+                "validated_recommendations": validated_recommendations,
+                "maturity_score": maturity_score
+            })
     
-    # Enjeux
+    # Afficher un message de succès en haut
+    st.success("✅ **Workflow terminé avec succès !**")
+    st.markdown("---")
+    
+    # Titre principal
+    st.title("📊 Résumé Executive Summary")
+    st.markdown("")
+    
+    # Section Enjeux identifiés
+    st.header("🎯 Enjeux identifiés")
     if validated_challenges:
-        st.markdown("### 🎯 Enjeux Stratégiques")
-        for ch in validated_challenges:
-            st.markdown(f"**{ch.get('id', '')} - {ch.get('titre', '')}**")
-            st.markdown(ch.get('description', ''))
-            st.markdown("---")
+        for i, ch in enumerate(validated_challenges, 1):
+            # Afficher l'ID et le titre si disponibles, sinon juste le numéro
+            challenge_id = ch.get('id', '')
+            challenge_titre = ch.get('titre', '')
+            challenge_desc = ch.get('description', '')
+            
+            if challenge_id and challenge_titre:
+                st.markdown(f"**{i}. {challenge_id} - {challenge_titre}**")
+            elif challenge_titre:
+                st.markdown(f"**{i}. {challenge_titre}**")
+            else:
+                st.markdown(f"**{i}. Enjeu {i}**")
+            
+            if challenge_desc:
+                st.markdown(challenge_desc)
+            
+            if i < len(validated_challenges):
+                st.markdown("")
     else:
         st.warning("⚠️ Aucun enjeu validé")
     
-    # Maturité
-    st.markdown("### 📊 Maturité IA")
-    if maturity_score is not None and maturity_summary:
-        st.metric("Score de maturité", f"{maturity_score}/5")
-        st.info("💡 " + maturity_summary)
-    elif maturity_score is not None:
-        st.metric("Score de maturité", f"{maturity_score}/5")
-        st.warning("⚠️ Phrase descriptive de maturité non disponible")
-    else:
-        st.warning("⚠️ Évaluation de maturité non disponible (pas encore calculée)")
+    st.markdown("---")
     
-    # Recommandations
+    # Section Recommandations clés
+    st.header("💡 Recommandations clés")
     if validated_recommendations:
-        st.markdown("### 💡 Recommandations")
+        # S'assurer que les recommandations sont bien des chaînes de caractères
         for i, rec in enumerate(validated_recommendations, 1):
-            st.markdown(f"**{i}. {rec}**")
+            # Si c'est un dictionnaire, extraire le texte
+            if isinstance(rec, dict):
+                rec_text = rec.get("text", rec.get("recommendation", str(rec)))
+            else:
+                rec_text = str(rec)
+            
+            st.markdown(f"**{i}. {rec_text}**")
+            if i < len(validated_recommendations):
+                st.markdown("")
     else:
         st.warning("⚠️ Aucune recommandation validée")
+        # Debug: afficher l'état complet pour comprendre le problème
+        with st.expander("🔍 Debug - Pourquoi aucune recommandation ?", expanded=False):
+            st.json({
+                "workflow_state_keys": list(workflow_state.keys()),
+                "validated_recommendations_type": type(validated_recommendations).__name__,
+                "validated_recommendations_value": validated_recommendations,
+                "recommendations_count": len(workflow_state.get("recommendations", [])),
+                "full_workflow_state": workflow_state
+            })
+    
+    st.markdown("---")
+    
+    # Section Maturité IA (optionnelle, en plus petit)
+    with st.expander("📊 Évaluation de la maturité IA", expanded=False):
+        if maturity_score is not None and maturity_summary:
+            st.metric("Score de maturité", f"{maturity_score}/5")
+            st.info("💡 " + maturity_summary)
+        elif maturity_score is not None:
+            st.metric("Score de maturité", f"{maturity_score}/5")
+            st.warning("⚠️ Phrase descriptive de maturité non disponible")
+        else:
+            st.warning("⚠️ Évaluation de maturité non disponible")
+    
+    st.markdown("---")
     
     # Bouton de téléchargement
-    st.markdown("---")
     results_json = {
         "validated_challenges": validated_challenges,
         "maturity_score": maturity_score,

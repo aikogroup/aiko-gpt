@@ -10,7 +10,8 @@ from dotenv import load_dotenv
 from models.executive_summary_models import (
     ChallengesResponse,
     MaturityResponse,
-    RecommendationsResponse
+    RecommendationsResponse,
+    Recommendation
 )
 from prompts.executive_summary_prompts import (
     EXECUTIVE_SUMMARY_SYSTEM_PROMPT,
@@ -50,7 +51,9 @@ class ExecutiveSummaryAgent:
         final_needs: List[Dict[str, Any]],
         rejected_challenges: Optional[List[Dict[str, Any]]] = None,
         validated_challenges: Optional[List[Dict[str, Any]]] = None,
-        challenges_feedback: str = ""
+        challenges_feedback: str = "",
+        challenges_iteration_count: int = 0,
+        max_challenges_iterations: int = 3
     ) -> Dict[str, Any]:
         """
         Identifie 5 enjeux stratégiques de l'IA.
@@ -62,6 +65,8 @@ class ExecutiveSummaryAgent:
             rejected_challenges: Enjeux précédemment rejetés (pour régénération)
             validated_challenges: Enjeux validés à conserver (pour régénération)
             challenges_feedback: Feedback utilisateur (pour régénération)
+            challenges_iteration_count: Numéro de l'itération actuelle
+            max_challenges_iterations: Nombre maximum d'itérations
             
         Returns:
             Dict avec 'challenges' (liste de 5 enjeux)
@@ -72,15 +77,32 @@ class ExecutiveSummaryAgent:
             needs_str = self._format_needs(final_needs)
             
             # Choisir le prompt selon le contexte (régénération ou première génération)
-            if rejected_challenges and challenges_feedback:
-                # Mode régénération
-                rejected_str = self._format_challenges(rejected_challenges)
+            # Si on a des enjeux validés ou rejetés, c'est une régénération
+            if validated_challenges or rejected_challenges:
+                # Mode régénération - passer TOUS les enjeux précédents
+                all_previous = []
+                if validated_challenges:
+                    all_previous.extend(validated_challenges)
+                if rejected_challenges:
+                    all_previous.extend(rejected_challenges)
+                
+                previous_str = self._format_challenges(all_previous) if all_previous else "Aucun"
+                rejected_str = self._format_challenges(rejected_challenges) if rejected_challenges else "Aucun"
                 validated_str = self._format_challenges(validated_challenges) if validated_challenges else "Aucun"
                 
+                # Calculer les valeurs pour le prompt
+                validated_count = len(validated_challenges) if validated_challenges else 0
+                rejected_count = len(rejected_challenges) if rejected_challenges else 0
+                
                 prompt = REGENERATE_CHALLENGES_PROMPT.format(
+                    previous_challenges=previous_str,
                     rejected_challenges=rejected_str,
-                    challenges_feedback=challenges_feedback,
+                    challenges_feedback=challenges_feedback or "Aucun commentaire",
                     validated_challenges=validated_str,
+                    validated_count=validated_count,
+                    rejected_count=rejected_count,
+                    current_iteration=challenges_iteration_count + 1,
+                    max_iterations=max_challenges_iterations,
                     transcript_content=transcript_content,
                     workshop_content=workshop_content,
                     final_needs=needs_str
@@ -199,7 +221,9 @@ class ExecutiveSummaryAgent:
         final_structuration_ia: List[Dict[str, Any]],
         rejected_recommendations: Optional[List[str]] = None,
         validated_recommendations: Optional[List[str]] = None,
-        recommendations_feedback: str = ""
+        recommendations_feedback: str = "",
+        recommendations_iteration_count: int = 0,
+        max_recommendations_iterations: int = 3
     ) -> Dict[str, Any]:
         """
         Génère 4 recommandations personnalisées.
@@ -212,6 +236,8 @@ class ExecutiveSummaryAgent:
             rejected_recommendations: Recommandations précédemment rejetées (pour régénération)
             validated_recommendations: Recommandations validées à conserver (pour régénération)
             recommendations_feedback: Feedback utilisateur (pour régénération)
+            recommendations_iteration_count: Numéro de l'itération actuelle
+            max_recommendations_iterations: Nombre maximum d'itérations
             
         Returns:
             Dict avec 'recommendations' (liste de 4 recommandations)
@@ -224,15 +250,34 @@ class ExecutiveSummaryAgent:
             structuration_str = self._format_use_cases(final_structuration_ia)
             
             # Choisir le prompt selon le contexte (régénération ou première génération)
-            if rejected_recommendations and recommendations_feedback:
-                # Mode régénération
-                rejected_str = "\n".join([f"- {r}" for r in rejected_recommendations])
+            # Si on a des recommandations validées ou rejetées, c'est une régénération
+            if validated_recommendations or rejected_recommendations:
+                # Mode régénération - passer TOUTES les recommandations précédentes
+                all_previous = []
+                if validated_recommendations:
+                    all_previous.extend(validated_recommendations)
+                if rejected_recommendations:
+                    all_previous.extend(rejected_recommendations)
+                
+                previous_str = "\n".join([f"- {r}" for r in all_previous]) if all_previous else "Aucune"
+                rejected_str = "\n".join([f"- {r}" for r in rejected_recommendations]) if rejected_recommendations else "Aucune"
                 validated_str = "\n".join([f"- {r}" for r in validated_recommendations]) if validated_recommendations else "Aucune"
                 
+                # Calculer les valeurs pour le prompt
+                validated_count = len(validated_recommendations) if validated_recommendations else 0
+                rejected_count = len(rejected_recommendations) if rejected_recommendations else 0
+                remaining_count = max(0, 4 - validated_count)
+                
                 prompt = REGENERATE_RECOMMENDATIONS_PROMPT.format(
+                    previous_recommendations=previous_str,
                     rejected_recommendations=rejected_str,
-                    recommendations_feedback=recommendations_feedback,
+                    recommendations_feedback=recommendations_feedback or "Aucun commentaire",
                     validated_recommendations=validated_str,
+                    validated_count=validated_count,
+                    rejected_count=rejected_count,
+                    remaining_count=remaining_count,
+                    current_iteration=recommendations_iteration_count + 1,
+                    max_iterations=max_recommendations_iterations,
                     maturite_ia=maturite_str,
                     final_needs=needs_str,
                     final_quick_wins=quick_wins_str,
@@ -261,7 +306,19 @@ class ExecutiveSummaryAgent:
             )
             
             parsed_response = response.output_parsed.model_dump()
-            recommendations = parsed_response.get("recommendations", [])
+            recommendations_objects = parsed_response.get("recommendations", [])
+            
+            # Convertir les objets Recommendation en liste de strings (extraire le text)
+            recommendations = []
+            for rec_obj in recommendations_objects:
+                if isinstance(rec_obj, dict):
+                    text = rec_obj.get("text", "").strip()
+                else:
+                    # Si c'est déjà un objet Recommendation
+                    text = rec_obj.text.strip() if hasattr(rec_obj, 'text') else str(rec_obj).strip()
+                
+                if text:
+                    recommendations.append(text)
             
             logger.info(f"✅ {len(recommendations)} recommandations générées")
             return {"recommendations": recommendations}
@@ -271,18 +328,17 @@ class ExecutiveSummaryAgent:
             return {"recommendations": []}
     
     def _format_needs(self, needs: List[Dict[str, Any]]) -> str:
-        """Formate les besoins pour le prompt"""
+        """Formate les besoins pour le prompt - ne passe que les titres"""
         if not needs:
             return "Aucun besoin identifié"
         
         formatted = []
         for i, need in enumerate(needs, 1):
-            theme = need.get("titre", f"Besoins {i}")
-            quotes = need.get("quotes", [])
-            quotes_str = "\n  - ".join(quotes) if quotes else "Aucune citation"
-            formatted.append(f"{i}. {theme}:\n  - {quotes_str}")
+            # Utiliser "titre" ou "theme" selon la structure du besoin
+            titre = need.get("titre") or need.get("theme", f"Besoins {i}")
+            formatted.append(f"{i}. {titre}")
         
-        return "\n\n".join(formatted)
+        return "\n".join(formatted)
     
     def _format_use_cases(self, use_cases: List[Dict[str, Any]]) -> str:
         """Formate les cas d'usage pour le prompt"""

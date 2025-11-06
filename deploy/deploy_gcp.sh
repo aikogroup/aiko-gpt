@@ -149,9 +149,11 @@ STREAMLIT_DEPLOY_OPTS=(
   --timeout 300
 )
 
-# Ajouter la variable d'environnement API_URL pour Streamlit
+# Ajouter les variables d'environnement pour Streamlit
 STREAMLIT_ENV_VARS="API_URL=${API_URL}"
 [ -n "${DEV_MODE:-}" ] && STREAMLIT_ENV_VARS="${STREAMLIT_ENV_VARS},DEV_MODE=${DEV_MODE}"
+[ -n "${AUTH_USERNAME:-}" ] && STREAMLIT_ENV_VARS="${STREAMLIT_ENV_VARS},AUTH_USERNAME=${AUTH_USERNAME}"
+[ -n "${AUTH_PASSWORD:-}" ] && STREAMLIT_ENV_VARS="${STREAMLIT_ENV_VARS},AUTH_PASSWORD=${AUTH_PASSWORD}"
 STREAMLIT_DEPLOY_OPTS+=(--set-env-vars "${STREAMLIT_ENV_VARS}")
 
 # Déployer Streamlit sur Cloud Run
