@@ -54,11 +54,10 @@ class TranscriptMaturiteAgent:
             try:
                 logger.info(f"Traitement transcript pour maturité: {file_path}")
                 
-                # Utiliser TranscriptAgent pour parser et filtrer
-                result = self.transcript_agent.process_single_file(file_path)
+                # Utiliser TranscriptAgent pour parser et filtrer (SANS analyse sémantique)
+                result = self.transcript_agent.get_interesting_parts_only(file_path)
                 
-                # Extraire les interventions intéressantes (sans analyse sémantique)
-                # process_single_file retourne interesting_parts.interventions, pas interesting_interventions
+                # Extraire les interventions intéressantes
                 interesting_parts = result.get("interesting_parts", {})
                 interesting_interventions = interesting_parts.get("interventions", [])
                 
@@ -103,50 +102,66 @@ class TranscriptMaturiteAgent:
     
     def _extract_citations_with_llm(self, transcript_text: str, interventions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Extrait les citations avec LLM"""
-        try:
-            prompt = EXTRACT_MATURITE_CITATIONS_PROMPT.format(transcript_text=transcript_text)
-            
-            response = self.client.responses.parse(
-                model=self.model,
-                instructions="Tu es un expert en évaluation de maturité IA. Extrait uniquement les citations pertinentes pour évaluer la maturité IA.",
-                input=[
-                    {
-                        "role": "user",
-                        "content": prompt
+        max_retries = 2
+        for attempt in range(max_retries):
+            try:
+                prompt = EXTRACT_MATURITE_CITATIONS_PROMPT.format(transcript_text=transcript_text)
+                
+                response = self.client.responses.parse(
+                    model=self.model,
+                    instructions="Tu es un expert en évaluation de maturité IA. Extrait uniquement les citations pertinentes pour évaluer la maturité IA. IMPORTANT: Assure-toi que toutes les citations sont correctement échappées dans le JSON (guillemets, apostrophes, retours à la ligne).",
+                    input=[
+                        {
+                            "role": "user",
+                            "content": prompt
+                        }
+                    ],
+                    text_format=CitationsMaturiteResponse
+                )
+                
+                parsed_response = response.output_parsed.model_dump()
+                citations = parsed_response.get("citations", [])
+                
+                # Enrichir avec les métadonnées des interventions
+                enriched_citations = []
+                for citation_data in citations:
+                    citation_text = citation_data.get("citation", "")
+                    
+                    # Trouver l'intervention correspondante
+                    matching_intervention = None
+                    for intervention in interventions:
+                        if citation_text in intervention.get("text", ""):
+                            matching_intervention = intervention
+                            break
+                    
+                    enriched_citation = {
+                        "citation": citation_data.get("citation", ""),
+                        "speaker": citation_data.get("speaker", matching_intervention.get("speaker", "") if matching_intervention else ""),
+                        "timestamp": citation_data.get("timestamp", matching_intervention.get("timestamp", "") if matching_intervention else ""),
+                        "type_info": citation_data.get("type_info", ""),
+                        "contexte": citation_data.get("contexte", ""),
+                        "speaker_type": matching_intervention.get("speaker_type", "") if matching_intervention else "",
+                        "speaker_level": matching_intervention.get("speaker_level", "") if matching_intervention else ""
                     }
-                ],
-                text_format=CitationsMaturiteResponse
-            )
-            
-            parsed_response = response.output_parsed.model_dump()
-            citations = parsed_response.get("citations", [])
-            
-            # Enrichir avec les métadonnées des interventions
-            enriched_citations = []
-            for citation_data in citations:
-                citation_text = citation_data.get("citation", "")
+                    enriched_citations.append(enriched_citation)
                 
-                # Trouver l'intervention correspondante
-                matching_intervention = None
-                for intervention in interventions:
-                    if citation_text in intervention.get("text", ""):
-                        matching_intervention = intervention
-                        break
+                return enriched_citations
                 
-                enriched_citation = {
-                    "citation": citation_data.get("citation", ""),
-                    "speaker": citation_data.get("speaker", matching_intervention.get("speaker", "") if matching_intervention else ""),
-                    "timestamp": citation_data.get("timestamp", matching_intervention.get("timestamp", "") if matching_intervention else ""),
-                    "type_info": citation_data.get("type_info", ""),
-                    "contexte": citation_data.get("contexte", ""),
-                    "speaker_type": matching_intervention.get("speaker_type", "") if matching_intervention else "",
-                    "speaker_level": matching_intervention.get("speaker_level", "") if matching_intervention else ""
-                }
-                enriched_citations.append(enriched_citation)
-            
-            return enriched_citations
-            
-        except Exception as e:
-            logger.error(f"Erreur lors de l'extraction LLM: {e}", exc_info=True)
-            return []
+            except Exception as e:
+                error_msg = str(e)
+                logger.warning(f"Erreur lors de l'extraction LLM (tentative {attempt + 1}/{max_retries}): {error_msg}")
+                
+                # Si c'est une erreur de parsing JSON, essayer de récupérer la réponse brute
+                if "json_invalid" in error_msg or "EOF while parsing" in error_msg:
+                    logger.warning("Erreur de parsing JSON détectée - le modèle a peut-être retourné un JSON invalide")
+                    if attempt < max_retries - 1:
+                        logger.info("Nouvelle tentative avec un prompt plus strict...")
+                        continue
+                
+                # Si c'est la dernière tentative, logger l'erreur complète et retourner vide
+                if attempt == max_retries - 1:
+                    logger.error(f"Erreur lors de l'extraction LLM après {max_retries} tentatives: {e}", exc_info=True)
+                    return []
+        
+        return []
 

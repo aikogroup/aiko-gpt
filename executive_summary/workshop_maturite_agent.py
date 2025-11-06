@@ -8,6 +8,7 @@ from pathlib import Path
 from openai import OpenAI
 import os
 from dotenv import load_dotenv
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from process_atelier.workshop_agent import WorkshopAgent
 from prompts.executive_summary_prompts import EXTRACT_WORKSHOP_MATURITE_PROMPT, EXECUTIVE_SUMMARY_SYSTEM_PROMPT
 from models.executive_summary_models import WorkshopMaturiteResponse
@@ -68,10 +69,29 @@ class WorkshopMaturiteAgent:
                     else:
                         workshops_dict.append(wd)
                 
-                # Traiter chaque atelier
-                for workshop_data in workshops_dict:
-                    informations = self._extract_informations_with_llm(workshop_data)
-                    all_informations.extend(informations)
+                # 🚀 PARALLÉLISATION : Traiter tous les ateliers en même temps
+                if len(workshops_dict) > 1:
+                    logger.info(f"Traitement parallèle de {len(workshops_dict)} ateliers")
+                    with ThreadPoolExecutor(max_workers=len(workshops_dict)) as executor:
+                        future_to_workshop = {}
+                        for workshop_data in workshops_dict:
+                            future = executor.submit(self._extract_informations_with_llm, workshop_data)
+                            future_to_workshop[future] = workshop_data.get('theme', 'N/A')
+                        
+                        # Récupérer les résultats au fur et à mesure
+                        for future in as_completed(future_to_workshop):
+                            workshop_name = future_to_workshop[future]
+                            try:
+                                informations = future.result()
+                                all_informations.extend(informations)
+                                logger.info(f"✓ Atelier '{workshop_name}' terminé")
+                            except Exception as e:
+                                logger.error(f"❌ Erreur lors du traitement de l'atelier '{workshop_name}': {e}", exc_info=True)
+                else:
+                    # Traitement séquentiel si un seul atelier
+                    for workshop_data in workshops_dict:
+                        informations = self._extract_informations_with_llm(workshop_data)
+                        all_informations.extend(informations)
                 
             except Exception as e:
                 logger.error(f"Erreur lors du traitement de {file_path}: {e}", exc_info=True)

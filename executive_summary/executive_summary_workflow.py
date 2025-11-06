@@ -458,7 +458,9 @@ class ExecutiveSummaryWorkflow:
     
     def _identify_challenges_node(self, state: ExecutiveSummaryState) -> ExecutiveSummaryState:
         """Identifie les 5 enjeux stratégiques"""
-        print(f"\n🎯 [EXECUTIVE] identify_challenges_node - DÉBUT")
+        import time
+        start_time = time.time()
+        print(f"\n🎯 [EXECUTIVE] identify_challenges_node - DÉBUT ({time.strftime('%H:%M:%S.%f', time.localtime(start_time))[:-3]})")
         try:
             # Préparer le contenu
             transcript_content = self._format_citations(state.get("transcript_enjeux_citations", []))
@@ -484,7 +486,10 @@ class ExecutiveSummaryWorkflow:
             )
             
             state["identified_challenges"] = result.get("challenges", [])
+            end_time = time.time()
+            duration = end_time - start_time
             print(f"✅ {len(state['identified_challenges'])} enjeux identifiés")
+            print(f"⏱️ [TIMING] identify_challenges_node: {duration:.3f}s")
             
             return state
             
@@ -495,7 +500,9 @@ class ExecutiveSummaryWorkflow:
     
     def _human_validation_enjeux_node(self, state: ExecutiveSummaryState) -> ExecutiveSummaryState:
         """Nœud de validation humaine des enjeux"""
-        print(f"\n🛑 [EXECUTIVE] human_validation_enjeux_node - DÉBUT")
+        import time
+        start_time = time.time()
+        print(f"\n🛑 [EXECUTIVE] human_validation_enjeux_node - DÉBUT ({time.strftime('%H:%M:%S.%f', time.localtime(start_time))[:-3]})")
         print(f"📊 identified_challenges: {len(state.get('identified_challenges', []))}")
         
         try:
@@ -532,8 +539,11 @@ class ExecutiveSummaryWorkflow:
                     state["challenges_no_progress_count"] = 0
                     print(f"✅ Progression détectée - Compteur sans progression réinitialisé")
                 
+                end_time = time.time()
+                duration = end_time - start_time
                 print(f"📊 Enjeux nouvellement validés: {len(newly_validated_filtered)}")
                 print(f"📊 Total enjeux validés: {len(state['validated_challenges'])}")
+                print(f"⏱️ [TIMING] human_validation_enjeux_node: {duration:.3f}s")
                 
                 return state
             else:
@@ -549,7 +559,9 @@ class ExecutiveSummaryWorkflow:
     
     def _check_challenges_success_node(self, state: ExecutiveSummaryState) -> ExecutiveSummaryState:
         """Vérifie le succès de la validation des enjeux"""
-        print(f"\n🔄 [EXECUTIVE] check_challenges_success_node - DÉBUT")
+        import time
+        start_time = time.time()
+        print(f"\n🔄 [EXECUTIVE] check_challenges_success_node - DÉBUT ({time.strftime('%H:%M:%S.%f', time.localtime(start_time))[:-3]})")
         
         validated_count = len(state.get("validated_challenges", []))
         success = validated_count >= 5
@@ -575,6 +587,10 @@ class ExecutiveSummaryWorkflow:
             print(f"🔄 Itération {state['challenges_iteration_count']}/{state.get('max_challenges_iterations', 3)}")
         else:
             print(f"✅ Objectif atteint ! {validated_count} enjeux validés")
+        
+        end_time = time.time()
+        duration = end_time - start_time
+        print(f"⏱️ [TIMING] check_challenges_success_node: {duration:.3f}s")
         
         return state
     

@@ -570,18 +570,29 @@ async def validate_executive(thread_id: str, feedback: ExecutiveValidationFeedba
     workflow = workflow_data["workflow"]
     
     # Injecter le feedback dans l'état
+    import time
+    api_start_time = time.time()
+    print(f"⏱️ [TIMING] validate_executive - DÉBUT ({time.strftime('%H:%M:%S.%f', time.localtime(api_start_time))[:-3]})")
+    
     config = {"configurable": {"thread_id": thread_id}}
+    get_state_start = time.time()
     current_state = workflow.graph.get_state(config)
+    get_state_duration = time.time() - get_state_start
+    print(f"⏱️ [TIMING] get_state: {get_state_duration:.3f}s")
     
     # Mettre à jour avec le feedback
+    update_start = time.time()
     updated_state = current_state.values.copy()
     updated_state["validation_result"] = feedback.validation_result
     updated_state["validation_type"] = feedback.validation_type
     
     # Reprendre le workflow
     workflow.graph.update_state(config, updated_state)
+    update_duration = time.time() - update_start
+    print(f"⏱️ [TIMING] update_state: {update_duration:.3f}s")
     
     # Continuer l'exécution jusqu'au prochain interrupt
+    stream_start = time.time()
     final_state = None
     for chunk in workflow.graph.stream(None, config):
         print(f"📊 [EXECUTIVE] Chunk reçu après validation: {list(chunk.keys())}")
@@ -589,9 +600,16 @@ async def validate_executive(thread_id: str, feedback: ExecutiveValidationFeedba
             print(f"  • Nœud '{node_name}' exécuté")
             final_state = node_state
     
+    stream_duration = time.time() - stream_start
+    print(f"⏱️ [TIMING] workflow.graph.stream: {stream_duration:.3f}s")
+    
     # Récupérer l'état complet depuis le checkpointer après l'exécution
     # IMPORTANT : Le workflow s'arrête à human_validation_enjeux grâce à interrupt_before
+    get_state_after_start = time.time()
     snapshot = workflow.graph.get_state(config)
+    get_state_after_duration = time.time() - get_state_after_start
+    print(f"⏱️ [TIMING] get_state (après stream): {get_state_after_duration:.3f}s")
+    
     if snapshot and snapshot.values:
         state = snapshot.values
         workflow_data["state"] = state
@@ -627,6 +645,9 @@ async def validate_executive(thread_id: str, feedback: ExecutiveValidationFeedba
     elif final_state:
         workflow_data["state"] = final_state
         workflow_data["status"] = "running"
+    
+    total_duration = time.time() - api_start_time
+    print(f"⏱️ [TIMING] validate_executive (total): {total_duration:.3f}s")
     
     return {"status": "success", "workflow_status": workflow_data["status"]}
 

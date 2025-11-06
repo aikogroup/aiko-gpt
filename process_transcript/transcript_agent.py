@@ -105,6 +105,77 @@ class TranscriptAgent:
                 "error": str(e)
             }
     
+    def get_interesting_parts_only(self, file_path: str) -> Dict[str, Any]:
+        """
+        Traite un fichier de transcription et retourne uniquement les parties intéressantes
+        SANS effectuer l'analyse sémantique (plus rapide et moins coûteux).
+        
+        Cette méthode est optimisée pour les cas où on a besoin seulement des interventions
+        intéressantes, comme pour l'extraction de citations spécifiques (enjeux, maturité, etc.)
+        
+        Args:
+            file_path: Chemin vers le fichier (PDF ou JSON)
+            
+        Returns:
+            Dictionnaire contenant uniquement les parties intéressantes avec métadonnées
+        """
+        logger.info(f"=== Début du traitement (sans analyse sémantique): {file_path} ===")
+        
+        try:
+            # Détecter le type de fichier et parser en conséquence
+            file_extension = Path(file_path).suffix.lower()
+            
+            # Étape 1: Parsing du fichier
+            if file_extension == '.json':
+                logger.info("Étape 1: Parsing du fichier JSON")
+                interventions = self.json_parser.parse_transcript(file_path)
+                parser_used = self.json_parser
+            elif file_extension == '.pdf':
+                logger.info("Étape 1: Parsing du fichier PDF")
+                interventions = self.pdf_parser.parse_transcript(file_path)
+                parser_used = self.pdf_parser
+            else:
+                raise ValueError(f"Format de fichier non supporté: {file_extension}. Utilisez .pdf ou .json")
+            
+            logger.info(f"✓ {len(interventions)} interventions extraites")
+            
+            # Étape 1.5: Classification des speakers (interviewer/interviewé, direction/métier)
+            logger.info("Étape 1.5: Classification des speakers")
+            enriched_interventions = self.speaker_classifier.classify_speakers(interventions)
+            logger.info(f"✓ {len(enriched_interventions)} interventions classifiées")
+            
+            # Étape 2: Filtrage des parties intéressantes (sur les données déjà parsées et classifiées)
+            logger.info("Étape 2: Filtrage des parties intéressantes")
+            interesting_interventions = self.interesting_parts_agent._filter_interesting_parts(enriched_interventions)
+            logger.info(f"✓ {len(interesting_interventions)} interventions intéressantes identifiées")
+            
+            # Résultat final (SANS analyse sémantique)
+            result = {
+                "file_path": file_path,
+                "file_type": file_extension,
+                "status": "success",
+                "parsing": {
+                    "total_interventions": len(interventions),
+                    "speakers": parser_used.get_speakers(interventions),
+                    "interventions": enriched_interventions
+                },
+                "interesting_parts": {
+                    "count": len(interesting_interventions),
+                    "interventions": interesting_interventions
+                }
+            }
+            
+            logger.info(f"=== Traitement terminé avec succès (sans analyse sémantique) ===")
+            return result
+            
+        except Exception as e:
+            logger.error(f"Erreur lors du traitement du fichier {file_path}: {e}")
+            return {
+                "file_path": file_path,
+                "status": "error",
+                "error": str(e)
+            }
+    
     def process_single_pdf(self, pdf_path: str) -> Dict[str, Any]:
         """
         Traite un seul PDF de transcription de manière optimisée

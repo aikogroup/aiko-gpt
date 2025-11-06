@@ -71,13 +71,18 @@ class ExecutiveSummaryAgent:
         Returns:
             Dict avec 'challenges' (liste de 5 enjeux)
         """
+        import time
+        api_start_time = time.time()
         print(f"final_needs dans identify_challenges : {final_needs}")
         try:
             # Formater les besoins pour le prompt
+            format_start = time.time()
             needs_str = self._format_needs(final_needs)
+            format_end = time.time()
             
             # Choisir le prompt selon le contexte (régénération ou première génération)
             # Si on a des enjeux validés ou rejetés, c'est une régénération
+            prompt_start = time.time()
             if validated_challenges or rejected_challenges:
                 # Mode régénération - passer TOUS les enjeux précédents
                 all_previous = []
@@ -115,7 +120,15 @@ class ExecutiveSummaryAgent:
                     final_needs=needs_str
                 )
             
+            prompt_end = time.time()
+            format_duration = format_end - format_start
+            prompt_duration = prompt_end - prompt_start
+            print(f"⏱️ [TIMING] Formatage besoins: {format_duration:.3f}s")
+            print(f"⏱️ [TIMING] Construction prompt: {prompt_duration:.3f}s")
+            
             # Appel à l'API avec structured output
+            api_call_start = time.time()
+            
             response = self.client.responses.parse(
                 model=self.model,
                 instructions=EXECUTIVE_SUMMARY_SYSTEM_PROMPT,
@@ -127,6 +140,10 @@ class ExecutiveSummaryAgent:
                 ],
                 text_format=ChallengesResponse
             )
+            
+            api_call_end = time.time()
+            api_duration = api_call_end - api_call_start
+            print(f"⏱️ [TIMING] Appel API OpenAI: {api_duration:.3f}s")
             
             parsed_response = response.output_parsed.model_dump()
             challenges = parsed_response.get("challenges", [])
@@ -141,7 +158,9 @@ class ExecutiveSummaryAgent:
                     "besoins_lies": challenge.get("besoins_lies", [])
                 })
             
+            total_duration = time.time() - api_start_time
             logger.info(f"✅ {len(challenges_dict)} enjeux identifiés")
+            print(f"⏱️ [TIMING] identify_challenges (total): {total_duration:.3f}s")
             return {"challenges": challenges_dict}
             
         except Exception as e:
