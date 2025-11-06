@@ -6,6 +6,10 @@
     "need_analysis": {
       "path": "graph_factory:need_analysis",
       "description": "Workflow d'analyse des besoins métier avec debugging"
+    },
+    "executive_summary": {
+      "path": "graph_factory:executive_summary",
+      "description": "Workflow d'Executive Summary avec debugging"
     }
   },
   "env": ".env",
