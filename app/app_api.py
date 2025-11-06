@@ -612,7 +612,7 @@ def main():
         # Radio buttons pour la navigation
         page = st.radio(
             "Navigation",
-            ["Accueil", "Upload de documents", "Configuration des Intervieweurs", "Génération du Diag", "Génération des Enjeux et Recommandations", "Rappel de la mission"],
+            ["Accueil", "Upload de documents", "Configuration des Intervieweurs", "Génération du Rapport", "Génération des Enjeux et Recommandations", "Rappel de la mission"],
             key="navigation_radio"
         )
         
@@ -1803,7 +1803,7 @@ def display_rappel_mission():
             placeholder="Ex : Cousin Surgery"
         )
 
-    if st.button("📥 Télécharger le rappel de la mission", type="primary"):
+    if st.button("📥 Générer le rappel de la mission", type="primary"):
         company_to_use = saved_company_name or st.session_state.get("rappel_mission_company_input", "").strip()
 
         if not company_to_use:
@@ -1836,14 +1836,13 @@ def display_rappel_mission():
 
     if mission_content:
         st.markdown(mission_content)
+        st.markdown("Elle a fait appel à aiko au travers du dispositif \"IA Booster\" de BPI France pour :​\
+                \n- faire le point sur les opportunités qui se présentent  pour son business model​\
+                \n- évaluer sa propre capacité à appréhender cette technologie​\
+                \n- définir, évaluer et prioriser les possibles cas d'usage​")
+        st.markdown("Nous allons démarré la mission en " + date.today().strftime("%B %Y"))
     else:
         st.info("Générez le rappel de la mission pour afficher les informations de l'entreprise.")
-
-    st.markdown("Elle a fait appel à aiko au travers du dispositif \"IA Booster\" de BPI France pour :​\
-            \n- faire le point sur les opportunités qui se présentent  pour son business model​\
-            \n- évaluer sa propre capacité à appréhender cette technologie​\
-            \n- définir, évaluer et prioriser les possibles cas d’usage​")
-    st.markdown("Nous allons démarré la mission en " + date.today().strftime("%B %Y"))
 
 if __name__ == "__main__":
     main()
