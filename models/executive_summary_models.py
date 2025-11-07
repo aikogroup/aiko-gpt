@@ -109,3 +109,16 @@ class WorkshopMaturiteResponse(BaseModel):
     """Modèle pour les informations de maturité extraites depuis les ateliers"""
     informations: List[WorkshopMaturiteInfo] = Field(description="Liste des informations pertinentes pour évaluer la maturité IA", default_factory=list)
 
+
+class WorkshopEnjeuxInfo(BaseModel):
+    """Modèle pour une information d'enjeu stratégique extraite depuis un atelier"""
+    atelier: str = Field(description="Thème de l'atelier")
+    use_case: str = Field(description="Titre du cas d'usage")
+    objectif: str = Field(description="Objectif du cas d'usage")
+    type: str = Field(description="Type d'information, toujours 'enjeu_strategique'", default="enjeu_strategique")
+
+
+class WorkshopEnjeuxResponse(BaseModel):
+    """Modèle pour les informations d'enjeux stratégiques extraites depuis les ateliers"""
+    informations: List[WorkshopEnjeuxInfo] = Field(description="Liste des cas d'usage qui révèlent des enjeux stratégiques de l'IA", default_factory=list)
+

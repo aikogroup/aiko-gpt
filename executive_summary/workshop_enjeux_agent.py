@@ -9,7 +9,8 @@ from openai import OpenAI
 import os
 from dotenv import load_dotenv
 from process_atelier.workshop_agent import WorkshopAgent
-from prompts.executive_summary_prompts import EXTRACT_WORKSHOP_ENJEUX_PROMPT
+from prompts.executive_summary_prompts import EXTRACT_WORKSHOP_ENJEUX_PROMPT, EXECUTIVE_SUMMARY_SYSTEM_PROMPT
+from models.executive_summary_models import WorkshopEnjeuxResponse
 
 load_dotenv()
 
@@ -80,34 +81,63 @@ class WorkshopEnjeuxAgent:
         return all_informations
     
     def _extract_informations_with_llm(self, workshop_data: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Extrait les informations avec LLM"""
-        try:
-            # Extraire les informations pertinentes directement par filtrage
-            # (pas besoin d'appel LLM coûteux si on fait juste un filtrage par mots-clés)
-            informations = []
-            
-            # Retourner les use cases qui révèlent des enjeux stratégiques
-            use_cases = workshop_data.get("use_cases", [])
-            for uc in use_cases:
-                # Si le titre ou l'objectif contient des mots-clés stratégiques
-                title = uc.get("title", "").lower()
-                objective = uc.get("objective", "").lower()
+        """Extrait les informations pertinentes pour les enjeux stratégiques avec LLM"""
+        max_retries = 2
+        for attempt in range(max_retries):
+            try:
+                # Préparer le texte de l'atelier pour l'analyse
+                workshop_text = self._prepare_workshop_text(workshop_data)
                 
-                strategic_keywords = ["stratégie", "transformation", "enjeu", "défi", "vision", "avenir", "compétitivité"]
+                # Formater le prompt
+                prompt = EXTRACT_WORKSHOP_ENJEUX_PROMPT.format(workshop_data=workshop_text)
                 
-                if any(keyword in title or keyword in objective for keyword in strategic_keywords):
+                # Appel LLM avec structured output
+                response = self.client.responses.parse(
+                    model=self.model,
+                    instructions=EXECUTIVE_SUMMARY_SYSTEM_PROMPT,
+                    input=[
+                        {
+                            "role": "user",
+                            "content": prompt
+                        }
+                    ],
+                    text_format=WorkshopEnjeuxResponse
+                )
+                
+                # Extraire les informations structurées
+                parsed_response = response.output_parsed.model_dump()
+                informations_list = parsed_response.get("informations", [])
+                
+                # Convertir en format dict pour compatibilité
+                informations = []
+                for info in informations_list:
                     informations.append({
-                        "atelier": workshop_data.get("theme", ""),
-                        "use_case": uc.get("title", ""),
-                        "objectif": uc.get("objective", ""),
-                        "type": "enjeu_strategique"
+                        "atelier": info.get("atelier", ""),
+                        "use_case": info.get("use_case", ""),
+                        "objectif": info.get("objectif", ""),
+                        "type": info.get("type", "enjeu_strategique")
                     })
-            
-            return informations
-            
-        except Exception as e:
-            logger.error(f"Erreur lors de l'extraction LLM: {e}", exc_info=True)
-            return []
+                
+                logger.info(f"✅ {len(informations)} informations d'enjeux extraites pour l'atelier '{workshop_data.get('theme', 'N/A')}'")
+                return informations
+                
+            except Exception as e:
+                error_msg = str(e)
+                logger.warning(f"Erreur lors de l'extraction LLM (tentative {attempt + 1}/{max_retries}): {error_msg}")
+                
+                # Si c'est une erreur de parsing JSON, essayer de récupérer la réponse brute
+                if "json_invalid" in error_msg or "EOF while parsing" in error_msg:
+                    logger.warning("Erreur de parsing JSON détectée - le modèle a peut-être retourné un JSON invalide")
+                    if attempt < max_retries - 1:
+                        logger.info("Nouvelle tentative avec un prompt plus strict...")
+                        continue
+                
+                # Si c'est la dernière tentative, logger l'erreur complète et retourner vide
+                if attempt == max_retries - 1:
+                    logger.error(f"Erreur lors de l'extraction LLM après {max_retries} tentatives: {e}", exc_info=True)
+                    return []
+        
+        return []
     
     def _prepare_workshop_text(self, workshop_data: Dict[str, Any]) -> str:
         """Prépare le texte de l'atelier pour l'analyse"""

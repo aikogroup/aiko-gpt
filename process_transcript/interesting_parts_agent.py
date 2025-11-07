@@ -130,30 +130,4 @@ class InterestingPartsAgent:
             # Fallback: retourner toutes les interventions si erreur
             return list(range(total_interventions))
     
-    def get_consultant_interventions(self, interventions: List[Dict[str, Any]], 
-                                   consultant_names: List[str] = None) -> List[Dict[str, Any]]:
-        """Filtre les interventions des consultants (Christella, Adrien)"""
-        if consultant_names is None:
-            consultant_names = ["christella", "adrien", "aiko"]
-        
-        consultant_interventions = []
-        for intervention in interventions:
-            speaker_lower = intervention["speaker"].lower()
-            if any(name.lower() in speaker_lower for name in consultant_names):
-                consultant_interventions.append(intervention)
-        
-        return consultant_interventions
     
-    def get_client_interventions(self, interventions: List[Dict[str, Any]], 
-                               consultant_names: List[str] = None) -> List[Dict[str, Any]]:
-        """Filtre les interventions du client (tous sauf les consultants)"""
-        if consultant_names is None:
-            consultant_names = ["christella", "adrien", "aiko"]
-        
-        client_interventions = []
-        for intervention in interventions:
-            speaker_lower = intervention["speaker"].lower()
-            if not any(name.lower() in speaker_lower for name in consultant_names):
-                client_interventions.append(intervention)
-        
-        return client_interventions
