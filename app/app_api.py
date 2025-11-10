@@ -622,7 +622,7 @@ def main():
         # Section Documents et configuration
         st.markdown("**Documents et configuration**")
         page_docs = st.radio(
-            "",
+            "Navigation Documents et configuration",
             ["Upload de documents", "Configuration des Intervieweurs"],
             index=0 if st.session_state.current_page == "Upload de documents" else (1 if st.session_state.current_page == "Configuration des Intervieweurs" else None),
             key="nav_docs",
@@ -632,7 +632,7 @@ def main():
         # Section Rapport initial
         st.markdown("**Génération des Use Cases**")
         page_rapport = st.radio(
-            "",
+            "Navigation Génération des Use Cases",
             ["Générer les Use Cases"],
             index=0 if st.session_state.current_page == "Générer les Use Cases" else None,
             key="nav_rapport",
@@ -642,7 +642,7 @@ def main():
         # Section Diag - Synthèse de mission
         st.markdown("**Génération du rapport**")
         page_diag = st.radio(
-            "",
+            "Navigation Génération du rapport",
             ["Génération des Enjeux et Recommandations", "Rappel de la mission"],
             index=0 if st.session_state.current_page == "Génération des Enjeux et Recommandations" else (1 if st.session_state.current_page == "Rappel de la mission" else None),
             key="nav_diag",
@@ -1233,6 +1233,10 @@ def display_upload_documents_section():
     st.header("📁 Upload de Documents")
     st.info("💡 Uploadez vos fichiers ici. Ils seront conservés pendant toute la session et réutilisables dans les workflows.")
     
+    # Initialiser le tracking des fichiers déjà uploadés
+    if 'uploaded_file_names' not in st.session_state:
+        st.session_state.uploaded_file_names = set()
+    
     # Upload Transcripts
     st.subheader("📄 Transcriptions (PDF ou JSON)")
     uploaded_transcripts = st.file_uploader(
@@ -1243,12 +1247,28 @@ def display_upload_documents_section():
     )
     
     if uploaded_transcripts:
-        # Sauvegarder dans session_state
-        transcript_paths = upload_files_to_api(list(uploaded_transcripts))
-        st.session_state.uploaded_transcripts = transcript_paths.get("transcript", [])
-        st.success(f"✅ {len(st.session_state.uploaded_transcripts)} fichier(s) de transcription sauvegardé(s)")
-        # Forcer la mise à jour de la sidebar
-        st.rerun()
+        # Filtrer uniquement les nouveaux fichiers (ceux qui n'ont pas encore été uploadés)
+        new_transcripts = [
+            f for f in uploaded_transcripts 
+            if f.name not in st.session_state.uploaded_file_names
+        ]
+        
+        if new_transcripts:
+            # Sauvegarder dans session_state
+            transcript_paths = upload_files_to_api(new_transcripts)
+            new_paths = transcript_paths.get("transcript", [])
+            
+            # Ajouter les nouveaux chemins aux transcripts existants
+            existing_transcripts = st.session_state.get("uploaded_transcripts", [])
+            st.session_state.uploaded_transcripts = existing_transcripts + new_paths
+            
+            # Marquer les fichiers comme uploadés
+            for f in new_transcripts:
+                st.session_state.uploaded_file_names.add(f.name)
+            
+            st.success(f"✅ {len(new_transcripts)} nouveau(x) fichier(s) de transcription sauvegardé(s)")
+            # Forcer la mise à jour de la sidebar
+            st.rerun()
     
     # Afficher les transcripts déjà uploadés
     if st.session_state.uploaded_transcripts:
@@ -1261,6 +1281,13 @@ def display_upload_documents_section():
             with col2:
                 if st.button("🗑️", key=f"delete_transcript_{path}", help="Supprimer"):
                     st.session_state.uploaded_transcripts.remove(path)
+                    # Retirer aussi le nom du fichier du tracking si on peut le retrouver
+                    file_basename = os.path.basename(path)
+                    # Chercher le nom original dans uploaded_file_names
+                    for name in list(st.session_state.uploaded_file_names):
+                        if file_basename.endswith(name) or name in file_basename:
+                            st.session_state.uploaded_file_names.discard(name)
+                            break
                     st.rerun()
     
     st.markdown("---")
@@ -1275,12 +1302,28 @@ def display_upload_documents_section():
     )
     
     if uploaded_workshops:
-        # Sauvegarder dans session_state
-        workshop_paths = upload_files_to_api(list(uploaded_workshops))
-        st.session_state.uploaded_workshops = workshop_paths.get("workshop", [])
-        st.success(f"✅ {len(st.session_state.uploaded_workshops)} fichier(s) d'atelier sauvegardé(s)")
-        # Forcer la mise à jour de la sidebar
-        st.rerun()
+        # Filtrer uniquement les nouveaux fichiers (ceux qui n'ont pas encore été uploadés)
+        new_workshops = [
+            f for f in uploaded_workshops 
+            if f.name not in st.session_state.uploaded_file_names
+        ]
+        
+        if new_workshops:
+            # Sauvegarder dans session_state
+            workshop_paths = upload_files_to_api(new_workshops)
+            new_paths = workshop_paths.get("workshop", [])
+            
+            # Ajouter les nouveaux chemins aux workshops existants
+            existing_workshops = st.session_state.get("uploaded_workshops", [])
+            st.session_state.uploaded_workshops = existing_workshops + new_paths
+            
+            # Marquer les fichiers comme uploadés
+            for f in new_workshops:
+                st.session_state.uploaded_file_names.add(f.name)
+            
+            st.success(f"✅ {len(new_workshops)} nouveau(x) fichier(s) d'atelier sauvegardé(s)")
+            # Forcer la mise à jour de la sidebar
+            st.rerun()
     
     # Afficher les workshops déjà uploadés
     if st.session_state.uploaded_workshops:
@@ -1293,6 +1336,13 @@ def display_upload_documents_section():
             with col2:
                 if st.button("🗑️", key=f"delete_workshop_{path}", help="Supprimer"):
                     st.session_state.uploaded_workshops.remove(path)
+                    # Retirer aussi le nom du fichier du tracking si on peut le retrouver
+                    file_basename = os.path.basename(path)
+                    # Chercher le nom original dans uploaded_file_names
+                    for name in list(st.session_state.uploaded_file_names):
+                        if file_basename.endswith(name) or name in file_basename:
+                            st.session_state.uploaded_file_names.discard(name)
+                            break
                     st.rerun()
     
     st.markdown("---")

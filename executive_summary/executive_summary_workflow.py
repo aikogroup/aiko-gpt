@@ -513,11 +513,21 @@ class ExecutiveSummaryWorkflow:
                 existing_validated = state.get("validated_challenges", [])
                 newly_validated = validation_data.get("validated_challenges", [])
                 
-                # Ajouter les nouveaux enjeux validés (garde-fou : éviter les doublons par ID)
+                # Générer un ID unique pour chaque nouvel enjeu validé pour éviter les conflits avec les IDs de l'IA
+                import uuid
+                iteration_count = state.get("challenges_iteration_count", 0)
                 existing_ids = [ch.get("id", "") for ch in existing_validated]
-                newly_validated_filtered = [ch for ch in newly_validated if ch.get("id", "") not in existing_ids]
                 
-                state["validated_challenges"] = existing_validated + newly_validated_filtered
+                for i, challenge in enumerate(newly_validated):
+                    # Si l'enjeu n'a pas d'ID ou si l'ID existe déjà, générer un nouvel ID unique
+                    challenge_id = challenge.get("id", "")
+                    
+                    if not challenge_id or challenge_id in existing_ids:
+                        # Générer un ID unique basé sur l'itération et un UUID
+                        challenge["id"] = f"challenge_{iteration_count}_{i}_{uuid.uuid4().hex[:8]}"
+                
+                # Ajouter tous les nouveaux enjeux validés (plus besoin de filtrer par ID maintenant)
+                state["validated_challenges"] = existing_validated + newly_validated
                 
                 # Accumuler les rejetés (ne pas remplacer, mais ajouter)
                 existing_rejected = state.get("rejected_challenges", [])
@@ -531,7 +541,7 @@ class ExecutiveSummaryWorkflow:
                 state["validation_type"] = ""
                 
                 # Détecter si aucun nouveau enjeu n'a été validé (pas de progression)
-                if len(newly_validated_filtered) == 0:
+                if len(newly_validated) == 0:
                     state["challenges_no_progress_count"] = state.get("challenges_no_progress_count", 0) + 1
                     print(f"⚠️ Aucun nouveau enjeu validé - Compteur sans progression: {state['challenges_no_progress_count']}")
                 else:
@@ -541,7 +551,7 @@ class ExecutiveSummaryWorkflow:
                 
                 end_time = time.time()
                 duration = end_time - start_time
-                print(f"📊 Enjeux nouvellement validés: {len(newly_validated_filtered)}")
+                print(f"📊 Enjeux nouvellement validés: {len(newly_validated)}")
                 print(f"📊 Total enjeux validés: {len(state['validated_challenges'])}")
                 print(f"⏱️ [TIMING] human_validation_enjeux_node: {duration:.3f}s")
                 
