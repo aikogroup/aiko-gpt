@@ -50,6 +50,8 @@ class WorkflowInput(BaseModel):
     workshop_files: List[str] = []
     transcript_files: List[str] = []
     company_name: Optional[str] = None
+    company_url: Optional[str] = None
+    company_description: Optional[str] = None
     interviewer_names: Optional[List[str]] = None
     additional_context: Optional[str] = ""
 
@@ -190,14 +192,27 @@ async def create_run(thread_id: str, workflow_input: WorkflowInput):
         print(f"📁 Workshop files: {workflow_input.workshop_files}")
         print(f"📁 Transcript files: {workflow_input.transcript_files}")
         print(f"🏢 Company: {workflow_input.company_name}")
+        if workflow_input.company_url:
+            print(f"🌐 Company URL: {workflow_input.company_url}")
+        if workflow_input.company_description:
+            print(f"📄 Company Description: {workflow_input.company_description}")
         print(f"👥 Interviewers: {workflow_input.interviewer_names}")
         print(f"📝 Additional context: {len(workflow_input.additional_context or '')} caractères")
+        
+        # Construire company_info avec tous les champs disponibles
+        company_info = {}
+        if workflow_input.company_name:
+            company_info["company_name"] = workflow_input.company_name
+        if workflow_input.company_url:
+            company_info["company_url"] = workflow_input.company_url
+        if workflow_input.company_description:
+            company_info["company_description"] = workflow_input.company_description
         
         # Exécuter le workflow (mode asynchrone géré par LangGraph)
         result = workflow.run(
             workshop_files=workflow_input.workshop_files,
             transcript_files=workflow_input.transcript_files,
-            company_info={"company_name": workflow_input.company_name} if workflow_input.company_name else {},
+            company_info=company_info,
             interviewer_names=workflow_input.interviewer_names,
             thread_id=thread_id,
             additional_context=workflow_input.additional_context or ""

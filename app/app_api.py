@@ -237,6 +237,10 @@ def init_session_state():
         st.session_state.uploaded_workshops = []
     if 'company_name' not in st.session_state:
         st.session_state.company_name = ""
+    if 'company_url' not in st.session_state:
+        st.session_state.company_url = ""
+    if 'company_description' not in st.session_state:
+        st.session_state.company_description = ""
     # Executive Summary workflow
     if 'executive_thread_id' not in st.session_state:
         st.session_state.executive_thread_id = None
@@ -281,7 +285,7 @@ def upload_files_to_api(files: List[Any]) -> Dict[str, Any]:
         st.error(f"❌ Erreur lors de l'upload: {str(e)}")
         return {"workshop": [], "transcript": [], "file_paths": []}
 
-def start_workflow_api_call(workshop_files: List[str], transcript_files: List[str], company_name: str, interviewer_names: List[str], additional_context: str, result_queue: queue.Queue):
+def start_workflow_api_call(workshop_files: List[str], transcript_files: List[str], company_name: str, company_url: str, company_description: str, interviewer_names: List[str], additional_context: str, result_queue: queue.Queue):
     """
     Fait l'appel API dans un thread séparé.
     Met le résultat dans la queue : (success: bool, thread_id: str, error_msg: str)
@@ -297,6 +301,8 @@ def start_workflow_api_call(workshop_files: List[str], transcript_files: List[st
                 "workshop_files": workshop_files,
                 "transcript_files": transcript_files,
                 "company_name": company_name if company_name else None,
+                "company_url": company_url if company_url else None,
+                "company_description": company_description if company_description else None,
                 "interviewer_names": interviewer_names,
                 "additional_context": additional_context if additional_context else ""
             },
@@ -509,10 +515,8 @@ def display_home_page():
         except Exception:
             st.warning("⚠️ L'API n'est pas accessible. Assurez-vous que l'API est lancée avec : `uv run python api/start_api.py`")
 
-def display_interviewers_config():
-    """Affiche l'interface de configuration des intervieweurs dans la sidebar"""
-    # Note: Cette fonction est appelée dans le contexte 'with st.sidebar:',
-    # donc on utilise directement 'st' au lieu de 'st.sidebar'
+def display_interviewers_config_page():
+    """Affiche l'interface complète de configuration des intervieweurs dans la page principale"""
     st.header("👥 Configuration des Intervieweurs")
     
     # Charger les intervieweurs depuis le fichier JSON
@@ -520,7 +524,7 @@ def display_interviewers_config():
     
     st.info("💡 Les intervieweurs configurés seront utilisés pour identifier les speakers dans les transcriptions.")
     
-    # Afficher la liste actuelle
+    # Afficher la liste actuelle avec possibilité de suppression
     if interviewers:
         st.markdown("**Interviewers configurés :**")
         for idx, interviewer in enumerate(interviewers):
@@ -528,22 +532,25 @@ def display_interviewers_config():
             with col_display:
                 st.text(f"• {interviewer}")
             with col_delete:
-                if st.button("🗑️", key=f"sidebar_delete_{idx}"):
+                if st.button("🗑️", key=f"delete_{idx}"):
                     interviewers.remove(interviewer)
                     if save_interviewers(interviewers):
                         st.success(f"✅ {interviewer} retiré")
                         st.rerun()
+    else:
+        st.warning("⚠️ Aucun interviewer configuré")
     
     st.markdown("---")
     
     # Interface pour ajouter un nouvel interviewer
+    st.subheader("➕ Ajouter un interviewer")
     new_interviewer = st.text_input(
-        "Ajouter un interviewer",
+        "Nom de l'interviewer",
         placeholder="Ex: Jean Dupont",
-        key="sidebar_new_interviewer"
+        key="new_interviewer"
     )
     
-    if st.button("➕ Ajouter", key="sidebar_add_btn"):
+    if st.button("➕ Ajouter", key="add_btn"):
         if new_interviewer and new_interviewer.strip():
             if new_interviewer.strip() not in interviewers:
                 interviewers.append(new_interviewer.strip())
@@ -600,6 +607,100 @@ def main():
         st.title("🤖 aikoGPT")
         st.markdown("---")
         
+        # Initialiser la page si nécessaire
+        if 'current_page' not in st.session_state:
+            st.session_state.current_page = "Accueil"
+        
+        # Radio button Accueil en haut
+        page_accueil = st.radio(
+            "Navigation",
+            ["Accueil"],
+            index=0 if st.session_state.current_page == "Accueil" else None,
+            key="nav_accueil"
+        )
+        
+        # Section Documents et configuration
+        st.markdown("**Documents et configuration**")
+        page_docs = st.radio(
+            "",
+            ["Upload de documents", "Configuration des Intervieweurs"],
+            index=0 if st.session_state.current_page == "Upload de documents" else (1 if st.session_state.current_page == "Configuration des Intervieweurs" else None),
+            key="nav_docs",
+            label_visibility="collapsed"
+        )
+        
+        # Section Rapport initial
+        st.markdown("**Rapport initial**")
+        page_rapport = st.radio(
+            "",
+            ["Génération du Rapport"],
+            index=0 if st.session_state.current_page == "Génération du Rapport" else None,
+            key="nav_rapport",
+            label_visibility="collapsed"
+        )
+        
+        # Section Diag - Synthèse de mission
+        st.markdown("**Diag - Synthèse de mission**")
+        page_diag = st.radio(
+            "",
+            ["Génération des Enjeux et Recommandations", "Rappel de la mission"],
+            index=0 if st.session_state.current_page == "Génération des Enjeux et Recommandations" else (1 if st.session_state.current_page == "Rappel de la mission" else None),
+            key="nav_diag",
+            label_visibility="collapsed"
+        )
+        
+        # Déterminer quelle page est sélectionnée
+        # On vérifie chaque groupe et on met à jour si une sélection différente de la page actuelle est faite
+        page = st.session_state.current_page
+        page_changed = False
+        
+        if page_accueil == "Accueil" and st.session_state.current_page != "Accueil":
+            page = "Accueil"
+            st.session_state.current_page = "Accueil"
+            page_changed = True
+        elif page_docs and st.session_state.current_page != page_docs:
+            page = page_docs
+            st.session_state.current_page = page_docs
+            page_changed = True
+        elif page_rapport and st.session_state.current_page != page_rapport:
+            page = page_rapport
+            st.session_state.current_page = page_rapport
+            page_changed = True
+        elif page_diag and st.session_state.current_page != page_diag:
+            page = page_diag
+            st.session_state.current_page = page_diag
+            page_changed = True
+        
+        # Si la page a changé, forcer un rerun pour mettre à jour immédiatement
+        if page_changed:
+            st.rerun()
+        
+        st.markdown("---")
+        
+        # Affichages de statut
+        # Statut des transcripts
+        transcript_count = len(st.session_state.get("uploaded_transcripts", []))
+        if transcript_count == 0:
+            st.warning("⚠️ Pas de transcript uploadé")
+        else:
+            st.success(f"✅ {transcript_count} transcript{'s' if transcript_count > 1 else ''} uploadé{'s' if transcript_count > 1 else ''}")
+        
+        # Statut des workshops
+        workshop_count = len(st.session_state.get("uploaded_workshops", []))
+        if workshop_count == 0:
+            st.warning("⚠️ Pas de fichier Workshop uploadé")
+        else:
+            st.success(f"✅ {workshop_count} fichier{'s' if workshop_count > 1 else ''} workshop uploadé{'s' if workshop_count > 1 else ''}")
+        
+        # Nom de l'entreprise
+        company_name = st.session_state.get("company_name", "")
+        if company_name:
+            st.success(f"🏢 {company_name}")
+        else:
+            st.info("🏢 Aucune entreprise sélectionnée")
+        
+        st.markdown("------")
+        
         # Bouton de déconnexion
         if st.button("🚪 Se déconnecter", use_container_width=True, key="logout_button"):
             # Réinitialiser toutes les variables de session
@@ -607,41 +708,13 @@ def main():
                 del st.session_state[key]
             st.rerun()
         
-        st.markdown("---")
-        
-        # Radio buttons pour la navigation
-        page = st.radio(
-            "Navigation",
-            ["Accueil", "Upload de documents", "Configuration des Intervieweurs", "Génération du Rapport", "Génération des Enjeux et Recommandations", "Rappel de la mission"],
-            key="navigation_radio"
-        )
-        
-        st.session_state.current_page = page
-        
-        st.markdown("---")
-        
-        # Afficher la configuration des intervieweurs dans la sidebar
-        if page == "Configuration des Intervieweurs":
-            display_interviewers_config()
-    
     # Afficher le contenu selon la page sélectionnée
     if page == "Accueil":
         display_home_page()
     elif page == "Upload de documents":
         display_upload_documents_section()
     elif page == "Configuration des Intervieweurs":
-        st.header("👥 Configuration des Intervieweurs")
-        st.info("💡 Utilisez la barre latérale pour gérer les intervieweurs.")
-        st.markdown("""
-        Les intervieweurs configurés sont utilisés pour identifier automatiquement
-        les speakers dans les transcriptions. Vous pouvez modifier cette liste à tout moment.
-        """)
-        # Afficher aussi dans le contenu principal pour référence
-        interviewers = load_interviewers()
-        if interviewers:
-            st.markdown("**Liste actuelle des intervieweurs :**")
-            for interviewer in interviewers:
-                st.text(f"• {interviewer}")
+        display_interviewers_config_page()
     elif page == "Génération du Rapport":
         display_diagnostic_section()
     elif page == "Génération des Enjeux et Recommandations":
@@ -724,6 +797,8 @@ def display_diagnostic_section():
                     st.session_state.uploaded_workshops,
                     st.session_state.uploaded_transcripts,
                     st.session_state.company_name,
+                    st.session_state.get("company_url", ""),
+                    st.session_state.get("company_description", ""),
                     interviewer_names,
                     additional_context or "",
                     result_queue
@@ -1172,6 +1247,8 @@ def display_upload_documents_section():
         transcript_paths = upload_files_to_api(list(uploaded_transcripts))
         st.session_state.uploaded_transcripts = transcript_paths.get("transcript", [])
         st.success(f"✅ {len(st.session_state.uploaded_transcripts)} fichier(s) de transcription sauvegardé(s)")
+        # Forcer la mise à jour de la sidebar
+        st.rerun()
     
     # Afficher les transcripts déjà uploadés
     if st.session_state.uploaded_transcripts:
@@ -1202,6 +1279,8 @@ def display_upload_documents_section():
         workshop_paths = upload_files_to_api(list(uploaded_workshops))
         st.session_state.uploaded_workshops = workshop_paths.get("workshop", [])
         st.success(f"✅ {len(st.session_state.uploaded_workshops)} fichier(s) d'atelier sauvegardé(s)")
+        # Forcer la mise à jour de la sidebar
+        st.rerun()
     
     # Afficher les workshops déjà uploadés
     if st.session_state.uploaded_workshops:
@@ -1218,18 +1297,68 @@ def display_upload_documents_section():
     
     st.markdown("---")
     
-    # Nom de l'entreprise
-    st.subheader("🏢 Nom de l'Entreprise")
-    company_name = st.text_input(
-        "Nom de l'entreprise",
-        value=st.session_state.company_name,
-        placeholder="Ex: Cousin Surgery",
-        key="company_name_persistent"
-    )
+    # Informations sur l'entreprise
+    st.subheader("🏢 Informations sur l'Entreprise")
     
-    if company_name:
-        st.session_state.company_name = company_name
-        st.success(f"✅ Nom d'entreprise sauvegardé: {company_name}")
+    # Initialiser les variables pour suivre les changements
+    if 'previous_company_name' not in st.session_state:
+        st.session_state.previous_company_name = st.session_state.get("company_name", "")
+    if 'previous_company_url' not in st.session_state:
+        st.session_state.previous_company_url = st.session_state.get("company_url", "")
+    if 'previous_company_description' not in st.session_state:
+        st.session_state.previous_company_description = st.session_state.get("company_description", "")
+    
+    # Créer 3 colonnes côte à côte
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        company_name = st.text_input(
+            "Nom de l'entreprise",
+            value=st.session_state.company_name,
+            placeholder="Ex: Cousin Surgery",
+            key="company_name_persistent"
+        )
+    
+    with col2:
+        company_url = st.text_input(
+            "URL de l'entreprise (optionnel)",
+            value=st.session_state.company_url,
+            placeholder="Ex: https://www.example.com",
+            key="company_url_persistent"
+        )
+    
+    with col3:
+        company_description = st.text_input(
+            "Description de l'activité (optionnel)",
+            value=st.session_state.company_description,
+            placeholder="Ex: Fabricant de dispositifs médicaux",
+            key="company_description_persistent"
+        )
+    
+    # Normaliser les valeurs (strip si non vide, sinon chaîne vide)
+    normalized_name = company_name.strip() if company_name else ""
+    normalized_url = company_url.strip() if company_url else ""
+    normalized_description = company_description.strip() if company_description else ""
+    
+    # Vérifier si les valeurs ont changé
+    name_changed = normalized_name != st.session_state.previous_company_name
+    url_changed = normalized_url != st.session_state.previous_company_url
+    description_changed = normalized_description != st.session_state.previous_company_description
+    
+    # Mettre à jour le session_state si les valeurs ont changé
+    if name_changed or url_changed or description_changed:
+        st.session_state.company_name = normalized_name
+        st.session_state.previous_company_name = normalized_name
+        st.session_state.company_url = normalized_url
+        st.session_state.previous_company_url = normalized_url
+        st.session_state.company_description = normalized_description
+        st.session_state.previous_company_description = normalized_description
+        # Forcer la mise à jour de la sidebar seulement si une valeur a changé
+        st.rerun()
+    
+    # Afficher le message de succès seulement si un nom est saisi
+    if company_name and company_name.strip():
+        st.success(f"🏢 {company_name.strip()}")
 
 def display_recommendations_section():
     """Section pour générer l'Executive Summary (enjeux et recommandations)"""

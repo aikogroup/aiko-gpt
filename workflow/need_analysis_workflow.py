@@ -406,8 +406,14 @@ class NeedAnalysisWorkflow:
             if company_info:
                 company_name = company_info.get("company_name", "")
                 if company_name:
+                    company_url = company_info.get("company_url")
+                    company_description = company_info.get("company_description")
                     print(f"🔄 [PARALLÈLE-3/3] Recherche web pour: {company_name}")
-                    results = self.web_search_agent.search_company_info(company_name)
+                    results = self.web_search_agent.search_company_info(
+                        company_name,
+                        company_url=company_url,
+                        company_description=company_description
+                    )
                     print(f"✅ [PARALLÈLE-3/3] Recherche web terminée")
                     print(f"✅ [PARALLÈLE-3/3] web_search_agent_node - FIN")
                     return {"web_search_results": results}
@@ -485,7 +491,13 @@ class NeedAnalysisWorkflow:
             if company_info:
                 company_name = company_info.get("company_name", "")
                 if company_name:
-                    results = self.web_search_agent.search_company_info(company_name)
+                    company_url = company_info.get("company_url")
+                    company_description = company_info.get("company_description")
+                    results = self.web_search_agent.search_company_info(
+                        company_name,
+                        company_url=company_url,
+                        company_description=company_description
+                    )
                     state["web_search_results"] = results
                 else:
                     state["web_search_results"] = {}

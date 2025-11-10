@@ -5,7 +5,7 @@ Web Search Agent - Collecte d'informations sur les entreprises via Perplexity So
 import os
 import sys
 import json
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from dotenv import load_dotenv
 from perplexity import Perplexity
 from openai import OpenAI
@@ -43,17 +43,37 @@ class WebSearchAgent:
         self.openai_client = OpenAI(api_key=self.openai_api_key)
         self.model = os.getenv('OPENAI_MODEL', 'gpt-5-nano')
     
-    def search_company_info(self, company_name: str) -> Dict[str, Any]:
+    def search_company_info(
+        self, 
+        company_name: str,
+        company_url: Optional[str] = None,
+        company_description: Optional[str] = None
+    ) -> Dict[str, Any]:
         """
         Recherche des informations sur une entreprise
         
         Args:
             company_name (str): Nom de l'entreprise à rechercher
+            company_url (str, optional): URL du site web de l'entreprise
+            company_description (str, optional): Description courte de l'activité de l'entreprise
             
         Returns:
             Dict[str, Any]: Informations structurées sur l'entreprise
         """
         try:
+            # Construction de la requête avec contexte supplémentaire si fourni
+            context_parts = []
+            
+            if company_url:
+                context_parts.append(f"Site web de l'entreprise: {company_url}")
+            
+            if company_description:
+                context_parts.append(f"Description de l'activité: {company_description}")
+            
+            context_section = ""
+            if context_parts:
+                context_section = "\n\nCONTEXTE SUPPLÉMENTAIRE:\n" + "\n".join(context_parts) + "\n"
+            
             # Recherche avec Perplexity Sonar - une seule requête complète
             search_query = f"""Recherche des informations détaillées sur l'entreprise {company_name}:
 - Nom complet officiel de l'entreprise
@@ -62,7 +82,7 @@ class WebSearchAgent:
 - Chiffre d'affaires (le plus récent disponible)
 - Description de l'activité de l'entreprise
 
-Fournis des informations précises et vérifiables."""
+{context_section}Fournis des informations précises et vérifiables. Utilise le contexte supplémentaire fourni pour affiner ta recherche et donner des informations plus pertinentes."""
             
             print(f"🔍 Recherche pour: {company_name}")
             
@@ -157,12 +177,21 @@ def main():
     """Fonction de test pour l'agent"""
     try:
         agent = WebSearchAgent()
-        company_name = "cousin surgery"
+        company_name = "aiko"
+        
+        # Exemple avec contexte supplémentaire
+        company_url = "https://www.aikogroup.ai/"
+        company_description = "aiko fournit aux entreprises les méthodes, les architectures et les outils pour intégrer les performances de l'IA au sein de leurs processus"
         
         print(f"Recherche d'informations pour : {company_name}")
         print("-" * 50)
         
-        results = agent.search_company_info(company_name)
+        # Appel avec contexte supplémentaire
+        results = agent.search_company_info(
+            company_name,
+            company_url=company_url,
+            company_description=company_description
+        )
         
         print("Résultats :")
         print(json.dumps(results, indent=2, ensure_ascii=False))
