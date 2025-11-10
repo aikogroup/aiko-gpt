@@ -8,6 +8,11 @@ import os
 import json
 from pathlib import Path
 from dotenv import load_dotenv
+import sys
+
+# Ajouter le répertoire parent au path pour importer les prompts
+sys.path.append(str(Path(__file__).parent.parent))
+from prompts.speaker_identification_prompts import SPEAKER_IDENTIFICATION_AND_ROLE_EXTRACTION_PROMPT
 
 load_dotenv()
 
@@ -48,6 +53,11 @@ class SpeakerClassifier:
             cache_file = "outputs/speaker_classification_cache.json"
         self.cache_file = Path(cache_file)
         self._persistent_cache: Dict[str, str] = self._load_persistent_cache()
+        
+        # Cache pour les rôles exacts (speaker_name -> role)
+        self._role_cache: Dict[str, str] = {}
+        self._role_cache_file = Path("outputs/speaker_roles_cache.json")
+        self._persistent_role_cache: Dict[str, str] = self._load_persistent_role_cache()
     
     def classify_speakers(self, interventions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
@@ -279,6 +289,299 @@ Réponds UNIQUEMENT par "direction", "métier" ou "inconnu".
             
         except Exception as e:
             logger.error(f"Erreur lors de la sauvegarde du cache persistant: {e}")
+    
+    def extract_speaker_role(self, speaker_name: str, context: List[Dict[str, Any]], known_roles: Optional[Dict[str, str]] = None) -> str:
+        """
+        Extrait le rôle exact (titre de poste) d'un speaker à partir de ses interventions via LLM
+        
+        Args:
+            speaker_name: Nom du speaker
+            context: Liste de toutes les interventions de ce speaker
+            known_roles: Dictionnaire optionnel de speaker_name -> role pour réutiliser les rôles déjà connus
+            
+        Returns:
+            Le rôle exact du speaker (ex: "Directrice Commerciale") ou chaîne vide si non trouvé
+        """
+        if not context:
+            return ""
+        
+        # Vérifier d'abord les rôles connus passés en paramètre
+        if known_roles and speaker_name in known_roles:
+            role = known_roles[speaker_name]
+            logger.info(f"✓ {speaker_name}: {role} (depuis rôles connus)")
+            return role
+        
+        # Vérifier le cache en mémoire
+        if speaker_name in self._role_cache:
+            role = self._role_cache[speaker_name]
+            logger.info(f"✓ {speaker_name}: {role} (depuis cache session)")
+            return role
+        
+        # Vérifier le cache persistant
+        if speaker_name in self._persistent_role_cache:
+            role = self._persistent_role_cache[speaker_name]
+            self._role_cache[speaker_name] = role  # Mettre aussi dans le cache session
+            logger.info(f"✓ {speaker_name}: {role} (depuis cache persistant)")
+            return role
+        
+        # Extraire le rôle via LLM
+        all_interventions_text = "\n".join([
+            f"- {interv.get('text', '')}"
+            for interv in context
+        ])
+        
+        prompt = f"""Tu dois extraire le titre de poste exact d'une personne à partir de ses interventions dans une réunion de conseil.
+
+Nom de la personne: {speaker_name}
+
+Interventions de cette personne:
+{all_interventions_text}
+
+INSTRUCTIONS IMPORTANTES :
+1. Cherche spécifiquement les phrases où la personne se présente ou mentionne son poste (ex: "je me présente [nom], Directrice Commerciale de...", "je suis Directeur des ventes", "mon rôle est Directeur Marketing", "je travaille en tant que Responsable RH")
+2. Si tu trouves un titre de poste clair et explicite, retourne-le exactement tel qu'il est mentionné (ex: "Directrice Commerciale", "Directeur des ventes", "Responsable RH")
+3. Si le titre est mentionné de manière incomplète mais que tu peux le compléter logiquement (ex: "je suis directeur" -> "Directeur"), tu peux le compléter
+4. Si aucune information claire sur le poste n'est trouvée dans les interventions, réponds UNIQUEMENT "NON_TROUVE" - NE PAS INVENTER un poste
+5. Ne pas se baser uniquement sur le style de parole ou le contenu des interventions, mais sur les informations explicites de poste/titre
+6. Réponds UNIQUEMENT par le titre de poste exact (ex: "Directrice Commerciale") ou "NON_TROUVE" si aucun titre n'est trouvé"""
+
+        try:
+            response = self.client.responses.create(
+                model=self.model,
+                input=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "input_text",
+                                "text": prompt
+                            }
+                        ]
+                    }
+                ]
+            )
+            
+            result = response.output_text.strip()
+            
+            # Valider la réponse
+            if result.upper() == "NON_TROUVE" or not result:
+                logger.info(f"✗ {speaker_name}: Aucun rôle trouvé")
+                return ""
+            else:
+                # Sauvegarder dans les caches
+                self._role_cache[speaker_name] = result
+                self._save_to_persistent_role_cache({speaker_name: result})
+                logger.info(f"✓ {speaker_name}: {result} (nouvelle extraction)")
+                return result
+                
+        except Exception as e:
+            logger.error(f"Erreur lors de l'extraction du rôle LLM pour {speaker_name}: {e}")
+            return ""  # Valeur par défaut en cas d'erreur
+    
+    def _load_persistent_role_cache(self) -> Dict[str, str]:
+        """
+        Charge le cache persistant des rôles depuis le fichier JSON
+        
+        Returns:
+            Dictionnaire speaker_name -> role
+        """
+        if not self._role_cache_file.exists():
+            logger.info(f"Cache persistant des rôles non trouvé: {self._role_cache_file}, création d'un nouveau cache")
+            return {}
+        
+        try:
+            with open(self._role_cache_file, 'r', encoding='utf-8') as f:
+                cache = json.load(f)
+                logger.info(f"Cache persistant des rôles chargé: {len(cache)} speakers")
+                return cache
+        except Exception as e:
+            logger.error(f"Erreur lors du chargement du cache persistant des rôles: {e}")
+            return {}
+    
+    def _save_to_persistent_role_cache(self, new_roles: Dict[str, str]):
+        """
+        Sauvegarde les nouveaux rôles dans le cache persistant
+        
+        Args:
+            new_roles: Dictionnaire speaker_name -> role à sauvegarder
+        """
+        if not new_roles:
+            return
+        
+        try:
+            # Créer le répertoire s'il n'existe pas
+            self._role_cache_file.parent.mkdir(parents=True, exist_ok=True)
+            
+            # Charger le cache existant depuis le fichier
+            current_cache = self._load_persistent_role_cache()
+            
+            # Mettre à jour avec les nouveaux rôles
+            current_cache.update(new_roles)
+            
+            # Sauvegarder
+            with open(self._role_cache_file, 'w', encoding='utf-8') as f:
+                json.dump(current_cache, f, ensure_ascii=False, indent=2)
+            
+            # Mettre à jour aussi le cache en mémoire
+            self._persistent_role_cache.update(new_roles)
+            
+            logger.info(f"Cache persistant des rôles mis à jour: {len(new_roles)} nouveaux rôles sauvegardés")
+            
+        except Exception as e:
+            logger.error(f"Erreur lors de la sauvegarde du cache persistant des rôles: {e}")
+    
+    def identify_and_extract_speakers_with_roles(
+        self, 
+        all_speakers: List[str], 
+        interventions: List[Dict[str, Any]],
+        interviewer_names_set: Set[str],
+        known_roles: Optional[Dict[str, str]] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Identifie les vrais noms de speakers ET extrait leurs rôles en un seul appel LLM
+        
+        Args:
+            all_speakers: Liste de tous les speakers extraits par le parser (peut contenir des faux positifs)
+            interventions: Liste de toutes les interventions pour contexte
+            interviewer_names_set: Set des noms d'interviewers (ne seront pas traités)
+            known_roles: Dictionnaire optionnel de speaker_name -> role pour réutiliser les rôles déjà connus
+            
+        Returns:
+            Liste de dictionnaires avec {"name": str, "role": str, "is_interviewer": bool}
+        """
+        if not all_speakers or not interventions:
+            return []
+        
+        # Filtrer les interviewers de la liste (ils seront ajoutés séparément)
+        candidate_speakers = [s for s in all_speakers if s not in interviewer_names_set]
+        
+        if not candidate_speakers:
+            # Seulement des interviewers, retourner juste eux
+            return [
+                {"name": name, "role": "", "is_interviewer": True}
+                for name in interviewer_names_set
+            ]
+        
+        # Préparer TOUTES les interventions de chaque speaker candidat (sans restriction)
+        # Grouper les interventions par speaker
+        interventions_by_speaker = {}
+        for intervention in interventions:
+            speaker = intervention.get("speaker", "")
+            if speaker in candidate_speakers:
+                if speaker not in interventions_by_speaker:
+                    interventions_by_speaker[speaker] = []
+                interventions_by_speaker[speaker].append(intervention)
+        
+        # Construire le texte avec TOUTES les interventions de chaque speaker
+        all_interventions_text = []
+        for speaker, speaker_intervs in interventions_by_speaker.items():
+            all_interventions_text.append(f"\n=== {speaker} ===")
+            for interv in speaker_intervs:
+                text = interv.get('text', '').strip()
+                if text:
+                    all_interventions_text.append(f"{text}")
+        
+        all_interventions = "\n".join(all_interventions_text)
+        
+        # Construire la liste des rôles connus pour référence
+        known_roles_text = ""
+        if known_roles:
+            known_roles_text = "\n\nRôles déjà connus pour référence:\n"
+            for name, role in known_roles.items():
+                if name in candidate_speakers:
+                    known_roles_text += f"- {name}: {role}\n"
+        
+        # Formater la liste des candidats
+        candidate_speakers_text = "\n".join(f"- {speaker}" for speaker in candidate_speakers)
+        
+        # Construire le prompt
+        prompt = SPEAKER_IDENTIFICATION_AND_ROLE_EXTRACTION_PROMPT.format(
+            candidate_speakers=candidate_speakers_text,
+            all_interventions=all_interventions,
+            known_roles_text=known_roles_text
+        )
+        
+        try:
+            response = self.client.responses.create(
+                model=self.model,
+                input=[{
+                    "role": "user",
+                    "content": [{
+                        "type": "input_text",
+                        "text": prompt
+                    }]
+                }]
+            )
+            
+            result_text = response.output_text.strip()
+            
+            # Parser le JSON
+            # Nettoyer le texte (enlever markdown code blocks si présent)
+            if result_text.startswith("```"):
+                result_text = result_text.split("```")[1]
+                if result_text.startswith("json"):
+                    result_text = result_text[4:]
+                result_text = result_text.strip()
+            
+            result_json = json.loads(result_text)
+            
+            # Construire la liste finale
+            speakers_list = []
+            
+            # D'abord, ajouter les interviewers
+            for interviewer_name in interviewer_names_set:
+                speakers_list.append({
+                    "name": interviewer_name,
+                    "role": "",
+                    "is_interviewer": True
+                })
+            
+            # Ensuite, ajouter les speakers identifiés par le LLM
+            for speaker_data in result_json.get("speakers", []):
+                name = speaker_data.get("name", "").strip()
+                role = speaker_data.get("role", "").strip()
+                
+                if not name:
+                    continue
+                
+                # Normaliser "NON_TROUVE" en chaîne vide
+                if role.upper() == "NON_TROUVE":
+                    role = ""
+                
+                # Vérifier si le rôle est dans les rôles connus (priorité)
+                if known_roles and name in known_roles:
+                    role = known_roles[name]
+                
+                # Sauvegarder dans le cache si un rôle a été trouvé
+                if role:
+                    self._role_cache[name] = role
+                    self._save_to_persistent_role_cache({name: role})
+                
+                speakers_list.append({
+                    "name": name,
+                    "role": role,
+                    "is_interviewer": False
+                })
+            
+            logger.info(f"✓ Identification LLM: {len(candidate_speakers)} candidats → {len([s for s in speakers_list if not s['is_interviewer']])} vrais speakers")
+            
+            return speakers_list
+            
+        except json.JSONDecodeError as e:
+            logger.error(f"Erreur de parsing JSON de la réponse LLM: {e}")
+            logger.error(f"Réponse reçue: {result_text[:500]}")
+            # Fallback: retourner les interviewers seulement
+            return [
+                {"name": name, "role": "", "is_interviewer": True}
+                for name in interviewer_names_set
+            ]
+        except Exception as e:
+            logger.error(f"Erreur lors de l'identification/extraction LLM des speakers: {e}")
+            # Fallback: retourner les interviewers seulement
+            return [
+                {"name": name, "role": "", "is_interviewer": True}
+                for name in interviewer_names_set
+            ]
     
     def set_interviewer_names(self, interviewer_names: List[str]):
         """

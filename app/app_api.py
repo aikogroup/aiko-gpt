@@ -269,6 +269,27 @@ def init_session_state():
     if 'web_search_counter' not in st.session_state:
         st.session_state.web_search_counter = 0
 
+def get_transcript_file_paths(transcripts: List[Any]) -> List[str]:
+    """
+    Extrait les file_paths depuis la liste de transcripts (nouvelle structure)
+    
+    Args:
+        transcripts: Liste de dictionnaires avec structure {nom, file_path, speakers}
+                     ou liste de strings (ancienne structure)
+        
+    Returns:
+        Liste des file_paths
+    """
+    if not transcripts:
+        return []
+    
+    # Si c'est déjà une liste de strings (ancienne structure), retourner tel quel
+    if transcripts and isinstance(transcripts[0], str):
+        return transcripts
+    
+    # Sinon, extraire les file_paths depuis la nouvelle structure
+    return [t.get("file_path", "") for t in transcripts if isinstance(t, dict) and t.get("file_path")]
+
 def upload_files_to_api(files: List[Any]) -> Dict[str, Any]:
     """
     Upload les fichiers vers l'API.
@@ -776,8 +797,15 @@ def display_diagnostic_section():
         st.metric("Transcriptions", len(st.session_state.uploaded_transcripts))
         if st.session_state.uploaded_transcripts:
             with st.expander("Voir les fichiers"):
-                for path in st.session_state.uploaded_transcripts:
-                    st.text(f"• {os.path.basename(path)}")
+                for transcript in st.session_state.uploaded_transcripts:
+                    if isinstance(transcript, dict):
+                        transcript_name = transcript.get("nom", "Sans nom")
+                        file_path = transcript.get("file_path", "")
+                        filename = os.path.basename(file_path) if file_path else "Fichier inconnu"
+                        st.text(f"• {transcript_name} ({filename})")
+                    else:
+                        # Ancienne structure (string)
+                        st.text(f"• {os.path.basename(transcript)}")
     with col2:
         st.metric("Ateliers", len(st.session_state.uploaded_workshops))
         if st.session_state.uploaded_workshops:
@@ -815,10 +843,12 @@ def display_diagnostic_section():
             
             # Lancer l'appel API dans un thread
             with ThreadPoolExecutor(max_workers=1) as executor:
+                # Extraire les file_paths depuis la nouvelle structure
+                transcript_file_paths = get_transcript_file_paths(st.session_state.uploaded_transcripts)
                 future = executor.submit(
                     start_workflow_api_call,
                     st.session_state.uploaded_workshops,
-                    st.session_state.uploaded_transcripts,
+                    transcript_file_paths,
                     st.session_state.company_name,
                     st.session_state.get("company_url", ""),
                     st.session_state.get("company_description", ""),
@@ -1261,57 +1291,245 @@ def display_upload_documents_section():
     if 'uploaded_file_names' not in st.session_state:
         st.session_state.uploaded_file_names = set()
     
-    # Upload Transcripts
+    # Initialiser l'état pour le formulaire de transcript
+    if 'current_transcript_file_path' not in st.session_state:
+        st.session_state.current_transcript_file_path = None
+    if 'current_transcript_name' not in st.session_state:
+        st.session_state.current_transcript_name = ""
+    if 'current_transcript_speakers' not in st.session_state:
+        st.session_state.current_transcript_speakers = []
+    if 'transcript_classification_in_progress' not in st.session_state:
+        st.session_state.transcript_classification_in_progress = False
+    
+    # Upload Transcripts - un par un
     st.subheader("📄 Transcriptions (PDF ou JSON)")
-    uploaded_transcripts = st.file_uploader(
-        "Uploadez vos transcriptions",
-        type=["pdf", "json"],
-        accept_multiple_files=True,
-        key="upload_transcripts_persistent"
-    )
     
-    if uploaded_transcripts:
-        # Filtrer uniquement les nouveaux fichiers (ceux qui n'ont pas encore été uploadés)
-        new_transcripts = [
-            f for f in uploaded_transcripts 
-            if f.name not in st.session_state.uploaded_file_names
-        ]
+    # Si on a un transcript en cours de traitement, afficher le formulaire
+    if st.session_state.current_transcript_file_path and st.session_state.current_transcript_speakers:
+        st.markdown("---")
+        st.markdown("### 📝 Configuration du transcript")
         
-        if new_transcripts:
-            # Sauvegarder dans session_state
-            transcript_paths = upload_files_to_api(new_transcripts)
-            new_paths = transcript_paths.get("transcript", [])
-            
-            # Ajouter les nouveaux chemins aux transcripts existants
-            existing_transcripts = st.session_state.get("uploaded_transcripts", [])
-            st.session_state.uploaded_transcripts = existing_transcripts + new_paths
-            
-            # Marquer les fichiers comme uploadés
-            for f in new_transcripts:
-                st.session_state.uploaded_file_names.add(f.name)
-            
-            st.success(f"✅ {len(new_transcripts)} nouveau(x) fichier(s) de transcription sauvegardé(s)")
-            # Forcer la mise à jour de la sidebar
+        # Nom du transcript (non modifiable)
+        st.text_input(
+            "Nom du transcript",
+            value=st.session_state.current_transcript_name,
+            disabled=True,
+            key="transcript_name_display"
+        )
+        
+        # Formulaire pour les speakers
+        st.markdown("**Intervenants :**")
+        st.caption("💡 Vous pouvez supprimer les speakers qui ne sont pas des participants directs (ex: personnes citées)")
+        
+        # Gérer la suppression de speakers
+        if 'delete_speaker_idx' in st.session_state:
+            idx_to_delete = st.session_state.delete_speaker_idx
+            if 0 <= idx_to_delete < len(st.session_state.current_transcript_speakers):
+                st.session_state.current_transcript_speakers.pop(idx_to_delete)
+            del st.session_state.delete_speaker_idx
             st.rerun()
+        
+        updated_speakers = []
+        
+        for idx, speaker in enumerate(st.session_state.current_transcript_speakers):
+            col1, col2, col3, col4 = st.columns([3, 3, 1, 1])
+            with col1:
+                speaker_name = st.text_input(
+                    "Nom",
+                    value=speaker.get("name", ""),
+                    key=f"speaker_name_{idx}"
+                )
+            with col2:
+                speaker_role = st.text_input(
+                    "Rôle",
+                    value=speaker.get("role", ""),
+                    key=f"speaker_role_{idx}"
+                )
+            with col3:
+                is_interviewer = speaker.get("is_interviewer", False)
+                if is_interviewer:
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    st.caption("Interviewer")
+                else:
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    st.caption("Participant")
+            with col4:
+                # Bouton supprimer (sauf pour les interviewers)
+                if not is_interviewer:
+                    if st.button("🗑️", key=f"delete_speaker_{idx}", help="Supprimer ce speaker"):
+                        st.session_state.delete_speaker_idx = idx
+                        st.rerun()
+            
+            updated_speakers.append({
+                "name": speaker_name,
+                "role": speaker_role,
+                "is_interviewer": is_interviewer
+            })
+        
+        st.session_state.current_transcript_speakers = updated_speakers
+        
+        # Bouton pour ajouter un nouveau speaker
+        st.markdown("---")
+        with st.expander("➕ Ajouter un speaker manuellement"):
+            col1, col2 = st.columns(2)
+            with col1:
+                new_speaker_name = st.text_input(
+                    "Nom du nouveau speaker",
+                    key="new_speaker_name_input",
+                    placeholder="Ex: Jean Dupont"
+                )
+            with col2:
+                new_speaker_role = st.text_input(
+                    "Rôle du nouveau speaker",
+                    key="new_speaker_role_input",
+                    placeholder="Ex: Directeur Commercial"
+                )
+            
+            if st.button("➕ Ajouter ce speaker", key="add_new_speaker_btn"):
+                if new_speaker_name and new_speaker_name.strip():
+                    new_speaker = {
+                        "name": new_speaker_name.strip(),
+                        "role": new_speaker_role.strip() if new_speaker_role else "",
+                        "is_interviewer": False
+                    }
+                    st.session_state.current_transcript_speakers.append(new_speaker)
+                    st.rerun()
+                else:
+                    st.warning("⚠️ Veuillez saisir au moins un nom")
+        
+        # Boutons de validation
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("✅ Valider", type="primary", key="validate_transcript"):
+                # Sauvegarder le transcript dans la liste
+                transcript_data = {
+                    "nom": st.session_state.current_transcript_name,
+                    "file_path": st.session_state.current_transcript_file_path,
+                    "speakers": [
+                        {"name": s["name"], "role": s["role"]}
+                        for s in updated_speakers
+                        if not s.get("is_interviewer", False)  # Exclure les interviewers
+                    ]
+                }
+                
+                # Ajouter à la liste des transcripts
+                if 'uploaded_transcripts' not in st.session_state:
+                    st.session_state.uploaded_transcripts = []
+                st.session_state.uploaded_transcripts.append(transcript_data)
+                
+                # Réinitialiser l'état pour permettre un nouvel upload
+                st.session_state.current_transcript_file_path = None
+                st.session_state.current_transcript_name = ""
+                st.session_state.current_transcript_speakers = []
+                st.session_state.transcript_classification_in_progress = False
+                
+                st.success("✅ Transcript sauvegardé avec succès !")
+                st.rerun()
+        
+        with col2:
+            if st.button("❌ Annuler", key="cancel_transcript"):
+                # Réinitialiser l'état
+                st.session_state.current_transcript_file_path = None
+                st.session_state.current_transcript_name = ""
+                st.session_state.current_transcript_speakers = []
+                st.session_state.transcript_classification_in_progress = False
+                st.rerun()
+        
+        st.markdown("---")
     
-    # Afficher les transcripts déjà uploadés
-    if st.session_state.uploaded_transcripts:
-        st.markdown("**Fichiers de transcription sauvegardés :**")
-        for path in st.session_state.uploaded_transcripts:
-            filename = os.path.basename(path)
+    # Upload d'un nouveau transcript (seulement si aucun en cours)
+    if not st.session_state.current_transcript_file_path:
+        uploaded_transcript = st.file_uploader(
+            "Uploadez un transcript (PDF ou JSON)",
+            type=["pdf", "json"],
+            accept_multiple_files=False,
+            key="upload_transcript_single"
+        )
+        
+        if uploaded_transcript:
+            # Champ pour le nom du transcript
+            transcript_name = st.text_input(
+                "Nom du transcript *",
+                placeholder="Ex: Echange Direction Commerciale",
+                key="transcript_name_input"
+            )
+            
+            if st.button("🔍 Classifier les speakers", type="primary", key="classify_speakers"):
+                if not transcript_name:
+                    st.error("⚠️ Veuillez saisir un nom pour le transcript")
+                else:
+                    # Upload le fichier
+                    with st.spinner("📤 Upload du fichier..."):
+                        try:
+                            transcript_paths = upload_files_to_api([uploaded_transcript])
+                            new_paths = transcript_paths.get("transcript", [])
+                            
+                            if not new_paths:
+                                st.error("❌ Erreur lors de l'upload du fichier")
+                            else:
+                                file_path = new_paths[0]
+                                
+                                # Construire le dictionnaire des rôles connus depuis les transcripts précédents
+                                known_speakers = {}
+                                if 'uploaded_transcripts' in st.session_state:
+                                    for transcript in st.session_state.uploaded_transcripts:
+                                        for speaker in transcript.get("speakers", []):
+                                            speaker_name = speaker.get("name", "")
+                                            speaker_role = speaker.get("role", "")
+                                            if speaker_name and speaker_role:
+                                                known_speakers[speaker_name] = speaker_role
+                                
+                                # Appeler l'API pour classifier les speakers
+                                st.session_state.transcript_classification_in_progress = True
+                                with st.spinner("🔍 Classification des speakers en cours..."):
+                                    try:
+                                        response = requests.post(
+                                            f"{API_URL}/transcripts/classify-speakers",
+                                            json={
+                                                "file_path": file_path,
+                                                "interviewer_names": None,  # Utiliser les valeurs par défaut
+                                                "known_speakers": known_speakers
+                                            }
+                                        )
+                                        response.raise_for_status()
+                                        result = response.json()
+                                        
+                                        # Sauvegarder les données dans session_state
+                                        st.session_state.current_transcript_file_path = file_path
+                                        st.session_state.current_transcript_name = transcript_name
+                                        st.session_state.current_transcript_speakers = result.get("speakers", [])
+                                        st.session_state.transcript_classification_in_progress = False
+                                        
+                                        st.success("✅ Classification terminée !")
+                                        st.rerun()
+                                        
+                                    except requests.exceptions.RequestException as e:
+                                        st.error(f"❌ Erreur lors de la classification: {str(e)}")
+                                        st.session_state.transcript_classification_in_progress = False
+                                        
+                        except Exception as e:
+                            st.error(f"❌ Erreur lors de l'upload: {str(e)}")
+                            st.session_state.transcript_classification_in_progress = False
+    
+    # Afficher les transcripts déjà uploadés et validés
+    if st.session_state.get("uploaded_transcripts"):
+        st.markdown("---")
+        st.markdown("**📋 Transcripts sauvegardés :**")
+        for idx, transcript in enumerate(st.session_state.uploaded_transcripts):
             col1, col2 = st.columns([4, 1])
             with col1:
-                st.text(f"• {filename}")
+                st.markdown(f"**{transcript.get('nom', 'Sans nom')}**")
+                filename = os.path.basename(transcript.get("file_path", ""))
+                st.caption(f"Fichier: {filename}")
+                speakers_text = " | ".join([
+                    f"{s.get('name', '')} | {s.get('role', '')}"
+                    for s in transcript.get("speakers", [])
+                ])
+                if speakers_text:
+                    st.caption(f"Intervenants: {speakers_text}")
             with col2:
-                if st.button("🗑️", key=f"delete_transcript_{path}", help="Supprimer"):
-                    st.session_state.uploaded_transcripts.remove(path)
-                    # Retirer aussi le nom du fichier du tracking si on peut le retrouver
-                    file_basename = os.path.basename(path)
-                    # Chercher le nom original dans uploaded_file_names
-                    for name in list(st.session_state.uploaded_file_names):
-                        if file_basename.endswith(name) or name in file_basename:
-                            st.session_state.uploaded_file_names.discard(name)
-                            break
+                if st.button("🗑️", key=f"delete_transcript_{idx}", help="Supprimer"):
+                    st.session_state.uploaded_transcripts.pop(idx)
                     st.rerun()
     
     st.markdown("---")
@@ -1632,7 +1850,7 @@ def display_recommendations_section():
                     f"{API_URL}/executive-summary/threads/{thread_id}/runs",
                     json={
                         "word_report_path": word_path,
-                        "transcript_files": st.session_state.uploaded_transcripts,
+                        "transcript_files": get_transcript_file_paths(st.session_state.uploaded_transcripts),
                         "workshop_files": st.session_state.uploaded_workshops,
                         "company_name": st.session_state.company_name,
                         "interviewer_note": interviewer_note or ""

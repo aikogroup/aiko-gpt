@@ -24,6 +24,9 @@ from workflow.need_analysis_workflow import NeedAnalysisWorkflow
 from workflow.rappel_mission_workflow import RappelMissionWorkflow
 from executive_summary.executive_summary_workflow import ExecutiveSummaryWorkflow
 from langgraph.checkpoint.memory import MemorySaver
+from process_transcript.pdf_parser import PDFParser
+from process_transcript.json_parser import JSONParser
+from process_transcript.speaker_classifier import SpeakerClassifier
 
 # Initialisation de l'API
 app = FastAPI(
@@ -90,6 +93,12 @@ class ExecutiveValidationFeedback(BaseModel):
     validation_type: str  # "challenges" ou "recommendations"
     validation_result: Dict[str, Any]
 
+class ClassifySpeakersInput(BaseModel):
+    """Input pour classifier les speakers d'un transcript"""
+    file_path: str
+    interviewer_names: Optional[List[str]] = None
+    known_speakers: Optional[Dict[str, str]] = None  # speaker_name -> role pour réutilisation
+
 
 # ==================== ENDPOINTS ====================
 
@@ -152,6 +161,81 @@ async def upload_files(files: List[UploadFile] = File(...)):
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erreur upload: {str(e)}")
+
+
+@app.post("/transcripts/classify-speakers")
+async def classify_speakers(input_data: ClassifySpeakersInput):
+    """
+    Classe les speakers d'un transcript et extrait leurs rôles
+    
+    Args:
+        input_data: Contient file_path, interviewer_names (optionnel), et known_speakers (optionnel)
+    
+    Returns:
+        {
+            "speakers": [
+                {"name": "...", "role": "...", "is_interviewer": bool},
+                ...
+            ]
+        }
+    """
+    try:
+        file_path = input_data.file_path
+        
+        # Vérifier que le fichier existe
+        if not Path(file_path).exists():
+            raise HTTPException(status_code=404, detail=f"Fichier non trouvé: {file_path}")
+        
+        # Initialiser les parsers et le classificateur
+        pdf_parser = PDFParser()
+        json_parser = JSONParser()
+        
+        interviewer_names = input_data.interviewer_names or ["Christella Umuhoza", "Adrien Fabry"]
+        speaker_classifier = SpeakerClassifier(
+            api_key=os.getenv("OPENAI_API_KEY"),
+            interviewer_names=interviewer_names
+        )
+        
+        # Parser le transcript selon son type
+        file_extension = Path(file_path).suffix.lower()
+        if file_extension == '.json':
+            interventions = json_parser.parse_transcript(file_path)
+        elif file_extension == '.pdf':
+            interventions = pdf_parser.parse_transcript(file_path)
+        else:
+            raise HTTPException(status_code=400, detail=f"Format de fichier non supporté: {file_extension}")
+        
+        if not interventions:
+            return {"speakers": []}
+        
+        # Identifier les interviewers (par matching de noms)
+        interviewer_names_set = speaker_classifier._identify_interviewers(interventions)
+        
+        # Extraire TOUS les speakers uniques du parsing
+        all_speakers = list(set(
+            interv.get("speaker", "") 
+            for interv in interventions 
+            if interv.get("speaker")
+        ))
+        
+        # Construire le dictionnaire de rôles connus
+        known_roles = input_data.known_speakers or {}
+        
+        # NOUVEAU: Un seul appel LLM pour identifier les vrais speakers ET extraire leurs rôles
+        speakers_list = speaker_classifier.identify_and_extract_speakers_with_roles(
+            all_speakers=all_speakers,
+            interventions=interventions,
+            interviewer_names_set=interviewer_names_set,
+            known_roles=known_roles
+        )
+        
+        return {"speakers": speakers_list}
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ [API] Erreur lors de la classification des speakers: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Erreur classification: {str(e)}")
 
 
 @app.post("/threads/{thread_id}/runs")
