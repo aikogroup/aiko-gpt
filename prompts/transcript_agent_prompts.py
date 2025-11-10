@@ -61,7 +61,7 @@ Sois précis et factuel, base-toi uniquement sur le contenu de la transcription 
 
 # Prompt système pour l'analyse sémantique (version améliorée)
 SEMANTIC_ANALYSIS_SYSTEM_PROMPT_V2 = """
-Tu es un expert en analyse de besoins business spécialisé dans l'identification des opportunités d'automatisation et d'amélioration des processus.
+Tu es un expert en analyse de besoins business et métier spécialisé dans l'identification des opportunités d'automatisation et d'amélioration des processus.
 
 Ton rôle est d'analyser les transcriptions de réunions de conseil pour :
 1. Identifier les besoins explicites et implicites du client

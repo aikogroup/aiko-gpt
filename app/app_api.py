@@ -630,17 +630,17 @@ def main():
         )
         
         # Section Rapport initial
-        st.markdown("**Rapport initial**")
+        st.markdown("**Génération des Use Cases**")
         page_rapport = st.radio(
             "",
-            ["Génération du Rapport"],
-            index=0 if st.session_state.current_page == "Génération du Rapport" else None,
+            ["Générer les Use Cases"],
+            index=0 if st.session_state.current_page == "Générer les Use Cases" else None,
             key="nav_rapport",
             label_visibility="collapsed"
         )
         
         # Section Diag - Synthèse de mission
-        st.markdown("**Diag - Synthèse de mission**")
+        st.markdown("**Génération du rapport**")
         page_diag = st.radio(
             "",
             ["Génération des Enjeux et Recommandations", "Rappel de la mission"],
@@ -715,7 +715,7 @@ def main():
         display_upload_documents_section()
     elif page == "Configuration des Intervieweurs":
         display_interviewers_config_page()
-    elif page == "Génération du Rapport":
+    elif page == "Générer les Use Cases":
         display_diagnostic_section()
     elif page == "Génération des Enjeux et Recommandations":
         display_recommendations_section()
@@ -728,7 +728,7 @@ def main():
 
 def display_diagnostic_section():
     """Affiche la section de génération du diagnostic (utilise fichiers depuis session_state)"""
-    st.header("🔍 Génération du Rapport")
+    st.header("🔍 Générer les Use Cases")
     
     # Si le workflow est en cours, afficher la progression
     if st.session_state.thread_id and st.session_state.workflow_status is not None:
