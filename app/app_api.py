@@ -9,7 +9,7 @@ import requests
 import time
 import uuid
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import json
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -52,6 +52,7 @@ except Exception as e:
 from utils.report_generator import ReportGenerator
 from human_in_the_loop.streamlit_validation_interface import StreamlitValidationInterface
 from use_case_analysis.streamlit_use_case_validation import StreamlitUseCaseValidation
+from web_search.web_search_agent import WebSearchAgent
 
 # Configuration de l'API
 # Utiliser la variable d'environnement API_URL si disponible, sinon utiliser localhost pour le développement
@@ -252,6 +253,21 @@ def init_session_state():
         st.session_state.rappel_mission = ""
     if 'rappel_mission_company' not in st.session_state:
         st.session_state.rappel_mission_company = ""
+    if 'validated_company_info' not in st.session_state:
+        st.session_state.validated_company_info = None
+    if 'web_search_results' not in st.session_state:
+        st.session_state.web_search_results = None
+    if 'trigger_web_search' not in st.session_state:
+        st.session_state.trigger_web_search = False
+    if 'web_search_agent' not in st.session_state:
+        try:
+            st.session_state.web_search_agent = WebSearchAgent()
+        except Exception as e:
+            st.session_state.web_search_agent = None
+            if os.getenv("DEV_MODE") == "1":
+                print(f"⚠️ Erreur lors de l'initialisation de WebSearchAgent: {e}")
+    if 'web_search_counter' not in st.session_state:
+        st.session_state.web_search_counter = 0
 
 def upload_files_to_api(files: List[Any]) -> Dict[str, Any]:
     """
@@ -285,7 +301,7 @@ def upload_files_to_api(files: List[Any]) -> Dict[str, Any]:
         st.error(f"❌ Erreur lors de l'upload: {str(e)}")
         return {"workshop": [], "transcript": [], "file_paths": []}
 
-def start_workflow_api_call(workshop_files: List[str], transcript_files: List[str], company_name: str, company_url: str, company_description: str, interviewer_names: List[str], additional_context: str, result_queue: queue.Queue):
+def start_workflow_api_call(workshop_files: List[str], transcript_files: List[str], company_name: str, company_url: str, company_description: str, validated_company_info: Optional[Dict[str, Any]], interviewer_names: List[str], additional_context: str, result_queue: queue.Queue):
     """
     Fait l'appel API dans un thread séparé.
     Met le résultat dans la queue : (success: bool, thread_id: str, error_msg: str)
@@ -303,6 +319,7 @@ def start_workflow_api_call(workshop_files: List[str], transcript_files: List[st
                 "company_name": company_name if company_name else None,
                 "company_url": company_url if company_url else None,
                 "company_description": company_description if company_description else None,
+                "validated_company_info": validated_company_info,
                 "interviewer_names": interviewer_names,
                 "additional_context": additional_context if additional_context else ""
             },
@@ -623,8 +640,8 @@ def main():
         st.markdown("**Documents et configuration**")
         page_docs = st.radio(
             "Navigation Documents et configuration",
-            ["Upload de documents", "Configuration des Intervieweurs"],
-            index=0 if st.session_state.current_page == "Upload de documents" else (1 if st.session_state.current_page == "Configuration des Intervieweurs" else None),
+            ["Upload de documents", "Contexte de l'entreprise", "Configuration des Intervieweurs"],
+            index=0 if st.session_state.current_page == "Upload de documents" else (1 if st.session_state.current_page == "Contexte de l'entreprise" else (2 if st.session_state.current_page == "Configuration des Intervieweurs" else None)),
             key="nav_docs",
             label_visibility="collapsed"
         )
@@ -692,12 +709,16 @@ def main():
         else:
             st.success(f"✅ {workshop_count} fichier{'s' if workshop_count > 1 else ''} workshop uploadé{'s' if workshop_count > 1 else ''}")
         
-        # Nom de l'entreprise
-        company_name = st.session_state.get("company_name", "")
-        if company_name:
-            st.success(f"🏢 {company_name}")
+        # Statut des informations de l'entreprise
+        validated_company_info = st.session_state.get("validated_company_info")
+        if validated_company_info:
+            company_name = validated_company_info.get("nom", "")
+            if company_name:
+                st.success(f"✅ Contexte d'entreprise validé : {company_name}")
+            else:
+                st.success("✅ Contexte d'entreprise validé")
         else:
-            st.info("🏢 Aucune entreprise sélectionnée")
+            st.warning("⚠️ Aucune info d'entreprise")
         
         st.markdown("------")
         
@@ -713,6 +734,8 @@ def main():
         display_home_page()
     elif page == "Upload de documents":
         display_upload_documents_section()
+    elif page == "Contexte de l'entreprise":
+        display_company_context_section()
     elif page == "Configuration des Intervieweurs":
         display_interviewers_config_page()
     elif page == "Générer les Use Cases":
@@ -799,6 +822,7 @@ def display_diagnostic_section():
                     st.session_state.company_name,
                     st.session_state.get("company_url", ""),
                     st.session_state.get("company_description", ""),
+                    st.session_state.get("validated_company_info"),
                     interviewer_names,
                     additional_context or "",
                     result_queue
@@ -1344,71 +1368,181 @@ def display_upload_documents_section():
                             st.session_state.uploaded_file_names.discard(name)
                             break
                     st.rerun()
-    
-    st.markdown("---")
-    
-    # Informations sur l'entreprise
-    st.subheader("🏢 Informations sur l'Entreprise")
+
+def display_company_context_section():
+    """Section pour configurer le contexte de l'entreprise avec recherche web"""
+    st.header("🏢 Contexte de l'entreprise")
+    st.info("💡 Configurez les informations sur l'entreprise et lancez une recherche web pour obtenir des informations détaillées.")
     
     # Initialiser les variables pour suivre les changements
-    if 'previous_company_name' not in st.session_state:
-        st.session_state.previous_company_name = st.session_state.get("company_name", "")
-    if 'previous_company_url' not in st.session_state:
-        st.session_state.previous_company_url = st.session_state.get("company_url", "")
-    if 'previous_company_description' not in st.session_state:
-        st.session_state.previous_company_description = st.session_state.get("company_description", "")
+    if 'company_context_name' not in st.session_state:
+        st.session_state.company_context_name = ""
+    if 'company_context_url' not in st.session_state:
+        st.session_state.company_context_url = ""
+    if 'company_context_description' not in st.session_state:
+        st.session_state.company_context_description = ""
+    if 'previous_company_context_name' not in st.session_state:
+        st.session_state.previous_company_context_name = ""
+    if 'web_search_counter' not in st.session_state:
+        st.session_state.web_search_counter = 0
     
-    # Créer 3 colonnes côte à côte
-    col1, col2, col3 = st.columns(3)
-    
+    # Champs de saisie
+    col1, col2 = st.columns(2)
     with col1:
-        company_name = st.text_input(
-            "Nom de l'entreprise",
-            value=st.session_state.company_name,
+        company_context_name = st.text_input(
+            "Nom de l'entreprise *",
+            value=st.session_state.company_context_name,
             placeholder="Ex: Cousin Surgery",
-            key="company_name_persistent"
+            key="company_context_name_input"
         )
-    
     with col2:
-        company_url = st.text_input(
-            "URL de l'entreprise (optionnel)",
-            value=st.session_state.company_url,
+        company_context_url = st.text_input(
+            "URL du site (optionnel)",
+            value=st.session_state.company_context_url,
             placeholder="Ex: https://www.example.com",
-            key="company_url_persistent"
+            key="company_context_url_input"
         )
     
-    with col3:
-        company_description = st.text_input(
-            "Description de l'activité (optionnel)",
-            value=st.session_state.company_description,
-            placeholder="Ex: Fabricant de dispositifs médicaux",
-            key="company_description_persistent"
-        )
+    company_context_description = st.text_area(
+        "Description de l'entreprise (optionnel)",
+        value=st.session_state.company_context_description,
+        placeholder="Ex: Fabricant de dispositifs médicaux spécialisé dans...",
+        height=100,
+        key="company_context_description_input"
+    )
     
-    # Normaliser les valeurs (strip si non vide, sinon chaîne vide)
-    normalized_name = company_name.strip() if company_name else ""
-    normalized_url = company_url.strip() if company_url else ""
-    normalized_description = company_description.strip() if company_description else ""
+    # Normaliser les valeurs
+    normalized_name = company_context_name.strip() if company_context_name else ""
+    normalized_url = company_context_url.strip() if company_context_url else ""
+    normalized_description = company_context_description.strip() if company_context_description else ""
     
-    # Vérifier si les valeurs ont changé
-    name_changed = normalized_name != st.session_state.previous_company_name
-    url_changed = normalized_url != st.session_state.previous_company_url
-    description_changed = normalized_description != st.session_state.previous_company_description
+    # Vérifier si le nom a changé (réinitialiser les résultats validés)
+    name_changed = normalized_name != st.session_state.previous_company_context_name
+    if name_changed and normalized_name:
+        # Réinitialiser les résultats validés si le nom change
+        st.session_state.validated_company_info = None
+        st.session_state.previous_company_context_name = normalized_name
     
-    # Mettre à jour le session_state si les valeurs ont changé
-    if name_changed or url_changed or description_changed:
-        st.session_state.company_name = normalized_name
-        st.session_state.previous_company_name = normalized_name
-        st.session_state.company_url = normalized_url
-        st.session_state.previous_company_url = normalized_url
-        st.session_state.company_description = normalized_description
-        st.session_state.previous_company_description = normalized_description
-        # Forcer la mise à jour de la sidebar seulement si une valeur a changé
+    # Mettre à jour le session_state
+    st.session_state.company_context_name = normalized_name
+    st.session_state.company_context_url = normalized_url
+    st.session_state.company_context_description = normalized_description
+    
+    # Exécuter la recherche si déclenchée (avant d'afficher le bouton pour éviter les problèmes de rerun)
+    if st.session_state.get("trigger_web_search", False) and normalized_name:
+        st.session_state.trigger_web_search = False  # Réinitialiser le flag
+        if st.session_state.web_search_agent is None:
+            st.error("❌ WebSearchAgent n'est pas initialisé. Vérifiez les variables d'environnement.")
+        else:
+            with st.spinner("🔍 Recherche d'informations sur l'entreprise..."):
+                try:
+                    search_results = st.session_state.web_search_agent.search_company_info(
+                        normalized_name,
+                        company_url=normalized_url if normalized_url else None,
+                        company_description=normalized_description if normalized_description else None
+                    )
+                    st.session_state.web_search_results = search_results
+                    st.success("✅ Recherche terminée !")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ Erreur lors de la recherche: {str(e)}")
+                    st.session_state.web_search_results = None
+    
+    # Bouton pour lancer la recherche web
+    col1, col2 = st.columns([1, 4])
+    with col1:
+        search_button = st.button("🔍 Lancer la recherche web", type="primary", disabled=not normalized_name)
+    
+    # Afficher les résultats de recherche ou les données validées
+    if search_button and normalized_name:
+        # Réinitialiser les données validées pour afficher les nouveaux résultats de recherche
+        st.session_state.validated_company_info = None
+        # Incrémenter le compteur pour forcer la mise à jour des clés du formulaire
+        st.session_state.web_search_counter += 1
+        st.session_state.trigger_web_search = True
         st.rerun()
     
-    # Afficher le message de succès seulement si un nom est saisi
-    if company_name and company_name.strip():
-        st.success(f"🏢 {company_name.strip()}")
+    # Afficher le formulaire éditable avec les résultats
+    if st.session_state.get("web_search_results") or st.session_state.get("validated_company_info"):
+        st.markdown("---")
+        st.subheader("📊 Informations de l'entreprise")
+        
+        # Utiliser les résultats validés s'ils existent, sinon les résultats de recherche
+        # Les résultats validés ont la priorité, mais si une nouvelle recherche a été effectuée,
+        # validated_company_info a été réinitialisé, donc on affichera les nouveaux résultats
+        data_to_display = st.session_state.get("validated_company_info") or st.session_state.get("web_search_results", {})
+        
+        if data_to_display:
+            # Créer un formulaire avec des champs texte pour chaque clé
+            # Utiliser le compteur de recherche dans les clés pour forcer la mise à jour
+            form_key_suffix = st.session_state.get("web_search_counter", 0)
+            with st.form(f"company_info_form_{form_key_suffix}", clear_on_submit=False):
+                st.markdown("**Modifiez les valeurs ci-dessous si nécessaire :**")
+                
+                # Champs modifiables pour chaque clé de CompanyInfo
+                # Utiliser le compteur dans les clés pour forcer la mise à jour
+                edited_nom = st.text_input(
+                    "Nom de l'entreprise",
+                    value=data_to_display.get("nom", ""),
+                    key=f"edit_nom_{form_key_suffix}"
+                )
+                
+                edited_secteur = st.text_input(
+                    "Secteur d'activité",
+                    value=data_to_display.get("secteur", ""),
+                    key=f"edit_secteur_{form_key_suffix}"
+                )
+                
+                edited_chiffre_affaires = st.text_input(
+                    "Chiffre d'affaires",
+                    value=data_to_display.get("chiffre_affaires", ""),
+                    key=f"edit_chiffre_affaires_{form_key_suffix}"
+                )
+                
+                edited_nombre_employes = st.text_input(
+                    "Nombre d'employés",
+                    value=data_to_display.get("nombre_employes", ""),
+                    key=f"edit_nombre_employes_{form_key_suffix}"
+                )
+                
+                edited_description = st.text_area(
+                    "Description",
+                    value=data_to_display.get("description", ""),
+                    height=150,
+                    key=f"edit_description_{form_key_suffix}"
+                )
+                
+                # Bouton de validation
+                col1, col2 = st.columns([1, 4])
+                with col1:
+                    validate_button = st.form_submit_button("✅ Valider", type="primary")
+                
+                if validate_button:
+                    # Créer le dictionnaire validé
+                    validated_data = {
+                        "nom": edited_nom.strip() if edited_nom else "",
+                        "secteur": edited_secteur.strip() if edited_secteur else "",
+                        "chiffre_affaires": edited_chiffre_affaires.strip() if edited_chiffre_affaires else "",
+                        "nombre_employes": edited_nombre_employes.strip() if edited_nombre_employes else "",
+                        "description": edited_description.strip() if edited_description else ""
+                    }
+                    
+                    # Sauvegarder dans session_state
+                    st.session_state.validated_company_info = validated_data
+                    st.success("✅ Informations validées et sauvegardées !")
+                    st.rerun()
+    
+    # Afficher un message si aucune recherche n'a été effectuée
+    if not st.session_state.get("web_search_results") and not st.session_state.get("validated_company_info"):
+        if normalized_name:
+            st.info("💡 Cliquez sur 'Lancer la recherche web' pour obtenir des informations sur l'entreprise.")
+        else:
+            st.warning("⚠️ Veuillez saisir au moins le nom de l'entreprise pour lancer une recherche.")
+    
+    # Afficher le statut de validation si des informations sont validées
+    if st.session_state.get("validated_company_info"):
+        st.markdown("---")
+        st.success("✅ Informations de l'entreprise validées et prêtes à être utilisées dans les workflows.")
 
 def display_recommendations_section():
     """Section pour générer l'Executive Summary (enjeux et recommandations)"""
@@ -1968,48 +2102,47 @@ def display_executive_results():
 def display_rappel_mission():
     """Affiche le rappel de la mission"""
     st.header("Rappel de la mission")
-    saved_company_name = (st.session_state.get("company_name") or "").strip()
-    if not saved_company_name:
-        saved_company_name = (st.session_state.get("company_name_input") or "").strip()
-
-    if saved_company_name:
-        st.info(f"Entreprise sélectionnée : {saved_company_name}")
-    else:
-        st.session_state.setdefault("rappel_mission_company_input", "")
-        st.text_input(
-            "Nom de l'entreprise",
-            key="rappel_mission_company_input",
-            placeholder="Ex : Cousin Surgery"
-        )
-
+    
+    # Vérifier si validated_company_info existe
+    validated_company_info = st.session_state.get("validated_company_info")
+    
+    if not validated_company_info:
+        st.warning("⚠️ Veuillez d'abord valider les informations de l'entreprise dans la section 'Upload de documents' > 'Contexte de l'entreprise'.")
+        return
+    
+    # Afficher le nom de l'entreprise validée
+    company_name = validated_company_info.get("nom", "")
+    if company_name:
+        st.info(f"🏢 Entreprise : {company_name}")
+    
     if st.button("📥 Générer le rappel de la mission", type="primary"):
-        company_to_use = saved_company_name or st.session_state.get("rappel_mission_company_input", "").strip()
+        thread_id = str(uuid.uuid4())
+        try:
+            with st.spinner("Génération du rappel de la mission..."):
+                # Envoyer validated_company_info au lieu de company_name
+                response = requests.post(
+                    f"{API_URL}/rappel-mission/threads/{thread_id}/runs",
+                    json={
+                        "company_name": company_name,  # Pour compatibilité
+                        "validated_company_info": validated_company_info
+                    },
+                    timeout=120
+                )
+                response.raise_for_status()
+                data = response.json()
+                result = data.get("result", {})
+                mission_markdown = result.get("mission_markdown", "")
 
-        if not company_to_use:
-            st.warning("Veuillez indiquer le nom de l'entreprise pour générer le rappel.")
-        else:
-            thread_id = str(uuid.uuid4())
-            try:
-                with st.spinner("Recherche des informations de l'entreprise..."):
-                    response = requests.post(
-                        f"{API_URL}/rappel-mission/threads/{thread_id}/runs",
-                        json={"company_name": company_to_use},
-                        timeout=120
-                    )
-                    response.raise_for_status()
-                    data = response.json()
-                    result = data.get("result", {})
-                    mission_markdown = result.get("mission_markdown", "")
-
-                if mission_markdown:
-                    st.session_state.rappel_mission = mission_markdown
-                    st.session_state.rappel_mission_company = company_to_use
-                    st.success("Rappel de la mission mis à jour.")
-                else:
-                    error_message = result.get("error") or "Aucun contenu retourné par le workflow."
-                    st.error(f"Impossible de générer le rappel : {error_message}")
-            except Exception as e:  # pragma: no cover - feedback utilisateur
-                st.error(f"Erreur lors de la génération du rappel : {str(e)}")
+            if mission_markdown:
+                st.session_state.rappel_mission = mission_markdown
+                st.session_state.rappel_mission_company = company_name
+                st.success("Rappel de la mission mis à jour.")
+                st.rerun()
+            else:
+                error_message = result.get("error") or "Aucun contenu retourné par le workflow."
+                st.error(f"Impossible de générer le rappel : {error_message}")
+        except Exception as e:  # pragma: no cover - feedback utilisateur
+            st.error(f"Erreur lors de la génération du rappel : {str(e)}")
 
     mission_content = st.session_state.get("rappel_mission", "")
 
@@ -2021,7 +2154,7 @@ def display_rappel_mission():
                 \n- définir, évaluer et prioriser les possibles cas d'usage​")
         st.markdown("Nous allons démarré la mission en " + date.today().strftime("%B %Y"))
     else:
-        st.info("Générez le rappel de la mission pour afficher les informations de l'entreprise.")
+        st.info("💡 Cliquez sur 'Générer le rappel de la mission' pour afficher les informations de l'entreprise.")
 
 if __name__ == "__main__":
     main()

@@ -52,6 +52,7 @@ class WorkflowInput(BaseModel):
     company_name: Optional[str] = None
     company_url: Optional[str] = None
     company_description: Optional[str] = None
+    validated_company_info: Optional[Dict[str, Any]] = None
     interviewer_names: Optional[List[str]] = None
     additional_context: Optional[str] = ""
 
@@ -82,6 +83,7 @@ class RappelMissionInput(BaseModel):
     """Input pour démarrer un workflow de rappel de mission"""
 
     company_name: str
+    validated_company_info: Optional[Dict[str, Any]] = None
 
 class ExecutiveValidationFeedback(BaseModel):
     """Feedback de validation Executive Summary"""
@@ -200,13 +202,18 @@ async def create_run(thread_id: str, workflow_input: WorkflowInput):
         print(f"📝 Additional context: {len(workflow_input.additional_context or '')} caractères")
         
         # Construire company_info avec tous les champs disponibles
-        company_info = {}
-        if workflow_input.company_name:
-            company_info["company_name"] = workflow_input.company_name
-        if workflow_input.company_url:
-            company_info["company_url"] = workflow_input.company_url
-        if workflow_input.company_description:
-            company_info["company_description"] = workflow_input.company_description
+        # Si validated_company_info est fourni, l'utiliser directement
+        if workflow_input.validated_company_info:
+            company_info = workflow_input.validated_company_info
+        else:
+            # Sinon, construire à partir des champs individuels (rétrocompatibilité)
+            company_info = {}
+            if workflow_input.company_name:
+                company_info["company_name"] = workflow_input.company_name
+            if workflow_input.company_url:
+                company_info["company_url"] = workflow_input.company_url
+            if workflow_input.company_description:
+                company_info["company_description"] = workflow_input.company_description
         
         # Exécuter le workflow (mode asynchrone géré par LangGraph)
         result = workflow.run(
@@ -401,7 +408,11 @@ async def create_rappel_mission_run(thread_id: str, mission_input: RappelMission
         workflow_data = rappel_workflows[thread_id]
         workflow = workflow_data["workflow"]
 
-        result = workflow.run(company_name=mission_input.company_name, thread_id=thread_id)
+        result = workflow.run(
+            company_name=mission_input.company_name,
+            validated_company_info=mission_input.validated_company_info,
+            thread_id=thread_id
+        )
 
         workflow_data["state"] = result
         workflow_data["status"] = "completed" if result.get("success") else "error"

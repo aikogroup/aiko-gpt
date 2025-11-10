@@ -404,6 +404,15 @@ class NeedAnalysisWorkflow:
             company_info = state.get("company_info", {})
             
             if company_info:
+                # Vérifier si company_info contient déjà les clés de CompanyInfo (validated_company_info)
+                # Les clés de CompanyInfo sont: nom, secteur, chiffre_affaires, nombre_employes, description
+                if "nom" in company_info or "secteur" in company_info:
+                    # C'est un validated_company_info, l'utiliser directement
+                    print(f"✅ [PARALLÈLE-3/3] Utilisation des informations validées (validated_company_info)")
+                    print(f"✅ [PARALLÈLE-3/3] web_search_agent_node - FIN")
+                    return {"web_search_results": company_info}
+                
+                # Sinon, c'est l'ancien format avec company_name, company_url, etc.
                 company_name = company_info.get("company_name", "")
                 if company_name:
                     company_url = company_info.get("company_url")

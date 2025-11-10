@@ -13,6 +13,7 @@ class RappelMissionState(TypedDict, total=False):
     """État du workflow rappel de la mission."""
 
     company_name: str
+    validated_company_info: Optional[Dict[str, Any]]
     web_search_results: Dict[str, Any]
     mission_markdown: str
     success: bool
@@ -39,6 +40,14 @@ class RappelMissionWorkflow:
         return workflow.compile()
 
     def _web_search_node(self, state: RappelMissionState) -> RappelMissionState:
+        # Si validated_company_info est fourni, l'utiliser directement
+        validated_company_info = state.get("validated_company_info")
+        if validated_company_info:
+            # Utiliser directement les informations validées
+            state["web_search_results"] = validated_company_info
+            return state
+        
+        # Sinon, faire une recherche web comme avant
         company_name = (state.get("company_name") or "").strip()
         if not company_name:
             state["success"] = False
@@ -60,7 +69,8 @@ class RappelMissionWorkflow:
             return state
 
         info = state["web_search_results"]
-        company_name = (info.get("company_name") or state.get("company_name") or "Entreprise").strip()
+        # Utiliser "nom" au lieu de "company_name" car c'est la clé dans CompanyInfo
+        company_name = (info.get("nom") or state.get("company_name") or "Entreprise").strip()
 
         description = (info.get("description") or "").strip()
 
@@ -71,8 +81,10 @@ class RappelMissionWorkflow:
         state["success"] = True
         return state
 
-    def run(self, company_name: str, thread_id: Optional[str] = None) -> Dict[str, Any]:
+    def run(self, company_name: str, validated_company_info: Optional[Dict[str, Any]] = None, thread_id: Optional[str] = None) -> Dict[str, Any]:
         initial_state: RappelMissionState = {"company_name": company_name.strip()}
+        if validated_company_info:
+            initial_state["validated_company_info"] = validated_company_info
 
         config = {"configurable": {"thread_id": thread_id}} if thread_id else None
         final_state = self.graph.invoke(initial_state, config=config) if config else self.graph.invoke(initial_state)
