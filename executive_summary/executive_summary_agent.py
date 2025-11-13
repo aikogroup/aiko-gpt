@@ -49,27 +49,25 @@ class ExecutiveSummaryAgent:
         transcript_content: str,
         workshop_content: str,
         final_needs: List[Dict[str, Any]],
+        interviewer_note: str = "",
         rejected_challenges: Optional[List[Dict[str, Any]]] = None,
         validated_challenges: Optional[List[Dict[str, Any]]] = None,
-        challenges_feedback: str = "",
-        challenges_iteration_count: int = 0,
-        max_challenges_iterations: int = 3
+        challenges_feedback: str = ""
     ) -> Dict[str, Any]:
         """
-        Identifie 5 enjeux stratégiques de l'IA.
+        Identifie des enjeux stratégiques de l'IA.
         
         Args:
             transcript_content: Contenu des transcripts formaté
             workshop_content: Contenu des ateliers formaté
             final_needs: Liste des besoins identifiés
+            interviewer_note: Note de l'interviewer avec contexte et insights
             rejected_challenges: Enjeux précédemment rejetés (pour régénération)
             validated_challenges: Enjeux validés à conserver (pour régénération)
             challenges_feedback: Feedback utilisateur (pour régénération)
-            challenges_iteration_count: Numéro de l'itération actuelle
-            max_challenges_iterations: Nombre maximum d'itérations
             
         Returns:
-            Dict avec 'challenges' (liste de 5 enjeux)
+            Dict avec 'challenges' (liste d'enjeux)
         """
         import time
         api_start_time = time.time()
@@ -106,8 +104,7 @@ class ExecutiveSummaryAgent:
                     validated_challenges=validated_str,
                     validated_count=validated_count,
                     rejected_count=rejected_count,
-                    current_iteration=challenges_iteration_count + 1,
-                    max_iterations=max_challenges_iterations,
+                    interviewer_note=interviewer_note or "Aucune note de l'interviewer",
                     transcript_content=transcript_content,
                     workshop_content=workshop_content,
                     final_needs=needs_str
@@ -115,6 +112,7 @@ class ExecutiveSummaryAgent:
             else:
                 # Mode première génération
                 prompt = IDENTIFY_CHALLENGES_PROMPT.format(
+                    interviewer_note=interviewer_note or "Aucune note de l'interviewer",
                     transcript_content=transcript_content,
                     workshop_content=workshop_content,
                     final_needs=needs_str
@@ -172,8 +170,7 @@ class ExecutiveSummaryAgent:
         transcript_content: str,
         workshop_content: str,
         final_needs: List[Dict[str, Any]],
-        final_quick_wins: List[Dict[str, Any]],
-        final_structuration_ia: List[Dict[str, Any]]
+        final_use_cases: List[Dict[str, Any]]
     ) -> Dict[str, Any]:
         """
         Évalue la maturité IA de l'entreprise (1-5).
@@ -182,8 +179,7 @@ class ExecutiveSummaryAgent:
             transcript_content: Contenu des transcripts formaté
             workshop_content: Contenu des ateliers formaté
             final_needs: Besoins identifiés
-            final_quick_wins: Quick Wins proposés
-            final_structuration_ia: Structuration IA proposée
+            final_use_cases: Cas d'usage proposés
             
         Returns:
             Dict avec 'echelle' (int 1-5) et 'phrase_resumant' (str)
@@ -191,15 +187,13 @@ class ExecutiveSummaryAgent:
         try:
             # Formater les données pour le prompt
             needs_str = self._format_needs(final_needs)
-            quick_wins_str = self._format_use_cases(final_quick_wins)
-            structuration_str = self._format_use_cases(final_structuration_ia)
+            use_cases_str = self._format_use_cases(final_use_cases)
             
             prompt = EVALUATE_MATURITY_PROMPT.format(
                 transcript_content=transcript_content,
                 workshop_content=workshop_content,
                 final_needs=needs_str,
-                final_quick_wins=quick_wins_str,
-                final_structuration_ia=structuration_str
+                final_use_cases=use_cases_str
             )
             
             # Appel à l'API avec structured output
@@ -236,37 +230,30 @@ class ExecutiveSummaryAgent:
         self,
         maturite_ia: Dict[str, Any],
         final_needs: List[Dict[str, Any]],
-        final_quick_wins: List[Dict[str, Any]],
-        final_structuration_ia: List[Dict[str, Any]],
+        final_use_cases: List[Dict[str, Any]],
         rejected_recommendations: Optional[List[str]] = None,
         validated_recommendations: Optional[List[str]] = None,
-        recommendations_feedback: str = "",
-        recommendations_iteration_count: int = 0,
-        max_recommendations_iterations: int = 3
+        recommendations_feedback: str = ""
     ) -> Dict[str, Any]:
         """
-        Génère 4 recommandations personnalisées.
+        Génère des recommandations personnalisées.
         
         Args:
             maturite_ia: Dict avec 'echelle' et 'phrase_resumant'
             final_needs: Besoins identifiés
-            final_quick_wins: Quick Wins proposés
-            final_structuration_ia: Structuration IA proposée
+            final_use_cases: Cas d'usage proposés
             rejected_recommendations: Recommandations précédemment rejetées (pour régénération)
             validated_recommendations: Recommandations validées à conserver (pour régénération)
-            recommendations_feedback: Feedback utilisateur (pour régénération)
-            recommendations_iteration_count: Numéro de l'itération actuelle
-            max_recommendations_iterations: Nombre maximum d'itérations
+            recommendations_feedback: Feedback utilisateur (pour première génération et régénération)
             
         Returns:
-            Dict avec 'recommendations' (liste de 4 recommandations)
+            Dict avec 'recommendations' (liste de recommandations)
         """
         try:
             # Formater les données pour le prompt
             maturite_str = f"Échelle: {maturite_ia.get('echelle', 3)}/5\n{maturite_ia.get('phrase_resumant', '')}"
             needs_str = self._format_needs(final_needs)
-            quick_wins_str = self._format_use_cases(final_quick_wins)
-            structuration_str = self._format_use_cases(final_structuration_ia)
+            use_cases_str = self._format_use_cases(final_use_cases)
             
             # Choisir le prompt selon le contexte (régénération ou première génération)
             # Si on a des recommandations validées ou rejetées, c'est une régénération
@@ -285,7 +272,6 @@ class ExecutiveSummaryAgent:
                 # Calculer les valeurs pour le prompt
                 validated_count = len(validated_recommendations) if validated_recommendations else 0
                 rejected_count = len(rejected_recommendations) if rejected_recommendations else 0
-                remaining_count = max(0, 4 - validated_count)
                 
                 prompt = REGENERATE_RECOMMENDATIONS_PROMPT.format(
                     previous_recommendations=previous_str,
@@ -294,21 +280,20 @@ class ExecutiveSummaryAgent:
                     validated_recommendations=validated_str,
                     validated_count=validated_count,
                     rejected_count=rejected_count,
-                    remaining_count=remaining_count,
-                    current_iteration=recommendations_iteration_count + 1,
-                    max_iterations=max_recommendations_iterations,
                     maturite_ia=maturite_str,
                     final_needs=needs_str,
-                    final_quick_wins=quick_wins_str,
-                    final_structuration_ia=structuration_str
+                    final_use_cases=use_cases_str
                 )
             else:
                 # Mode première génération
+                # Utiliser recommendations_feedback si disponible, sinon message par défaut
+                feedback_str = recommendations_feedback.strip() if recommendations_feedback else "Aucun commentaire spécifique. Génère des recommandations adaptées à la maturité IA et aux besoins identifiés."
+                
                 prompt = GENERATE_RECOMMENDATIONS_PROMPT.format(
                     maturite_ia=maturite_str,
                     final_needs=needs_str,
-                    final_quick_wins=quick_wins_str,
-                    final_structuration_ia=structuration_str
+                    final_use_cases=use_cases_str,
+                    recommendations_feedback=feedback_str
                 )
             
             # Appel à l'API avec structured output

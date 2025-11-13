@@ -16,6 +16,11 @@ class StreamlitValidationInterface:
         """Initialise l'interface de validation Streamlit"""
         pass
     
+    def _on_checkbox_change(self):
+        """Callback pour les changements de checkbox - force un rerun"""
+        # Ne rien faire - le simple fait d'avoir un callback force Streamlit à recalculer
+        pass
+    
     def display_needs_for_validation(self, identified_needs: List[Dict[str, Any]], validated_count: int = 0, key_suffix: str = None) -> Dict[str, Any]:
         """
         Affiche les besoins identifiés pour validation dans Streamlit.
@@ -34,20 +39,26 @@ class StreamlitValidationInterface:
             key_suffix = str(len(identified_needs))
         # (Spinner retiré - géré par app_api.py pour un flux continu)
         
+        # IMPORTANT: Ne nettoyer que lors de l'affichage initial, pas lors des reruns causés par les callbacks
+        # Utiliser un flag pour savoir si cette liste de besoins a déjà été initialisée
+        initialization_flag = f"needs_initialized_{key_suffix}"
+        
+        # Si c'est la première fois qu'on affiche cette liste de besoins avec ce key_suffix
+        if initialization_flag not in st.session_state:
+            # Nettoyer TOUTES les anciennes clés de validation pour réinitialiser les checkboxes
+            # Cela garantit que les checkboxes sont toujours réinitialisées quand de nouveaux besoins sont affichés
+            for key in list(st.session_state.keys()):
+                if (key.startswith("validate_need_") or key.startswith("need_theme_")):
+                    del st.session_state[key]
+            # Marquer comme initialisé
+            st.session_state[initialization_flag] = True
+        
         st.subheader("Validation des Besoins Métier")
         
         if validated_count > 0:
-            st.success(f"Vous avez déjà validé {validated_count} besoins")
-            remaining = max(0, 5 - validated_count)
-            if remaining > 0:
-                st.info(f"Il vous faut valider {remaining} besoins supplémentaires pour terminer")
-            else:
-                st.success("Vous avez atteint le minimum requis (5 besoins)")
+            st.info(f"Vous avez déjà validé {validated_count} besoin(s)")
         
         st.markdown("---")
-        
-        # Ne pas nettoyer les clés ici pour éviter les conflits de timing
-        # Les clés seront nettoyées après validation
         
         # Afficher les besoins avec des champs éditables - 2 par ligne
         for i in range(0, len(identified_needs), 2):
@@ -59,10 +70,10 @@ class StreamlitValidationInterface:
                 original_theme = need.get('theme', 'Thème non défini')
                 original_quotes = need.get('quotes', [])
                 
-                # Initialiser les valeurs dans session_state si nécessaire
+                # Initialiser les valeurs dans session_state APRÈS le nettoyage
+                # Réinitialiser toujours avec la valeur originale pour forcer la mise à jour
                 theme_key = f"need_theme_{i}_{key_suffix}"
-                if theme_key not in st.session_state:
-                    st.session_state[theme_key] = original_theme
+                st.session_state[theme_key] = original_theme
                 
                 # Champ éditable pour le thème (ne pas passer value pour éviter le warning)
                 modified_theme = st.text_input(
@@ -81,7 +92,11 @@ class StreamlitValidationInterface:
                 
                 # Checkbox pour sélectionner ce besoin avec une clé unique
                 checkbox_key = f"validate_need_{i+1}_{key_suffix}"
-                is_selected = st.checkbox(f"Valider ce besoin", key=checkbox_key)
+                # Initialiser à False si la clé n'existe pas encore (première fois)
+                if checkbox_key not in st.session_state:
+                    st.session_state[checkbox_key] = False
+                # Créer la checkbox (la valeur sera lue depuis session_state)
+                is_selected = st.checkbox(f"Valider ce besoin", key=checkbox_key, on_change=self._on_checkbox_change)
             
             # Deuxième besoin de la ligne (si existant)
             if i + 1 < len(identified_needs):
@@ -90,10 +105,10 @@ class StreamlitValidationInterface:
                     original_theme = need.get('theme', 'Thème non défini')
                     original_quotes = need.get('quotes', [])
                     
-                    # Initialiser les valeurs dans session_state si nécessaire
+                    # Initialiser les valeurs dans session_state APRÈS le nettoyage
+                    # Réinitialiser toujours avec la valeur originale pour forcer la mise à jour
                     theme_key = f"need_theme_{i+1}_{key_suffix}"
-                    if theme_key not in st.session_state:
-                        st.session_state[theme_key] = original_theme
+                    st.session_state[theme_key] = original_theme
                     
                     # Champ éditable pour le thème (ne pas passer value pour éviter le warning)
                     modified_theme = st.text_input(
@@ -112,7 +127,11 @@ class StreamlitValidationInterface:
                     
                     # Checkbox pour sélectionner ce besoin avec une clé unique
                     checkbox_key = f"validate_need_{i+2}_{key_suffix}"
-                    is_selected = st.checkbox(f"Valider ce besoin", key=checkbox_key)
+                    # Initialiser à False si la clé n'existe pas encore (première fois)
+                    if checkbox_key not in st.session_state:
+                        st.session_state[checkbox_key] = False
+                    # Créer la checkbox (la valeur sera lue depuis session_state)
+                    is_selected = st.checkbox(f"Valider ce besoin", key=checkbox_key, on_change=self._on_checkbox_change)
             
             # Ligne de séparation fine entre les besoins
             st.markdown("---")
@@ -140,23 +159,44 @@ class StreamlitValidationInterface:
             height=100
         )
         
-        # Bouton de validation
+        # Boutons de validation
         st.markdown("---")
         
-        if st.button("✅ Valider la sélection", type="primary", disabled=selected_count == 0, width="stretch"):
-            if selected_count == 0:
-                st.warning("Veuillez sélectionner au moins un besoin")
-            else:
-                # Lire l'état des checkboxes directement
-                selected_needs = []
-                for i in range(1, len(identified_needs) + 1):
-                    checkbox_key = f"validate_need_{i}_{key_suffix}"
-                    if st.session_state.get(checkbox_key, False):
-                        selected_needs.append(i)
-                
-                # Traiter la validation et retourner le résultat
-                result = self._process_validation(identified_needs, selected_needs, comments, validated_count, key_suffix)
-                return result  # Retourner le résultat pour que app_api.py puisse l'envoyer à l'API
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if st.button("✅ Valider et proposer de nouveaux besoins", type="primary", disabled=selected_count == 0, use_container_width=True):
+                if selected_count == 0:
+                    st.warning("Veuillez sélectionner au moins un besoin")
+                else:
+                    # Lire l'état des checkboxes directement
+                    selected_needs = []
+                    for i in range(1, len(identified_needs) + 1):
+                        checkbox_key = f"validate_need_{i}_{key_suffix}"
+                        if st.session_state.get(checkbox_key, False):
+                            selected_needs.append(i)
+                    
+                    # Traiter la validation et retourner le résultat avec l'action
+                    result = self._process_validation(identified_needs, selected_needs, comments, validated_count, key_suffix)
+                    result["user_action"] = "continue_needs"
+                    return result
+        
+        with col2:
+            if st.button("✅ Valider et passer aux use cases", type="secondary", disabled=selected_count == 0, use_container_width=True):
+                if selected_count == 0:
+                    st.warning("Veuillez sélectionner au moins un besoin")
+                else:
+                    # Lire l'état des checkboxes directement
+                    selected_needs = []
+                    for i in range(1, len(identified_needs) + 1):
+                        checkbox_key = f"validate_need_{i}_{key_suffix}"
+                        if st.session_state.get(checkbox_key, False):
+                            selected_needs.append(i)
+                    
+                    # Traiter la validation et retourner le résultat avec l'action
+                    result = self._process_validation(identified_needs, selected_needs, comments, validated_count, key_suffix)
+                    result["user_action"] = "continue_to_use_cases"
+                    return result
         
         # Retour par défaut (en attente de validation)
         return None
@@ -216,37 +256,30 @@ class StreamlitValidationInterface:
         
         # Calculer le total
         total_validated = validated_count + len(validated_new)
-        success = total_validated >= 5
         
         print(f"📊 [DEBUG] total_validated: {total_validated}")
-        print(f"📊 [DEBUG] success: {success}")
         
         result = {
             "validated_needs": validated_new,  # Seulement les nouveaux besoins validés
             "rejected_needs": rejected_new,
             "user_feedback": comments,
-            "success": success,  # Succès seulement si on atteint 5 besoins au total
             "total_validated": total_validated,
             "newly_validated": validated_new,
             "newly_rejected": rejected_new
         }
         
         print(f"💾 [DEBUG] Préparation du résultat")
-        print(f"✅ [DEBUG] Résultat préparé - success={result['success']}, total_validated={result['total_validated']}")
+        print(f"✅ [DEBUG] Résultat préparé - total_validated={result['total_validated']}")
         
         # Nettoyer l'état des sélections et les clés de validation + modification
         print(f"🧹 [DEBUG] Nettoyage des clés de validation et modification")
         st.session_state.selected_needs = set()
         for key in list(st.session_state.keys()):
-            if key.startswith("validate_need_") or key.startswith("need_theme_"):
+            if key.startswith("validate_need_") or key.startswith("need_theme_") or key.startswith("needs_initialized_"):
                 del st.session_state[key]
         print(f"✅ [DEBUG] Nettoyage terminé")
         
-        if result["success"]:
-            print(f"🎉 [DEBUG] Validation réussie - {total_validated} besoins validés")
-        else:
-            remaining = 5 - total_validated
-            print(f"⚠️ [DEBUG] Validation partielle - il reste {remaining} besoins à valider")
+        print(f"🎉 [DEBUG] Validation - {total_validated} besoins validés au total")
         
         print(f"✅ [DEBUG] _process_validation - Retour du résultat")
         return result

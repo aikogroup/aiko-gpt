@@ -1,0 +1,227 @@
+{
+  "workshop": {
+    "workshops": [
+      {
+        "workshop_id": "W001",
+        "theme": "Direction commerciale - IA et analyse des cas d'usage",
+        "use_cases": [
+          {
+            "title": "Analyse et consolidation des données marché et veille concurrentielle",
+            "objective": "Centraliser et croiser les données marché (issues d'Excel et autres sources) pour générer des insights sur les tendances, la concurrence et les opportunités.",
+            "benefits": [
+              "Vision unique et fiable des marchés",
+              "Décisions plus rapides et fondées sur les données",
+              "Détection proactive des opportunités et des risques"
+            ]
+          },
+          {
+            "title": "Suivi NPS et satisfaction client",
+            "objective": "Mesurer, analyser et agir sur le NPS et les taux de satisfaction pour améliorer la loyauté et réduire le churn.",
+            "benefits": [
+              "Amélioration de la rétention client",
+              "Alignement produit et service sur les attentes clients",
+              "Priorisation des actions opérationnelles et commerciales"
+            ]
+          }
+        ]
+      },
+      {
+        "workshop_id": "W002",
+        "theme": "Excellence Opérationnelle par l'IA et l'automatisation",
+        "use_cases": [
+          {
+            "title": "Automatisation et contrôle qualité en ligne",
+            "objective": "Mettre en place un système d'inspection et d'analyse en continu couvrant les contrôles MSP, la vérification des étiquettes, et la détection de défauts sur les sachets et les tricots via vision par ordinateur.",
+            "benefits": [
+              "Réduction des défauts et des tests manuels répétitifs",
+              "Traçabilité accrue et accélération du flux de production",
+              "Détection précoce des non-conformités et réduction des interruptions"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "transcript": {
+    "results": [
+      {
+        "pdf_path": "/mock/transcript_1.pdf",
+        "status": "success",
+        "semantic_analysis": {
+          "besoins_exprimes": [
+            "Automatisation des processus administratifs répétitifs",
+            "Amélioration du suivi des performances commerciales",
+            "Optimisation de la gestion des stocks"
+          ],
+          "frustrations_blocages": [
+            "Trop de temps passé sur les tâches manuelles",
+            "Manque de visibilité sur les données en temps réel",
+            "Ruptures de stock fréquentes"
+          ],
+          "attentes_implicites": [
+            "Gain de temps significatif sur les tâches administratives",
+            "Dashboard en temps réel pour le suivi des performances",
+            "Système de prévision des stocks plus fiable"
+          ],
+          "opportunites_amelioration": [
+            "Automatisation des rapports mensuels",
+            "Intégration des données de différents systèmes",
+            "Alertes proactives pour les stocks faibles"
+          ],
+          "opportunites_automatisation": [
+            "Génération automatique de rapports",
+            "Synchronisation automatique des données entre systèmes",
+            "Prévision automatique des besoins en stock"
+          ],
+          "citations_cles": [
+            "Nous passons trop de temps sur les tâches administratives répétitives",
+            "L'automatisation nous ferait gagner beaucoup de temps",
+            "Nous avons besoin de mieux suivre nos performances commerciales",
+            "Un dashboard en temps réel serait très utile",
+            "Nous avons souvent des ruptures de stock",
+            "Une meilleure prévision nous aiderait"
+          ]
+        }
+      },
+      {
+        "pdf_path": "/mock/transcript_2.pdf",
+        "status": "success",
+        "semantic_analysis": {
+          "besoins_exprimes": [
+            "Formation et gestion des talents",
+            "Amélioration du recrutement",
+            "Système d'alerte pour non-conformité"
+          ],
+          "frustrations_blocages": [
+            "Difficultés à trouver les bons profils",
+            "Manque de suivi des compétences",
+            "Complexité de la conformité réglementaire"
+          ],
+          "attentes_implicites": [
+            "Système de suivi des compétences plus efficace",
+            "Amélioration du processus de recrutement",
+            "Meilleure traçabilité pour la conformité"
+          ],
+          "opportunites_amelioration": [
+            "Plateforme de gestion des compétences",
+            "Automatisation du screening des CV",
+            "Système d'alerte automatique pour les non-conformités"
+          ],
+          "opportunites_automatisation": [
+            "Matching automatique CV/poste",
+            "Génération automatique des rapports de conformité",
+            "Alertes automatiques pour les échéances réglementaires"
+          ],
+          "citations_cles": [
+            "La formation de nos équipes est un enjeu majeur",
+            "Nous avons besoin d'un système de suivi des compétences",
+            "Le recrutement prend trop de temps",
+            "La conformité réglementaire est complexe",
+            "Nous devons améliorer notre traçabilité"
+          ]
+        }
+      }
+    ]
+  },
+  "web_search": {
+    "nom": "Entreprise Test Mock",
+    "secteur": "Conseil en Intelligence Artificielle",
+    "chiffre_affaires": "5-10M EUR",
+    "nombre_employes": "50-100 employés",
+    "description": "Entreprise de conseil spécialisée en Intelligence Artificielle, accompagnant les entreprises dans leur transformation digitale et l'implémentation de solutions IA innovantes."
+  },
+  "need_analysis": {
+    "identified_needs": [
+      {
+        "id": "need_1",
+        "theme": "Automatisation & Efficacité Opérationnelle",
+        "quotes": [
+          "Nous passons trop de temps sur les tâches administratives répétitives",
+          "L'automatisation nous ferait gagner beaucoup de temps",
+          "Génération automatique de rapports serait un gain de temps significatif"
+        ],
+        "description": "Besoin d'automatiser les processus administratifs répétitifs pour libérer du temps et réduire les erreurs humaines."
+      },
+      {
+        "id": "need_2",
+        "theme": "Analyse de Données & Amélioration de la Performance",
+        "quotes": [
+          "Nous avons besoin de mieux suivre nos performances commerciales",
+          "Un dashboard en temps réel serait très utile",
+          "Manque de visibilité sur les données en temps réel"
+        ],
+        "description": "Besoin d'améliorer le suivi et l'analyse des performances commerciales avec des outils de visualisation en temps réel."
+      },
+      {
+        "id": "need_3",
+        "theme": "Optimisation de la Gestion des Stocks",
+        "quotes": [
+          "Nous avons souvent des ruptures de stock",
+          "Une meilleure prévision nous aiderait",
+          "Système de prévision des stocks plus fiable nécessaire"
+        ],
+        "description": "Besoin d'optimiser la gestion des stocks avec des systèmes de prévision plus fiables pour éviter les ruptures."
+      },
+      {
+        "id": "need_4",
+        "theme": "Formation et Gestion des Talents",
+        "quotes": [
+          "La formation de nos équipes est un enjeu majeur",
+          "Nous avons besoin d'un système de suivi des compétences",
+          "Plateforme de gestion des compétences nécessaire"
+        ],
+        "description": "Besoin d'améliorer la formation et le suivi des compétences des équipes avec des outils dédiés."
+      },
+      {
+        "id": "need_5",
+        "theme": "Système d'Alerte pour Non-Conformité",
+        "quotes": [
+          "La conformité réglementaire est complexe",
+          "Nous devons améliorer notre traçabilité",
+          "Alertes automatiques pour les échéances réglementaires"
+        ],
+        "description": "Besoin d'un système d'alerte automatique pour gérer la conformité réglementaire et améliorer la traçabilité."
+      }
+    ]
+  },
+  "use_case_analysis": {
+    "use_cases": [
+      {
+        "id": "uc_1",
+        "titre": "Automatisation des rapports administratifs",
+        "ia_utilisee": "LLM + RAG",
+        "description": "Système automatisé de génération de rapports administratifs à partir de données structurées, utilisant un LLM pour la génération de texte et RAG pour l'accès aux données historiques et aux modèles de rapports.",
+        "famille": "Quick Win"
+      },
+      {
+        "id": "uc_2",
+        "titre": "Dashboard de performance commerciale en temps réel",
+        "ia_utilisee": "NLP + Visualisation IA",
+        "description": "Dashboard interactif avec analyse en temps réel des performances commerciales, utilisant le NLP pour extraire les insights des données textuelles et l'IA pour générer des visualisations adaptatives.",
+        "famille": "Structuration IA"
+      },
+      {
+        "id": "uc_3",
+        "titre": "Prévision intelligente des stocks",
+        "ia_utilisee": "XGBoost + Time Series",
+        "description": "Système de prévision des besoins en stock utilisant des modèles de machine learning (XGBoost) et d'analyse de séries temporelles pour anticiper les demandes et éviter les ruptures.",
+        "famille": "Quick Win"
+      },
+      {
+        "id": "uc_4",
+        "titre": "Plateforme de gestion des compétences et formation",
+        "ia_utilisee": "LLM + Recommandation",
+        "description": "Plateforme intelligente de gestion des compétences avec recommandation personnalisée de formations, utilisant un LLM pour analyser les profils et un système de recommandation pour proposer des parcours adaptés.",
+        "famille": "Structuration IA"
+      },
+      {
+        "id": "uc_5",
+        "titre": "Système d'alerte automatique pour conformité réglementaire",
+        "ia_utilisee": "NLP + RAG",
+        "description": "Système automatisé de veille et d'alerte pour la conformité réglementaire, utilisant le NLP pour analyser les textes réglementaires et RAG pour accéder à la base de connaissances de l'entreprise.",
+        "famille": "Quick Win"
+      }
+    ]
+  }
+}
+

@@ -3,7 +3,7 @@ Prompts pour le Workshop Agent
 """
 
 WORKSHOP_ANALYSIS_PROMPT = """
-Vous êtes un expert en analyse de cas d'usage IA pour une société de conseil.
+Vous êtes un expert en analyse de cas d'usage Datas et IA pour une société de conseil.
 
 Votre mission est d'analyser les cas d'usage identifiés lors d'un atelier et de les structurer de manière cohérente et professionnelle.
 

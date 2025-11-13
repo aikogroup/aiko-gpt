@@ -34,8 +34,7 @@ class ExecutiveSummaryState(TypedDict):
     interviewer_note: str
     # Extraction Word
     extracted_needs: List[Dict]
-    extracted_quick_wins: List[Dict]
-    extracted_structuration_ia: List[Dict]
+    extracted_use_cases: List[Dict]
     # Citations extraites
     transcript_enjeux_citations: List[Dict]
     workshop_enjeux_citations: List[Dict]
@@ -46,10 +45,8 @@ class ExecutiveSummaryState(TypedDict):
     validated_challenges: List[Dict]
     rejected_challenges: List[Dict]
     challenges_feedback: str
-    challenges_iteration_count: int
-    max_challenges_iterations: int
-    challenges_success: bool
-    challenges_no_progress_count: int
+    # Action demandée par l'utilisateur (pour les boutons)
+    challenges_user_action: str  # "continue_challenges" ou "continue_to_maturity"
     # Résultats Maturité
     maturity_score: int
     maturity_summary: str
@@ -58,9 +55,8 @@ class ExecutiveSummaryState(TypedDict):
     validated_recommendations: List[str]
     rejected_recommendations: List[str]
     recommendations_feedback: str
-    recommendations_iteration_count: int
-    max_recommendations_iterations: int
-    recommendations_success: bool
+    # Action demandée par l'utilisateur (pour les boutons)
+    recommendations_user_action: str  # "continue_recommendations" ou "continue_to_finalize"
     # Validation
     workflow_paused: bool
     validation_type: str  # "challenges" ou "recommendations"
@@ -70,18 +66,16 @@ class ExecutiveSummaryState(TypedDict):
 class ExecutiveSummaryWorkflow:
     """Workflow LangGraph pour l'Executive Summary"""
     
-    def __init__(self, api_key: str, dev_mode: bool = False, debug_mode: bool = False):
+    def __init__(self, api_key: str, dev_mode: bool = False):
         """
         Initialise le workflow.
         
         Args:
             api_key: Clé API OpenAI
             dev_mode: Mode développement
-            debug_mode: Mode debugging
         """
         self.api_key = api_key
         self.dev_mode = dev_mode
-        self.debug_mode = debug_mode
         
         model = os.getenv('OPENAI_MODEL', 'gpt-5-nano')
         self.llm = ChatOpenAI(
@@ -117,11 +111,10 @@ class ExecutiveSummaryWorkflow:
         workflow.add_node("collect_citations", self._collect_citations_node)
         workflow.add_node("identify_challenges", self._identify_challenges_node)
         workflow.add_node("human_validation_enjeux", self._human_validation_enjeux_node)
-        workflow.add_node("check_challenges_success", self._check_challenges_success_node)
+        workflow.add_node("pre_recommendations_interrupt", self._pre_recommendations_interrupt_node)
         workflow.add_node("evaluate_maturity", self._evaluate_maturity_node)
         workflow.add_node("generate_recommendations", self._generate_recommendations_node)
         workflow.add_node("human_validation_recommendations", self._human_validation_recommendations_node)
-        workflow.add_node("check_recommendations_success", self._check_recommendations_success_node)
         workflow.add_node("finalize_results", self._finalize_results_node)
         
         # Point d'entrée
@@ -144,32 +137,31 @@ class ExecutiveSummaryWorkflow:
         # Flux séquentiel : Enjeux
         workflow.add_edge("collect_citations", "identify_challenges")
         workflow.add_edge("identify_challenges", "human_validation_enjeux")
-        workflow.add_edge("human_validation_enjeux", "check_challenges_success")
         
-        # Conditions de branchement - Enjeux
+        # Conditions de branchement - Enjeux (basé sur l'action utilisateur)
         workflow.add_conditional_edges(
-            "check_challenges_success",
+            "human_validation_enjeux",
             self._should_continue_challenges,
             {
-                "continue": "identify_challenges",
-                "success": "evaluate_maturity",
-                "max_iterations": END
+                "continue_challenges": "identify_challenges",
+                "continue_to_maturity": "pre_recommendations_interrupt"
             }
         )
+        
+        # Nœud de pause avant la génération des recommandations
+        workflow.add_edge("pre_recommendations_interrupt", "evaluate_maturity")
         
         # Flux séquentiel : Maturité et Recommandations
         workflow.add_edge("evaluate_maturity", "generate_recommendations")
         workflow.add_edge("generate_recommendations", "human_validation_recommendations")
-        workflow.add_edge("human_validation_recommendations", "check_recommendations_success")
         
-        # Conditions de branchement - Recommandations
+        # Conditions de branchement - Recommandations (basé sur l'action utilisateur)
         workflow.add_conditional_edges(
-            "check_recommendations_success",
+            "human_validation_recommendations",
             self._should_continue_recommendations,
             {
-                "continue": "generate_recommendations",
-                "success": "finalize_results",
-                "max_iterations": END
+                "continue_recommendations": "generate_recommendations",
+                "continue_to_finalize": "finalize_results"
             }
         )
         
@@ -178,12 +170,8 @@ class ExecutiveSummaryWorkflow:
         # Configuration avec checkpointer et interrupts
         compile_kwargs = {
             "checkpointer": MemorySaver(),
-            "interrupt_before": ["human_validation_enjeux", "human_validation_recommendations"]
+            "interrupt_before": ["human_validation_enjeux", "pre_recommendations_interrupt", "human_validation_recommendations"]
         }
-        
-        if self.debug_mode:
-            compile_kwargs["interrupt_after"] = ["dispatcher", "collect_citations"]
-            compile_kwargs["debug"] = True
         
         return workflow.compile(**compile_kwargs)
     
@@ -218,8 +206,7 @@ class ExecutiveSummaryWorkflow:
             "company_name": company_name,
             "interviewer_note": interviewer_note,
             "extracted_needs": [],
-            "extracted_quick_wins": [],
-            "extracted_structuration_ia": [],
+            "extracted_use_cases": [],
             "transcript_enjeux_citations": [],
             "workshop_enjeux_citations": [],
             "transcript_maturite_citations": [],
@@ -228,19 +215,14 @@ class ExecutiveSummaryWorkflow:
             "validated_challenges": [],
             "rejected_challenges": [],
             "challenges_feedback": "",
-            "challenges_iteration_count": 0,
-            "max_challenges_iterations": 3,
-            "challenges_success": False,
-            "challenges_no_progress_count": 0,
+            "challenges_user_action": "",
             "maturity_score": 3,
             "maturity_summary": "",
             "recommendations": [],
             "validated_recommendations": [],
             "rejected_recommendations": [],
             "recommendations_feedback": "",
-            "recommendations_iteration_count": 0,
-            "max_recommendations_iterations": 3,
-            "recommendations_success": False,
+            "recommendations_user_action": "",
             "workflow_paused": False,
             "validation_type": "",
             "validation_result": {}
@@ -315,28 +297,29 @@ class ExecutiveSummaryWorkflow:
             extracted = self.word_extractor.extract_from_word(word_path)
             
             extracted_needs = extracted.get("final_needs", [])
-            extracted_quick_wins = extracted.get("final_quick_wins", [])
-            extracted_structuration_ia = extracted.get("final_structuration_ia", [])
+            extracted_use_cases = extracted.get("final_use_cases", [])
+            # Rétrocompatibilité avec l'ancien format
+            if not extracted_use_cases:
+                final_quick_wins = extracted.get("final_quick_wins", [])
+                final_structuration_ia = extracted.get("final_structuration_ia", [])
+                extracted_use_cases = final_quick_wins + final_structuration_ia
             
             print(f"✅ Extraction: {len(extracted_needs)} besoins, "
-                  f"{len(extracted_quick_wins)} Quick Wins, "
-                  f"{len(extracted_structuration_ia)} Structuration IA")
+                  f"{len(extracted_use_cases)} cas d'usage")
             
-            # Afficher le détail des Quick Wins et Structuration IA
-            print(f"\n📊 [EXECUTIVE] DÉTAIL DES QUICK WINS ({len(extracted_quick_wins)}):")
-            for i, qw in enumerate(extracted_quick_wins, 1):
-                titre = qw.get("titre", "N/A")
-                print(f"   {i}. {titre}")
-            
-            print(f"\n📊 [EXECUTIVE] DÉTAIL DES STRUCTURATION IA ({len(extracted_structuration_ia)}):")
-            for i, sia in enumerate(extracted_structuration_ia, 1):
-                titre = sia.get("titre", "N/A")
-                print(f"   {i}. {titre}")
+            # Afficher le détail des cas d'usage
+            print(f"\n📊 [EXECUTIVE] DÉTAIL DES CAS D'USAGE ({len(extracted_use_cases)}):")
+            for i, uc in enumerate(extracted_use_cases, 1):
+                titre = uc.get("titre", "N/A")
+                famille = uc.get("famille")
+                if famille:
+                    print(f"   {i}. [{famille}] {titre}")
+                else:
+                    print(f"   {i}. {titre}")
             
             return {
                 "extracted_needs": extracted_needs,
-                "extracted_quick_wins": extracted_quick_wins,
-                "extracted_structuration_ia": extracted_structuration_ia
+                "extracted_use_cases": extracted_use_cases
             }
             
         except Exception as e:
@@ -466,23 +449,21 @@ class ExecutiveSummaryWorkflow:
             transcript_content = self._format_citations(state.get("transcript_enjeux_citations", []))
             workshop_content = self._format_workshop_info(state.get("workshop_enjeux_citations", []))
             final_needs = state.get("extracted_needs", [])
+            interviewer_note = state.get("interviewer_note", "")
             
             # Récupérer les enjeux rejetés et validés pour régénération
             rejected = state.get("rejected_challenges", [])
             validated = state.get("validated_challenges", [])
             feedback = state.get("challenges_feedback", "")
-            iteration_count = state.get("challenges_iteration_count", 0)
-            max_iterations = state.get("max_challenges_iterations", 3)
             
             result = self.executive_agent.identify_challenges(
                 transcript_content=transcript_content,
                 workshop_content=workshop_content,
                 final_needs=final_needs,
+                interviewer_note=interviewer_note,
                 rejected_challenges=rejected if rejected else None,
                 validated_challenges=validated if validated else None,
-                challenges_feedback=feedback,
-                challenges_iteration_count=iteration_count,
-                max_challenges_iterations=max_iterations
+                challenges_feedback=feedback
             )
             
             state["identified_challenges"] = result.get("challenges", [])
@@ -513,20 +494,23 @@ class ExecutiveSummaryWorkflow:
                 existing_validated = state.get("validated_challenges", [])
                 newly_validated = validation_data.get("validated_challenges", [])
                 
-                # Générer un ID unique pour chaque nouvel enjeu validé pour éviter les conflits avec les IDs de l'IA
-                import uuid
-                iteration_count = state.get("challenges_iteration_count", 0)
+                # Conserver les IDs originaux (E1, E2, etc.) s'ils existent
+                # Ne régénérer que si l'ID est vide
                 existing_ids = [ch.get("id", "") for ch in existing_validated]
                 
                 for i, challenge in enumerate(newly_validated):
-                    # Si l'enjeu n'a pas d'ID ou si l'ID existe déjà, générer un nouvel ID unique
                     challenge_id = challenge.get("id", "")
                     
-                    if not challenge_id or challenge_id in existing_ids:
-                        # Générer un ID unique basé sur l'itération et un UUID
-                        challenge["id"] = f"challenge_{iteration_count}_{i}_{uuid.uuid4().hex[:8]}"
+                    # Seulement régénérer si l'ID est complètement vide
+                    if not challenge_id:
+                        # Générer un nouvel ID au format E{n}
+                        new_index = len(existing_validated) + i + 1
+                        challenge["id"] = f"E{new_index}"
+                    # Si l'ID existe mais est en conflit, ajouter un suffixe
+                    elif challenge_id in existing_ids:
+                        challenge["id"] = f"{challenge_id}_bis"
                 
-                # Ajouter tous les nouveaux enjeux validés (plus besoin de filtrer par ID maintenant)
+                # Ajouter tous les nouveaux enjeux validés
                 state["validated_challenges"] = existing_validated + newly_validated
                 
                 # Accumuler les rejetés (ne pas remplacer, mais ajouter)
@@ -537,17 +521,9 @@ class ExecutiveSummaryWorkflow:
                 state["rejected_challenges"] = existing_rejected + unique_newly_rejected
                 
                 state["challenges_feedback"] = validation_data.get("challenges_feedback", "")
+                state["challenges_user_action"] = validation_data.get("challenges_user_action", "continue_challenges")
                 state["validation_result"] = {}
                 state["validation_type"] = ""
-                
-                # Détecter si aucun nouveau enjeu n'a été validé (pas de progression)
-                if len(newly_validated) == 0:
-                    state["challenges_no_progress_count"] = state.get("challenges_no_progress_count", 0) + 1
-                    print(f"⚠️ Aucun nouveau enjeu validé - Compteur sans progression: {state['challenges_no_progress_count']}")
-                else:
-                    # Réinitialiser le compteur si un nouveau enjeu a été validé
-                    state["challenges_no_progress_count"] = 0
-                    print(f"✅ Progression détectée - Compteur sans progression réinitialisé")
                 
                 end_time = time.time()
                 duration = end_time - start_time
@@ -567,40 +543,18 @@ class ExecutiveSummaryWorkflow:
             state["messages"] = state.get("messages", []) + [HumanMessage(content=f"Erreur validation: {str(e)}")]
             return state
     
-    def _check_challenges_success_node(self, state: ExecutiveSummaryState) -> ExecutiveSummaryState:
-        """Vérifie le succès de la validation des enjeux"""
-        import time
-        start_time = time.time()
-        print(f"\n🔄 [EXECUTIVE] check_challenges_success_node - DÉBUT ({time.strftime('%H:%M:%S.%f', time.localtime(start_time))[:-3]})")
+    
+    def _pre_recommendations_interrupt_node(self, state: ExecutiveSummaryState) -> ExecutiveSummaryState:
+        """
+        Nœud d'interrupt avant la génération des recommandations.
+        Permet à l'utilisateur de voir les enjeux validés et d'ajouter des commentaires.
+        """
+        print(f"\n⏸️ [EXECUTIVE] pre_recommendations_interrupt_node - DÉBUT")
+        print(f"📊 Enjeux validés: {len(state.get('validated_challenges', []))}")
         
-        validated_count = len(state.get("validated_challenges", []))
-        success = validated_count >= 5
-        
-        # Vérifier si on a trop de tentatives sans progression (boucle infinie)
-        no_progress_count = state.get("challenges_no_progress_count", 0)
-        max_no_progress = 2  # Arrêter après 2 tentatives sans progression
-        
-        if no_progress_count >= max_no_progress:
-            print(f"🛑 Arrêt de la boucle : {no_progress_count} tentatives sans progression (max: {max_no_progress})")
-            state["challenges_success"] = True  # Forcer le succès pour arrêter la boucle
-            print(f"⚠️ Forçage de l'arrêt - Enjeux validés: {validated_count}/5")
-            return state
-        
-        state["challenges_success"] = success
-        
-        print(f"📊 Enjeux validés: {validated_count}/5")
-        print(f"🎯 Succès: {success}")
-        print(f"📊 Tentatives sans progression: {no_progress_count}/{max_no_progress}")
-        
-        if not success:
-            state["challenges_iteration_count"] = state.get("challenges_iteration_count", 0) + 1
-            print(f"🔄 Itération {state['challenges_iteration_count']}/{state.get('max_challenges_iterations', 3)}")
-        else:
-            print(f"✅ Objectif atteint ! {validated_count} enjeux validés")
-        
-        end_time = time.time()
-        duration = end_time - start_time
-        print(f"⏱️ [TIMING] check_challenges_success_node: {duration:.3f}s")
+        # Ce nœud ne fait rien, il sert juste d'interrupt
+        # L'utilisateur va voir l'interface avec les enjeux validés et pourra ajouter un commentaire
+        # Le commentaire sera stocké dans recommendations_feedback
         
         return state
     
@@ -611,19 +565,16 @@ class ExecutiveSummaryWorkflow:
             transcript_content = self._format_maturite_citations(state.get("transcript_maturite_citations", []))
             workshop_content = self._format_workshop_maturite(state.get("workshop_maturite_citations", []))
             final_needs = state.get("extracted_needs", [])
-            final_quick_wins = state.get("extracted_quick_wins", [])
-            final_structuration_ia = state.get("extracted_structuration_ia", [])
+            final_use_cases = state.get("extracted_use_cases", [])
             
             print(f"📊 [EXECUTIVE] Données pour évaluation maturité:")
-            print(f"   - Quick Wins: {len(final_quick_wins)}")
-            print(f"   - Structuration IA: {len(final_structuration_ia)}")
+            print(f"   - Cas d'usage: {len(final_use_cases)}")
             
             result = self.executive_agent.evaluate_maturity(
                 transcript_content=transcript_content,
                 workshop_content=workshop_content,
                 final_needs=final_needs,
-                final_quick_wins=final_quick_wins,
-                final_structuration_ia=final_structuration_ia
+                final_use_cases=final_use_cases
             )
             
             state["maturity_score"] = result.get("echelle", 3)
@@ -648,34 +599,32 @@ class ExecutiveSummaryWorkflow:
                 "phrase_resumant": state.get("maturity_summary", "")
             }
             final_needs = state.get("extracted_needs", [])
-            final_quick_wins = state.get("extracted_quick_wins", [])
-            final_structuration_ia = state.get("extracted_structuration_ia", [])
+            final_use_cases = state.get("extracted_use_cases", [])
             
             rejected = state.get("rejected_recommendations", [])
             validated = state.get("validated_recommendations", [])
             feedback = state.get("recommendations_feedback", "")
-            iteration_count = state.get("recommendations_iteration_count", 0)
-            max_iterations = state.get("max_recommendations_iterations", 3)
             
             # Logs avant la génération
-            print(f"📊 [REGENERATION] Recommandations validées ({len(validated)}):")
-            for i, rec in enumerate(validated, 1):
-                print(f"   {i}. {rec[:100]}..." if len(rec) > 100 else f"   {i}. {rec}")
+            if feedback:
+                print(f"📝 [GENERATION] Feedback utilisateur reçu: {feedback[:100]}...")
+            if validated:
+                print(f"📊 [REGENERATION] Recommandations validées ({len(validated)}):")
+                for i, rec in enumerate(validated, 1):
+                    print(f"   {i}. {rec[:100]}..." if len(rec) > 100 else f"   {i}. {rec}")
             
-            print(f"📊 [REGENERATION] Recommandations rejetées ({len(rejected)}):")
-            for i, rec in enumerate(rejected, 1):
-                print(f"   {i}. {rec[:100]}..." if len(rec) > 100 else f"   {i}. {rec}")
+            if rejected:
+                print(f"📊 [REGENERATION] Recommandations rejetées ({len(rejected)}):")
+                for i, rec in enumerate(rejected, 1):
+                    print(f"   {i}. {rec[:100]}..." if len(rec) > 100 else f"   {i}. {rec}")
             
             result = self.executive_agent.generate_recommendations(
                 maturite_ia=maturite_ia,
                 final_needs=final_needs,
-                final_quick_wins=final_quick_wins,
-                final_structuration_ia=final_structuration_ia,
+                final_use_cases=final_use_cases,
                 rejected_recommendations=rejected if rejected else None,
                 validated_recommendations=validated if validated else None,
-                recommendations_feedback=feedback,
-                recommendations_iteration_count=iteration_count,
-                max_recommendations_iterations=max_iterations
+                recommendations_feedback=feedback
             )
             
             state["recommendations"] = result.get("recommendations", [])
@@ -718,6 +667,7 @@ class ExecutiveSummaryWorkflow:
                 state["rejected_recommendations"] = existing_rejected + newly_rejected_filtered
                 
                 state["recommendations_feedback"] = validation_data.get("recommendations_feedback", "")
+                state["recommendations_user_action"] = validation_data.get("recommendations_user_action", "continue_recommendations")
                 state["validation_result"] = {}
                 state["validation_type"] = ""
                 
@@ -736,25 +686,6 @@ class ExecutiveSummaryWorkflow:
             state["messages"] = state.get("messages", []) + [HumanMessage(content=f"Erreur validation: {str(e)}")]
             return state
     
-    def _check_recommendations_success_node(self, state: ExecutiveSummaryState) -> ExecutiveSummaryState:
-        """Vérifie le succès de la validation des recommandations"""
-        print(f"\n🔄 [EXECUTIVE] check_recommendations_success_node - DÉBUT")
-        
-        validated_count = len(state.get("validated_recommendations", []))
-        success = validated_count >= 4
-        
-        state["recommendations_success"] = success
-        
-        print(f"📊 Recommandations validées: {validated_count}/4")
-        print(f"🎯 Succès: {success}")
-        
-        if not success:
-            state["recommendations_iteration_count"] = state.get("recommendations_iteration_count", 0) + 1
-            print(f"🔄 Itération {state['recommendations_iteration_count']}/{state.get('max_recommendations_iterations', 3)}")
-        else:
-            print(f"✅ Objectif atteint ! {validated_count} recommandations validées")
-        
-        return state
     
     def _finalize_results_node(self, state: ExecutiveSummaryState) -> ExecutiveSummaryState:
         """Finalise les résultats"""
@@ -767,35 +698,33 @@ class ExecutiveSummaryWorkflow:
         # Sauvegarder les résultats
         self._save_results(state)
         
+        # Marquer le workflow comme terminé (plus de pause)
+        state["workflow_paused"] = False
+        state["validation_type"] = ""
+        
         return state
     
     # ==================== MÉTHODES UTILITAIRES ====================
     
     def _should_continue_challenges(self, state: ExecutiveSummaryState) -> str:
-        """Détermine si on continue les itérations pour les enjeux"""
-        success = state.get("challenges_success", False)
-        iteration = state.get("challenges_iteration_count", 0)
-        max_iterations = state.get("max_challenges_iterations", 3)
+        """Détermine la direction du workflow basée sur l'action de l'utilisateur pour les enjeux"""
+        user_action = state.get("challenges_user_action", "")
         
-        if success:
-            return "success"
-        elif iteration >= max_iterations:
-            return "max_iterations"
+        if user_action == "continue_to_maturity":
+            return "continue_to_maturity"
         else:
-            return "continue"
+            # Par défaut, continuer avec les enjeux
+            return "continue_challenges"
     
     def _should_continue_recommendations(self, state: ExecutiveSummaryState) -> str:
-        """Détermine si on continue les itérations pour les recommandations"""
-        success = state.get("recommendations_success", False)
-        iteration = state.get("recommendations_iteration_count", 0)
-        max_iterations = state.get("max_recommendations_iterations", 3)
+        """Détermine la direction du workflow basée sur l'action de l'utilisateur pour les recommandations"""
+        user_action = state.get("recommendations_user_action", "")
         
-        if success:
-            return "success"
-        elif iteration >= max_iterations:
-            return "max_iterations"
+        if user_action == "continue_to_finalize":
+            return "continue_to_finalize"
         else:
-            return "continue"
+            # Par défaut, continuer avec les recommandations
+            return "continue_recommendations"
     
     def _format_citations(self, citations: List[Dict[str, Any]]) -> str:
         """Formate les citations pour le prompt"""

@@ -26,9 +26,7 @@ class NeedSummary(BaseModel):
 class NeedAnalysisResponse(BaseModel):
     """Modèle pour la réponse complète de l'analyse des besoins"""
     identified_needs: List[Need] = Field(
-        description="Liste des besoins métier identifiés",
-        min_length=8,
-        max_length=12
+        description="Liste des besoins métier identifiés"
     )
     summary: NeedSummary = Field(description="Résumé de l'analyse")
 

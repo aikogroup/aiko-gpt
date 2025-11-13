@@ -21,77 +21,78 @@ class StreamlitUseCaseValidation:
         """Initialise l'interface de validation Streamlit"""
         logger.info("StreamlitUseCaseValidation initialisé")
     
+    def _on_checkbox_change(self):
+        """Callback pour les changements de checkbox - force un rerun"""
+        # Forcer un rerun explicite pour mettre à jour les boutons
+        st.rerun()
+    
     def display_use_cases_for_validation(
         self,
-        quick_wins: List[Dict[str, Any]],
-        structuration_ia: List[Dict[str, Any]],
-        validated_qw_count: int = 0,
-        validated_sia_count: int = 0,
+        use_cases: List[Dict[str, Any]],
+        validated_count: int = 0,
         key_suffix: str = None
     ) -> Optional[Dict[str, Any]]:
         """
         Affiche les cas d'usage pour validation dans Streamlit.
-        Validation simultanée des deux familles.
+        Liste unifiée sans distinction de catégorie.
         
         Args:
-            quick_wins: Liste des Quick Wins proposés
-            structuration_ia: Liste des Structuration IA proposés
-            validated_qw_count: Nombre de Quick Wins déjà validés
-            validated_sia_count: Nombre de Structuration IA déjà validés
-            key_suffix: Suffixe personnalisé pour les clés de checkbox (ex: iteration_count). Si None, utilise len(quick_wins)
+            use_cases: Liste des cas d'usage proposés
+            validated_count: Nombre de cas d'usage déjà validés
+            key_suffix: Suffixe personnalisé pour les clés de checkbox. Si None, utilise len(use_cases)
             
         Returns:
             Résultat de la validation ou None si en attente
         """
         # Utiliser un suffixe personnalisé ou la longueur de la liste
         if key_suffix is None:
-            key_suffix = str(len(quick_wins))
-        logger.info(f"Affichage de {len(quick_wins)} Quick Wins et {len(structuration_ia)} Structuration IA")
+            key_suffix = str(len(use_cases))
+        logger.info(f"Affichage de {len(use_cases)} cas d'usage")
+        
+        # IMPORTANT: Ne nettoyer que lors de l'affichage initial, pas lors des reruns causés par les callbacks
+        # Utiliser un flag pour savoir si cette liste de use cases a déjà été initialisée
+        initialization_flag = f"use_cases_initialized_{key_suffix}"
+        
+        # Si c'est la première fois qu'on affiche cette liste de use cases avec ce key_suffix
+        if initialization_flag not in st.session_state:
+            # Nettoyer TOUTES les anciennes clés de validation pour réinitialiser les checkboxes
+            # Cela garantit que les checkboxes sont toujours réinitialisées quand de nouveaux use cases sont affichés
+            for key in list(st.session_state.keys()):
+                if (key.startswith("validate_uc_") or 
+                    key.startswith("uc_titre_") or key.startswith("uc_desc_")):
+                    del st.session_state[key]
+            # Marquer comme initialisé
+            st.session_state[initialization_flag] = True
         
         # (Spinner retiré - géré par app_api.py pour un flux continu)
         
-        st.title("Validation des Cas d'Usage IA")
+        st.title("Validation des Cas d'Usage")
         
         # Afficher le statut de validation
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            if validated_qw_count >= 5:
-                st.success(f"Quick Wins : {validated_qw_count}/5 validés")
-            else:
-                remaining_qw = 5 - validated_qw_count
-                st.warning(f"Quick Wins : {validated_qw_count}/5 validés (encore {remaining_qw} requis)")
-        
-        with col2:
-            if validated_sia_count >= 5:
-                st.success(f"Structuration IA : {validated_sia_count}/5 validés")
-            else:
-                remaining_sia = 5 - validated_sia_count
-                st.warning(f"Structuration IA : {validated_sia_count}/5 validés (encore {remaining_sia} requis)")
+        if validated_count > 0:
+            st.info(f"Vous avez déjà validé {validated_count} cas d'usage")
         
         st.markdown("---")
         
-        # Section Quick Wins
-        st.header("⚡ Quick Wins - Automatisation & assistance intelligente")
-        st.caption("Solutions à faible complexité technique, mise en œuvre rapide (< 3 mois), ROI immédiat")
+        # Section Cas d'usage
+        st.header("📋 Cas d'Usage")
         
-        # Afficher les Quick Wins avec champs éditables - 2 par ligne
-        for i in range(0, len(quick_wins), 2):
+        # Afficher les cas d'usage avec champs éditables - 2 par ligne
+        for i in range(0, len(use_cases), 2):
             col1, col2 = st.columns(2, gap="large")
             
-            # Premier Quick Win de la ligne
+            # Premier cas d'usage de la ligne
             with col1:
-                use_case = quick_wins[i]
+                use_case = use_cases[i]
                 original_titre = use_case.get('titre', 'Titre non défini')
                 original_description = use_case.get('description', 'Description non disponible')
                 
-                # Initialiser les valeurs dans session_state si nécessaire
-                titre_key = f"uc_qw_titre_{i}_{key_suffix}"
-                desc_key = f"uc_qw_desc_{i}_{key_suffix}"
-                if titre_key not in st.session_state:
-                    st.session_state[titre_key] = original_titre
-                if desc_key not in st.session_state:
-                    st.session_state[desc_key] = original_description
+                # Initialiser les valeurs dans session_state APRÈS le nettoyage
+                # Réinitialiser toujours avec la valeur originale pour forcer la mise à jour
+                titre_key = f"uc_titre_{i}_{key_suffix}"
+                desc_key = f"uc_desc_{i}_{key_suffix}"
+                st.session_state[titre_key] = original_titre
+                st.session_state[desc_key] = original_description
                 
                 # Champ éditable pour le titre (ne pas passer value pour éviter le warning)
                 modified_titre = st.text_input(
@@ -109,108 +110,27 @@ class StreamlitUseCaseValidation:
                     label_visibility="hidden"
                 )
                 
-                # Checkbox pour sélectionner ce Quick Win
-                checkbox_key = f"validate_qw_{i+1}_{key_suffix}"
-                is_selected = st.checkbox(f"Valider ce Quick Win", key=checkbox_key)
+                # Checkbox pour sélectionner ce cas d'usage avec une clé unique
+                checkbox_key = f"validate_uc_{i+1}_{key_suffix}"
+                # Initialiser à False si la clé n'existe pas encore (première fois)
+                if checkbox_key not in st.session_state:
+                    st.session_state[checkbox_key] = False
+                # Créer la checkbox (la valeur sera lue depuis session_state)
+                is_selected = st.checkbox(f"Valider ce cas d'usage", key=checkbox_key, on_change=self._on_checkbox_change)
             
-            # Deuxième Quick Win de la ligne (si existant)
-            if i + 1 < len(quick_wins):
+            # Deuxième cas d'usage de la ligne (si existant)
+            if i + 1 < len(use_cases):
                 with col2:
-                    use_case = quick_wins[i + 1]
+                    use_case = use_cases[i + 1]
                     original_titre = use_case.get('titre', 'Titre non défini')
                     original_description = use_case.get('description', 'Description non disponible')
                     
-                    # Initialiser les valeurs dans session_state si nécessaire
-                    titre_key = f"uc_qw_titre_{i+1}_{key_suffix}"
-                    desc_key = f"uc_qw_desc_{i+1}_{key_suffix}"
-                    if titre_key not in st.session_state:
-                        st.session_state[titre_key] = original_titre
-                    if desc_key not in st.session_state:
-                        st.session_state[desc_key] = original_description
-                    
-                    # Champ éditable pour le titre (ne pas passer value pour éviter le warning)
-                    modified_titre = st.text_input(
-                        "**Titre**",
-                        key=titre_key,
-                        label_visibility="visible"
-                    )
-                    
-                    # Champ éditable pour la description
-                    st.markdown("**Description :**")
-                    modified_description = st.text_area(
-                        "Description",
-                        key=desc_key,
-                        height=120,
-                        label_visibility="hidden"
-                    )
-                    
-                    # Checkbox pour sélectionner ce Quick Win
-                    checkbox_key = f"validate_qw_{i+2}_{key_suffix}"
-                    is_selected = st.checkbox(f"Valider ce Quick Win", key=checkbox_key)
-            
-            # Ligne de séparation fine entre les Quick Wins
-            st.markdown("---")
-        
-        # Séparation visuelle forte entre les deux sections
-        st.markdown("---")
-        st.markdown("##")  # Espace supplémentaire
-        
-        # Section Structuration IA
-        st.header("🔬 Structuration IA à moyen et long terme - Scalabilité & qualité prédictive")
-        st.caption("Solutions à complexité moyenne/élevée, mise en œuvre progressive (3-12 mois), ROI moyen/long terme")
-        
-        # Afficher les Structuration IA avec champs éditables - 2 par ligne
-        for i in range(0, len(structuration_ia), 2):
-            col1, col2 = st.columns(2, gap="large")
-            
-            # Premier Structuration IA de la ligne
-            with col1:
-                use_case = structuration_ia[i]
-                original_titre = use_case.get('titre', 'Titre non défini')
-                original_description = use_case.get('description', 'Description non disponible')
-                
-                # Initialiser les valeurs dans session_state si nécessaire
-                titre_key = f"uc_sia_titre_{i}_{key_suffix}"
-                desc_key = f"uc_sia_desc_{i}_{key_suffix}"
-                if titre_key not in st.session_state:
+                    # Initialiser les valeurs dans session_state APRÈS le nettoyage
+                    # Réinitialiser toujours avec la valeur originale pour forcer la mise à jour
+                    titre_key = f"uc_titre_{i+1}_{key_suffix}"
+                    desc_key = f"uc_desc_{i+1}_{key_suffix}"
                     st.session_state[titre_key] = original_titre
-                if desc_key not in st.session_state:
                     st.session_state[desc_key] = original_description
-                
-                # Champ éditable pour le titre (ne pas passer value pour éviter le warning)
-                modified_titre = st.text_input(
-                    "**Titre**",
-                    key=titre_key,
-                    label_visibility="visible"
-                )
-                
-                # Champ éditable pour la description
-                st.markdown("**Description :**")
-                modified_description = st.text_area(
-                    "Description",
-                    key=desc_key,
-                    height=120,
-                    label_visibility="hidden"
-                )
-                
-                # Checkbox pour sélectionner cette Structuration IA
-                checkbox_key = f"validate_sia_{i+1}_{key_suffix}"
-                is_selected = st.checkbox(f"Valider ce cas d'usage", key=checkbox_key)
-            
-            # Deuxième Structuration IA de la ligne (si existant)
-            if i + 1 < len(structuration_ia):
-                with col2:
-                    use_case = structuration_ia[i + 1]
-                    original_titre = use_case.get('titre', 'Titre non défini')
-                    original_description = use_case.get('description', 'Description non disponible')
-                    
-                    # Initialiser les valeurs dans session_state si nécessaire
-                    titre_key = f"uc_sia_titre_{i+1}_{key_suffix}"
-                    desc_key = f"uc_sia_desc_{i+1}_{key_suffix}"
-                    if titre_key not in st.session_state:
-                        st.session_state[titre_key] = original_titre
-                    if desc_key not in st.session_state:
-                        st.session_state[desc_key] = original_description
                     
                     # Champ éditable pour le titre (ne pas passer value pour éviter le warning)
                     modified_titre = st.text_input(
@@ -228,234 +148,205 @@ class StreamlitUseCaseValidation:
                         label_visibility="hidden"
                     )
                     
-                    # Checkbox pour sélectionner cette Structuration IA
-                    checkbox_key = f"validate_sia_{i+2}_{key_suffix}"
-                    is_selected = st.checkbox(f"Valider ce cas d'usage", key=checkbox_key)
+                    # Checkbox pour sélectionner ce cas d'usage avec une clé unique
+                    checkbox_key = f"validate_uc_{i+2}_{key_suffix}"
+                    # Initialiser à False si la clé n'existe pas encore (première fois)
+                    if checkbox_key not in st.session_state:
+                        st.session_state[checkbox_key] = False
+                    # Créer la checkbox (la valeur sera lue depuis session_state)
+                    is_selected = st.checkbox(f"Valider ce cas d'usage", key=checkbox_key, on_change=self._on_checkbox_change)
             
-            # Ligne de séparation fine entre les Structuration IA
+            # Ligne de séparation fine entre les cas d'usage
             st.markdown("---")
-        
-        # Calculer le nombre de sélections en temps réel
-        selected_qw_count = len([i for i in range(1, len(quick_wins) + 1) 
-                                 if st.session_state.get(f"validate_qw_{i}_{key_suffix}", False)])
-        selected_sia_count = len([i for i in range(1, len(structuration_ia) + 1) 
-                                  if st.session_state.get(f"validate_sia_{i}_{key_suffix}", False)])
         
         # Afficher le nombre de sélections
         st.markdown("---")
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            if selected_qw_count > 0:
-                st.info(f"{selected_qw_count} Quick Win(s) sélectionné(s)")
-        
-        with col2:
-            if selected_sia_count > 0:
-                st.info(f"{selected_sia_count} Structuration IA sélectionné(s)")
         
         # Zone de commentaires
         st.subheader("Commentaires (optionnel)")
         comments = st.text_area(
             "Ajoutez des commentaires sur votre sélection :",
-            placeholder="Ex: Les Quick Wins sélectionnés sont les plus pertinents pour notre contexte...",
+            placeholder="Ex: Les cas d'usage sélectionnés sont les plus pertinents pour notre contexte...",
             height=100
         )
         
-        # Bouton de validation
+        # Boutons de validation
         st.markdown("---")
         
-        can_validate = selected_qw_count > 0 or selected_sia_count > 0
-        if st.button("✅ Valider la sélection", type="primary", disabled=not can_validate, width="stretch"):
-            if not can_validate:
-                st.warning("Veuillez sélectionner au moins un cas d'usage")
-            else:
-                # Lire l'état des checkboxes directement
-                selected_qw_indices = []
-                for i in range(1, len(quick_wins) + 1):
-                    checkbox_key = f"validate_qw_{i}_{key_suffix}"
-                    if st.session_state.get(checkbox_key, False):
-                        selected_qw_indices.append(i)
-                
-                selected_sia_indices = []
-                for i in range(1, len(structuration_ia) + 1):
-                    checkbox_key = f"validate_sia_{i}_{key_suffix}"
-                    if st.session_state.get(checkbox_key, False):
-                        selected_sia_indices.append(i)
-                
-                # Traiter la validation et retourner le résultat
-                result = self._process_validation(
-                    quick_wins, 
-                    structuration_ia,
-                    selected_qw_indices,
-                    selected_sia_indices,
-                    comments,
-                    validated_qw_count,
-                    validated_sia_count,
-                    key_suffix
-                )
-                return result  # Retourner le résultat pour que app_api.py puisse l'envoyer à l'API
+        # IMPORTANT: Recalculer selected_count juste avant d'afficher les boutons
+        # pour s'assurer que la valeur est à jour après le rerun
+        selected_count = 0
+        for i in range(1, len(use_cases) + 1):
+            checkbox_key = f"validate_uc_{i}_{key_suffix}"
+            is_selected = st.session_state.get(checkbox_key, False)
+            if is_selected:
+                selected_count += 1
+        
+        # Afficher le nombre de sélections
+        if selected_count > 0:
+            st.info(f"{selected_count} cas d'usage sélectionné(s)")
+        
+        col1, col2 = st.columns(2)
+        
+        # Utiliser une clé dynamique basée sur selected_count pour forcer la mise à jour des boutons
+        button_key_suffix = f"_{selected_count}_{key_suffix}"
+        
+        with col1:
+            if st.button("✅ Valider et régénérer des use cases", type="primary", disabled=selected_count == 0, use_container_width=True, key=f"validate_continue{button_key_suffix}"):
+                if selected_count == 0:
+                    st.warning("Veuillez sélectionner au moins un cas d'usage")
+                else:
+                    # Lire l'état des checkboxes directement
+                    selected_indices = []
+                    for i in range(1, len(use_cases) + 1):
+                        checkbox_key = f"validate_uc_{i}_{key_suffix}"
+                        if st.session_state.get(checkbox_key, False):
+                            selected_indices.append(i)
+                    
+                    # Traiter la validation et retourner le résultat avec l'action
+                    result = self._process_validation(
+                        use_cases,
+                        selected_indices,
+                        comments,
+                        validated_count,
+                        key_suffix
+                    )
+                    result["use_case_user_action"] = "continue_use_cases"
+                    return result  # Retourner le résultat pour que app_api.py puisse l'envoyer à l'API
+        
+        with col2:
+            if st.button("✅ Valider et finaliser", type="secondary", disabled=selected_count == 0, use_container_width=True, key=f"validate_finalize{button_key_suffix}"):
+                if selected_count == 0:
+                    st.warning("Veuillez sélectionner au moins un cas d'usage")
+                else:
+                    # Lire l'état des checkboxes directement
+                    selected_indices = []
+                    for i in range(1, len(use_cases) + 1):
+                        checkbox_key = f"validate_uc_{i}_{key_suffix}"
+                        if st.session_state.get(checkbox_key, False):
+                            selected_indices.append(i)
+                    
+                    # Traiter la validation et retourner le résultat avec l'action
+                    result = self._process_validation(
+                        use_cases,
+                        selected_indices,
+                        comments,
+                        validated_count,
+                        key_suffix
+                    )
+                    result["use_case_user_action"] = "finalize_use_cases"
+                    return result  # Retourner le résultat pour que app_api.py puisse l'envoyer à l'API
         
         # Retour par défaut (en attente de validation)
         return None
     
     def _process_validation(
         self,
-        quick_wins: List[Dict[str, Any]],
-        structuration_ia: List[Dict[str, Any]],
-        selected_qw_indices: List[int],
-        selected_sia_indices: List[int],
+        use_cases: List[Dict[str, Any]],
+        selected_indices: List[int],
         comments: str,
-        validated_qw_count: int,
-        validated_sia_count: int,
+        validated_count: int,
         key_suffix: str = None
     ) -> Dict[str, Any]:
         """
         Traite la validation de l'utilisateur.
         
         Args:
-            quick_wins: Liste des Quick Wins proposés
-            structuration_ia: Liste des Structuration IA proposés
-            selected_qw_indices: Indices des Quick Wins sélectionnés
-            selected_sia_indices: Indices des Structuration IA sélectionnés
+            use_cases: Liste des cas d'usage proposés
+            selected_indices: Indices des cas d'usage sélectionnés
             comments: Commentaires de l'utilisateur
-            validated_qw_count: Nombre de Quick Wins déjà validés
-            validated_sia_count: Nombre de Structuration IA déjà validés
+            validated_count: Nombre de cas d'usage déjà validés
+            key_suffix: Suffixe pour les clés
             
         Returns:
             Résultat de la validation
         """
-        logger.info(f"Traitement de la validation : {len(selected_qw_indices)} QW, {len(selected_sia_indices)} SIA")
+        logger.info(f"Traitement de la validation : {len(selected_indices)} cas d'usage")
         print(f"\n✅ [DEBUG UC] _process_validation - DÉBUT")
-        print(f"📊 [DEBUG UC] selected_qw_indices: {selected_qw_indices}")
-        print(f"📊 [DEBUG UC] selected_sia_indices: {selected_sia_indices}")
-        print(f"📊 [DEBUG UC] validated_qw_count: {validated_qw_count}")
-        print(f"📊 [DEBUG UC] validated_sia_count: {validated_sia_count}")
+        print(f"📊 [DEBUG UC] selected_indices: {selected_indices}")
+        print(f"📊 [DEBUG UC] validated_count: {validated_count}")
         
-        # Extraire les Quick Wins validés avec les modifications de l'utilisateur
-        validated_qw = []
-        for selected_idx in selected_qw_indices:
+        # Extraire les cas d'usage validés avec les modifications de l'utilisateur
+        validated_uc = []
+        for selected_idx in selected_indices:
             idx = selected_idx - 1  # Convertir en index 0-based
-            original_uc = quick_wins[idx]
+            original_uc = use_cases[idx]
             
             # Lire les valeurs modifiées depuis session_state
-            titre_key = f"uc_qw_titre_{idx}_{key_suffix}"
-            desc_key = f"uc_qw_desc_{idx}_{key_suffix}"
+            titre_key = f"uc_titre_{idx}_{key_suffix}"
+            desc_key = f"uc_desc_{idx}_{key_suffix}"
             modified_titre = st.session_state.get(titre_key, original_uc.get('titre', ''))
             modified_description = st.session_state.get(desc_key, original_uc.get('description', ''))
             
-            # Créer le use case modifié (conserver l'id et ia_utilisee originaux)
+            # Créer le use case modifié (conserver l'id, ia_utilisee et famille originaux)
             modified_uc = {
                 'id': original_uc.get('id', ''),
                 'titre': modified_titre.strip() if modified_titre.strip() else original_uc.get('titre', ''),
                 'description': modified_description.strip() if modified_description.strip() else original_uc.get('description', ''),
-                'ia_utilisee': original_uc.get('ia_utilisee', '')  # Conserver l'original
+                'ia_utilisee': original_uc.get('ia_utilisee', ''),  # Conserver l'original
+                'famille': original_uc.get('famille')  # Conserver la famille si elle existe
             }
-            validated_qw.append(modified_uc)
+            validated_uc.append(modified_uc)
         
         # Pour les rejetés, on garde les originaux
-        rejected_qw_indices = [i for i in range(1, len(quick_wins) + 1) if i not in selected_qw_indices]
-        rejected_qw = [quick_wins[i-1] for i in rejected_qw_indices]
+        rejected_indices = [i for i in range(1, len(use_cases) + 1) if i not in selected_indices]
+        rejected_uc = [use_cases[i-1] for i in rejected_indices]
         
-        # Extraire les Structuration IA validées avec les modifications de l'utilisateur
-        validated_sia = []
-        for selected_idx in selected_sia_indices:
-            idx = selected_idx - 1  # Convertir en index 0-based
-            original_uc = structuration_ia[idx]
-            
-            # Lire les valeurs modifiées depuis session_state
-            titre_key = f"uc_sia_titre_{idx}_{key_suffix}"
-            desc_key = f"uc_sia_desc_{idx}_{key_suffix}"
-            modified_titre = st.session_state.get(titre_key, original_uc.get('titre', ''))
-            modified_description = st.session_state.get(desc_key, original_uc.get('description', ''))
-            
-            # Créer le use case modifié (conserver l'id et ia_utilisee originaux)
-            modified_uc = {
-                'id': original_uc.get('id', ''),
-                'titre': modified_titre.strip() if modified_titre.strip() else original_uc.get('titre', ''),
-                'description': modified_description.strip() if modified_description.strip() else original_uc.get('description', ''),
-                'ia_utilisee': original_uc.get('ia_utilisee', '')  # Conserver l'original
-            }
-            validated_sia.append(modified_uc)
+        # Calculer le total
+        total_validated = validated_count + len(validated_uc)
         
-        # Pour les rejetés, on garde les originaux
-        rejected_sia_indices = [i for i in range(1, len(structuration_ia) + 1) if i not in selected_sia_indices]
-        rejected_sia = [structuration_ia[i-1] for i in rejected_sia_indices]
-        
-        # Calculer les totaux
-        total_validated_qw = validated_qw_count + len(validated_qw)
-        total_validated_sia = validated_sia_count + len(validated_sia)
-        
-        # Succès si au moins 5 dans chaque famille
-        success = total_validated_qw >= 5 and total_validated_sia >= 5
-        
-        logger.info(f"Validation : QW={total_validated_qw}/5, SIA={total_validated_sia}/5, Succès={success}")
+        logger.info(f"Validation : {total_validated} cas d'usage validés au total")
         
         result = {
-            "validated_quick_wins": validated_qw,
-            "validated_structuration_ia": validated_sia,
-            "rejected_quick_wins": rejected_qw,
-            "rejected_structuration_ia": rejected_sia,
+            "validated_use_cases": validated_uc,
+            "rejected_use_cases": rejected_uc,
             "user_feedback": comments,
-            "success": success,
-            "total_validated_qw": total_validated_qw,
-            "total_validated_sia": total_validated_sia,
-            "newly_validated_qw": validated_qw,
-            "newly_validated_sia": validated_sia,
-            "newly_rejected_qw": rejected_qw,
-            "newly_rejected_sia": rejected_sia
+            "total_validated": total_validated,
+            "newly_validated": validated_uc,
+            "newly_rejected": rejected_uc
         }
         
         print(f"💾 [DEBUG UC] Préparation du résultat")
-        print(f"✅ [DEBUG UC] Résultat préparé - success={result['success']}, QW={result['total_validated_qw']}, SIA={result['total_validated_sia']}")
+        print(f"✅ [DEBUG UC] Résultat préparé - total_validated={result['total_validated']}")
         
-        # Nettoyer les clés de validation et modification
+        # Nettoyer l'état des sélections et les clés de validation + modification
         print(f"🧹 [DEBUG UC] Nettoyage des clés de validation et modification")
+        st.session_state.selected_use_cases = set()
         for key in list(st.session_state.keys()):
-            if (key.startswith("validate_qw_") or key.startswith("validate_sia_") or 
-                key.startswith("uc_qw_") or key.startswith("uc_sia_")):
+            if (key.startswith("validate_uc_") or 
+                key.startswith("uc_titre_") or 
+                key.startswith("uc_desc_") or 
+                key.startswith("use_cases_initialized_")):
                 del st.session_state[key]
         print(f"✅ [DEBUG UC] Nettoyage terminé")
         
-        if success:
-            print(f"🎉 [DEBUG UC] Validation réussie")
-        else:
-            remaining_qw = max(0, 5 - total_validated_qw)
-            remaining_sia = max(0, 5 - total_validated_sia)
-            print(f"⚠️ [DEBUG UC] Validation partielle - QW restants={remaining_qw}, SIA restants={remaining_sia}")
+        print(f"🎉 [DEBUG UC] Validation - {total_validated} cas d'usage validés au total")
         
         print(f"✅ [DEBUG UC] _process_validation - Retour du résultat")
         return result
     
     def validate_use_cases(
         self,
-        quick_wins: List[Dict[str, Any]],
-        structuration_ia: List[Dict[str, Any]],
-        validated_quick_wins: List[Dict[str, Any]] = None,
-        validated_structuration_ia: List[Dict[str, Any]] = None
+        use_cases: List[Dict[str, Any]],
+        validated_use_cases: List[Dict[str, Any]] = None
     ) -> Optional[Dict[str, Any]]:
         """
         Processus de validation humaine dans Streamlit.
         
         Args:
-            quick_wins: Quick Wins proposés à valider
-            structuration_ia: Structuration IA proposés à valider
-            validated_quick_wins: Quick Wins déjà validés (optionnel)
-            validated_structuration_ia: Structuration IA déjà validés (optionnel)
+            use_cases: Cas d'usage proposés à valider
+            validated_use_cases: Cas d'usage déjà validés (optionnel)
             
         Returns:
             Résultat de la validation ou None si en attente
         """
-        validated_quick_wins = validated_quick_wins or []
-        validated_structuration_ia = validated_structuration_ia or []
+        validated_use_cases = validated_use_cases or []
         
-        validated_qw_count = len(validated_quick_wins)
-        validated_sia_count = len(validated_structuration_ia)
+        validated_count = len(validated_use_cases)
         
         # Afficher l'interface de validation
         return self.display_use_cases_for_validation(
-            quick_wins,
-            structuration_ia,
-            validated_qw_count,
-            validated_sia_count
+            use_cases,
+            validated_count
         )
 

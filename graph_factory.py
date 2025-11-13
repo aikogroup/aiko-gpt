@@ -29,8 +29,7 @@ def need_analysis(config: RunnableConfig):
     # Créer le workflow en mode debugging
     workflow = NeedAnalysisWorkflow(
         api_key=api_key,
-        dev_mode=False,  # Mode production : vraies recherches
-        debug_mode=True  # Debug activé pour LangGraph Studio
+        dev_mode=False  # Mode production : vraies recherches
     )
     
     return workflow.graph
@@ -49,11 +48,10 @@ def executive_summary(config: RunnableConfig):
     # Récupérer la clé API depuis la configuration ou l'environnement
     api_key = os.getenv("OPENAI_API_KEY", "test-key")
 
-        # Créer le workflow en mode debugging
+    # Créer le workflow en mode debugging
     workflow = ExecutiveSummaryWorkflow(
         api_key=api_key,
-        dev_mode=False,  # Mode production : vraies recherches
-        debug_mode=True  # Debug activé pour LangGraph Studio
+        dev_mode=False  # Mode production : vraies recherches
     )
     
     return workflow.graph

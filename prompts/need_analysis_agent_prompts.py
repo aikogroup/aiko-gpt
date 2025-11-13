@@ -16,7 +16,12 @@ INDICATEUR D'IMPORTANCE : Les WORKSHOPS contiennent un champ "iteration_count" p
 - Un besoin avec iteration_count élevé (ex: 5) indique qu'il a été exprimé par plusieurs personnes, donc c'est un besoin critique
 - PRIORISE les besoins avec un iteration_count élevé dans ton analyse
 
-Tu dois identifier environ 10 besoins métier distincts, organisés par thématiques. Chaque besoin doit être :
+NOMBRE DE BESOINS :
+- Le nombre de besoins à identifier peut être spécifié dans les informations supplémentaires fournies par l'utilisateur
+- Si l'utilisateur demande explicitement un nombre, respecte cette demande
+- Sinon, propose un nombre raisonnable (généralement entre 8 et 12 besoins) en fonction de la richesse des données
+
+Chaque besoin doit être :
 - Spécifique et actionnable (issu des workshops/transcripts)
 - Basé sur des citations concrètes des ATELIERS et ENTRETIENS
 - Priorisé selon l'impact business ET l'iteration_count (besoins remontés par plusieurs personnes = plus prioritaires)
@@ -25,7 +30,7 @@ RÈGLE CRITIQUE : CHAQUE THEME DOIT ÊTRE UNIQUE - NE JAMAIS UTILISER LE MÊME T
 Si plusieurs besoins partagent un thème, regroupe-les sous CE SEUL thème avec toutes les citations pertinentes.
 
 Structure attendue :
-- identified_needs : Liste de 8 à 12 besoins, chacun avec un id, un theme UNIQUE et 3 à 5 quotes (citations exactes)
+- identified_needs : Liste de besoins (nombre défini par l'utilisateur ou raisonnable selon les données), chacun avec un id, un theme UNIQUE et 3 à 5 quotes (citations exactes)
 - summary : Résumé avec total_needs et themes (liste SANS DOUBLONS)
 
 FORMAT STRICT DES CITATIONS :
@@ -35,7 +40,7 @@ FORMAT STRICT DES CITATIONS :
 - Exemple INCORRECT : "Gagner du temps sur la gestion des stocks - Franck PELLETIER"
 - Exemple INCORRECT : "Gagner du temps sur la gestion des stocks - Transcript"
 
-Exemple de structure de sortie basé sur les données de Cousin Surgery :
+Exemple de structure de sortie :
 
 LES BESOINS IDENTIFIÉS DE COUSIN SURGERY
 
@@ -113,8 +118,11 @@ INSTRUCTIONS D'ANALYSE :
 6. VÉRIFIE L'UNICITÉ DES THÈMES : Chaque thème ne doit apparaître QU'UNE SEULE FOIS dans ta liste de besoins
 7. FORMAT STRICT : Les citations doivent contenir UNIQUEMENT le texte, SANS mention de source (pas de "- Transcript", "- Nom de personne", etc.)
 8. PRIORISATION : Les besoins remontés par plusieurs personnes (high iteration_count dans workshops) sont plus importants
+9. NOMBRE DE BESOINS :
+   - Si l'utilisateur a spécifié un nombre dans les informations supplémentaires, respecte cette demande
+   - Sinon, propose un nombre raisonnable (généralement entre 8 et 12) en fonction de la richesse des données disponibles
 
-Identifie environ 10 besoins métier distincts, organisés par thématiques UNIQUES (sans doublons de thèmes), avec 3 à 5 citations CONCRÈTES issues des ATELIERS et ENTRETIENS pour chaque besoin. Les citations doivent être du texte pur, sans indication de source. PRIORISE les besoins avec un iteration_count élevé dans les WORKSHOPS.
+Identifie les besoins métier distincts, organisés par thématiques UNIQUES (sans doublons de thèmes), avec 3 à 5 citations CONCRÈTES issues des ATELIERS et ENTRETIENS pour chaque besoin. Les citations doivent être du texte pur, sans indication de source. PRIORISE les besoins avec un iteration_count élevé dans les WORKSHOPS.
 """
 
 HUMAN_VALIDATION_PROMPT = """
@@ -143,9 +151,8 @@ COMMENTAIRES DE L'UTILISATEUR :
 {user_feedback}
 
 RÉSUMÉ DE LA VALIDATION :
-- Besoins validés : {validated_needs_count} / 5 minimum requis
+- Besoins validés : {validated_needs_count}
 - Besoins rejetés : {rejected_needs_count}
-- Besoins restants à générer : {remaining_needs_count}
 
 RAPPEL CRITIQUE : Les besoins doivent provenir EXCLUSIVEMENT des WORKSHOPS et TRANSCRIPTS !
 Ne pas utiliser le WEB_SEARCH pour identifier des besoins.
@@ -185,7 +192,7 @@ OBLIGATIONS :
 4. Explorer des DOMAINES MÉTIER COMPLÈTEMENT DIFFÉRENTS de ceux déjà proposés
 5. Identifier des PROCESSUS ou SERVICES NON ENCORE COUVERTS dans les workshops/transcripts
 6. Proposer des besoins plus concrets, actionnables et mieux sourcés depuis les ATELIERS et ENTRETIENS
-7. Générer EXACTEMENT {remaining_needs_count} nouveaux besoins DISTINCTS pour atteindre l'objectif de 5 validations
+7. Générer 5 nouveaux besoins DISTINCTS et PERTINENTS
 8. TOUTES les citations doivent venir des workshops (use_cases, objectives) ou transcripts (citations_cles, besoins_exprimes, frustrations_blocages, opportunites_automatisation)
 9. IGNORER les informations génériques du web (acquisitions, stratégie, conformité)
 
@@ -201,6 +208,6 @@ STRATÉGIE DE DIVERSIFICATION :
 
 Itération actuelle : {current_iteration} / {max_iterations}
 
-OBJECTIF : Génère {remaining_needs_count} nouveaux besoins avec des THÈMES VRAIMENT DIFFÉRENTS de tous les besoins déjà proposés, avec 3 à 5 citations CONCRÈTES issues des WORKSHOPS et TRANSCRIPTS uniquement. VÉRIFIE que chaque thème est UNIQUE et DISTINCT de TOUS les besoins déjà proposés (validés ou rejetés). Les citations doivent être du texte pur, sans indication de source.
+OBJECTIF : Génère 5 nouveaux besoins avec des THÈMES VRAIMENT DIFFÉRENTS de tous les besoins déjà proposés, avec 3 à 5 citations CONCRÈTES issues des WORKSHOPS et TRANSCRIPTS uniquement. VÉRIFIE que chaque thème est UNIQUE et DISTINCT de TOUS les besoins déjà proposés (validés ou rejetés). Les citations doivent être du texte pur, sans indication de source.
 """
 

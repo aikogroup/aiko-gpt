@@ -48,7 +48,7 @@ class WordReportExtractor:
             word_path: Chemin vers le fichier Word (.docx)
             
         Returns:
-            Dict avec keys: 'final_needs', 'final_quick_wins', 'final_structuration_ia'
+            Dict avec keys: 'final_needs', 'final_use_cases'
         """
         logger.info(f"Extraction depuis Word: {word_path}")
         
@@ -69,8 +69,8 @@ class WordReportExtractor:
         Cette méthode parse le document Word et extrait les besoins et cas d'usage
         basés sur la structure du document :
         - Besoins : lignes commençant par 🔹, avec citations entre « et »
-        - Cas d'usage : section "LES CAS D'USAGES IA PRIORITAIRES" avec familles
-          "Quick Wins" et "Structuration IA"
+        - Cas d'usage : section "LES CAS D'USAGES IA PRIORITAIRES"
+          La famille (si présente) est extraite du préfixe [Famille] dans la description
         
         Si l'extraction échoue ou ne trouve rien, on utilise l'extraction LLM.
         
@@ -78,19 +78,17 @@ class WordReportExtractor:
             word_path: Chemin vers le fichier Word
             
         Returns:
-            Dict avec 'final_needs', 'final_quick_wins', 'final_structuration_ia'
+            Dict avec 'final_needs', 'final_use_cases'
             ou None si échec (on utilisera alors LLM)
         """
         try:
             doc = Document(word_path)
             
             needs = []
-            quick_wins = []
-            structuration_ia = []
+            use_cases = []
             
             current_need = None
             current_section = "needs"  # "needs" ou "use_cases"
-            current_family = None  # "Quick Wins" ou "Structuration IA"
             current_use_case = None
             
             for para in doc.paragraphs:
@@ -124,45 +122,25 @@ class WordReportExtractor:
                     print(f"current_need dans _try_extract_json : {current_need}")
                 # --- Extraction des cas d'usage ---
                 elif current_section == "use_cases":
-                    # Détection de la famille (Quick Wins ou Structuration IA)
-                    # Vérifier que c'est bien un titre de section (Heading de niveau 2)
-                    # Les titres de section sont généralement seuls sur une ligne
-                    text_upper = text.upper()
-                    
-                    # Détection plus stricte : chercher "Famille" suivi du nom de la famille
-                    if ("FAMILLE" in text_upper and "QUICK WINS" in text_upper) or \
-                       (text_upper.startswith("FAMILLE") and "QUICK" in text_upper and "WINS" in text_upper):
-                        current_family = "Quick Wins"
-                        logger.debug("Famille 'Quick Wins' détectée")
-                        continue
-                    elif ("FAMILLE" in text_upper and "STRUCTURATION IA" in text_upper) or \
-                         (text_upper.startswith("FAMILLE") and "STRUCTURATION" in text_upper):
-                        current_family = "Structuration IA"
-                        logger.debug("Famille 'Structuration IA' détectée")
-                        continue
-                    
                     # Nouveau cas d'usage (numéro suivi de titre)
-                    # S'assurer qu'on a détecté une famille avant d'extraire un cas d'usage
-                    if re.match(r"^\d+[\.\)]\s*", text) and current_family:
+                    if re.match(r"^\d+[\.\)]\s*", text):
                         # Sauvegarder le cas d'usage précédent
                         if current_use_case:
-                            if current_family == "Quick Wins":
-                                quick_wins.append(current_use_case)
-                            else:
-                                structuration_ia.append(current_use_case)
+                            use_cases.append(current_use_case)
                         
                         # Extraire le titre
                         title = re.sub(r"^\d+[\.\)]\s*", "", text).strip()
                         current_use_case = {
                             "titre": title,
-                            "description": ""
+                            "description": "",
+                            "famille": None
                         }
                     # Description du cas d'usage
                     elif (text.startswith("Description :") or text.startswith("Description:")) and current_use_case:
                         description = re.sub(r"^Description\s*:\s*", "", text, flags=re.IGNORECASE).strip()
                         current_use_case["description"] = description
-                    # Autre texte pour le cas d'usage actuel (seulement si on a une famille définie)
-                    elif current_use_case and current_family:
+                    # Autre texte pour le cas d'usage actuel
+                    elif current_use_case:
                         if current_use_case["description"]:
                             current_use_case["description"] += " " + text
                         else:
@@ -171,11 +149,8 @@ class WordReportExtractor:
             # Ajouter le dernier besoin et cas d'usage
             if current_need:
                 needs.append(current_need)
-            if current_use_case and current_family:
-                if current_family == "Quick Wins":
-                    quick_wins.append(current_use_case)
-                else:
-                    structuration_ia.append(current_use_case)
+            if current_use_case:
+                use_cases.append(current_use_case)
             
             # Convertir les besoins au format attendu
             final_needs = []
@@ -192,18 +167,33 @@ class WordReportExtractor:
                     "description": " ".join(description_parts) if description_parts else ""
                 })
             print(f"Final needs de l'extractor : {final_needs}")
-            # Convertir les cas d'usage au format attendu
-            final_quick_wins = [{"titre": uc.get("titre", ""), "description": uc.get("description", "")} for uc in quick_wins]
-            final_structuration_ia = [{"titre": uc.get("titre", ""), "description": uc.get("description", "")} for uc in structuration_ia]
+            
+            # Convertir les cas d'usage et extraire la famille depuis le préfixe [Famille]
+            final_use_cases = []
+            for uc in use_cases:
+                titre = uc.get("titre", "")
+                description = uc.get("description", "")
+                
+                # Extraire la famille depuis le préfixe [Famille] dans la description
+                famille = None
+                match = re.match(r"^\[([^\]]+)\]\s*(.*)", description)
+                if match:
+                    famille = match.group(1).strip()
+                    description = match.group(2).strip()
+                
+                final_use_cases.append({
+                    "titre": titre,
+                    "description": description,
+                    "famille": famille
+                })
             
             # Vérifier si on a extrait quelque chose
-            if final_needs or final_quick_wins or final_structuration_ia:
+            if final_needs or final_use_cases:
                 logger.info(f"✅ Extraction structurée réussie: {len(final_needs)} besoins, "
-                           f"{len(final_quick_wins)} Quick Wins, {len(final_structuration_ia)} Structuration IA")
+                           f"{len(final_use_cases)} cas d'usage")
                 return {
                     "final_needs": final_needs,
-                    "final_quick_wins": final_quick_wins,
-                    "final_structuration_ia": final_structuration_ia
+                    "final_use_cases": final_use_cases
                 }
             else:
                 logger.debug("Aucune donnée structurée trouvée, utilisation de l'extraction LLM")
@@ -232,8 +222,7 @@ class WordReportExtractor:
                 logger.warning("Document Word vide")
                 return {
                     "final_needs": [],
-                    "final_quick_wins": [],
-                    "final_structuration_ia": []
+                    "final_use_cases": []
                 }
             
             # Préparer le prompt
@@ -256,13 +245,11 @@ class WordReportExtractor:
             extracted_data = response.output_parsed.model_dump()
             
             logger.info(f"✅ Extraction LLM réussie: {len(extracted_data.get('final_needs', []))} besoins, "
-                       f"{len(extracted_data.get('final_quick_wins', []))} Quick Wins, "
-                       f"{len(extracted_data.get('final_structuration_ia', []))} Structuration IA")
+                       f"{len(extracted_data.get('final_use_cases', []))} cas d'usage")
             
             return {
                 "final_needs": extracted_data.get("final_needs", []),
-                "final_quick_wins": extracted_data.get("final_quick_wins", []),
-                "final_structuration_ia": extracted_data.get("final_structuration_ia", [])
+                "final_use_cases": extracted_data.get("final_use_cases", [])
             }
             
         except Exception as e:
@@ -270,7 +257,6 @@ class WordReportExtractor:
             # Retourner une structure vide en cas d'erreur
             return {
                 "final_needs": [],
-                "final_quick_wins": [],
-                "final_structuration_ia": []
+                "final_use_cases": []
             }
 

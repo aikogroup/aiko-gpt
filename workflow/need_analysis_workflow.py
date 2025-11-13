@@ -53,26 +53,22 @@ class WorkflowState(TypedDict):
     validation_result: Dict[str, Any]
     # État du workflow des besoins
     final_needs: List[Dict[str, Any]]
-    success: bool
-    iteration_count: int
-    max_iterations: int
     workflow_paused: bool
+    # Action demandée par l'utilisateur (pour les boutons)
+    user_action: str  # "continue_needs" ou "continue_to_use_cases"
     # Résultats de l'analyse des use cases
-    proposed_quick_wins: List[Dict[str, Any]]
-    proposed_structuration_ia: List[Dict[str, Any]]
+    proposed_use_cases: List[Dict[str, Any]]
+    # Contexte additionnel pour la génération des use cases
+    use_case_additional_context: str
     # Validation humaine des use cases
-    validated_quick_wins: List[Dict[str, Any]]
-    validated_structuration_ia: List[Dict[str, Any]]
-    rejected_quick_wins: List[Dict[str, Any]]
-    rejected_structuration_ia: List[Dict[str, Any]]
+    validated_use_cases: List[Dict[str, Any]]
+    rejected_use_cases: List[Dict[str, Any]]
     use_case_user_feedback: str
     use_case_validation_result: Dict[str, Any]
+    # Action demandée par l'utilisateur pour les use cases (pour les boutons)
+    use_case_user_action: str  # "continue_use_cases" ou "finalize_use_cases"
     # État du workflow des use cases
-    final_quick_wins: List[Dict[str, Any]]
-    final_structuration_ia: List[Dict[str, Any]]
-    use_case_success: bool
-    use_case_iteration: int
-    max_use_case_iterations: int
+    final_use_cases: List[Dict[str, Any]]
     use_case_workflow_paused: bool
 
 
@@ -81,18 +77,16 @@ class NeedAnalysisWorkflow:
     Workflow LangGraph pour l'analyse des besoins métier
     """
     
-    def __init__(self, api_key: str, dev_mode: bool = False, debug_mode: bool = False):
+    def __init__(self, api_key: str, dev_mode: bool = False):
         """
         Initialise le workflow avec la clé API OpenAI.
         
         Args:
             api_key: Clé API OpenAI
             dev_mode: Mode développement (utilise les données mockées)
-            debug_mode: Mode debugging avec LangGraph Studio
         """
         self.api_key = api_key
         self.dev_mode = dev_mode
-        self.debug_mode = debug_mode
         model = os.getenv('OPENAI_MODEL', 'gpt-5-nano')
         self.llm = ChatOpenAI(
             model=model,
@@ -165,12 +159,8 @@ class NeedAnalysisWorkflow:
         Returns:
             Checkpointer configuré
         """
-        if self.debug_mode:
-            # Mode debugging - utiliser MemorySaver pour la persistance
-            return MemorySaver()
-        else:
-            # Mode normal - pas de checkpointer
-            return None
+        # Toujours utiliser MemorySaver pour gérer les interrupts
+        return MemorySaver()
     
     def _create_graph(self) -> StateGraph:
         """
@@ -192,20 +182,16 @@ class NeedAnalysisWorkflow:
         workflow.add_node("collect_data", self._collect_data_node)
         workflow.add_node("analyze_needs", self._analyze_needs_node)
         workflow.add_node("human_validation", self._human_validation_node)
-        workflow.add_node("check_success", self._check_success_node)
         workflow.add_node("finalize_results", self._finalize_results_node)
         
         # Ajout des nœuds - Phase 2 : Analyse des use cases
+        workflow.add_node("pre_use_case_interrupt", self._pre_use_case_interrupt_node)
         workflow.add_node("analyze_use_cases", self._analyze_use_cases_node)
         workflow.add_node("validate_use_cases", self._validate_use_cases_node)
-        workflow.add_node("check_use_case_success", self._check_use_case_success_node)
         workflow.add_node("finalize_use_cases", self._finalize_use_cases_node)
         
-        # Définition du flux - point d'entrée selon le mode
-        if self.dev_mode:
-            workflow.set_entry_point("collect_data")
-        else:
-            workflow.set_entry_point("dispatcher")
+        # Définition du flux - toujours commencer par dispatcher
+        workflow.set_entry_point("dispatcher")
         
         # NOUVEAU: Flux parallèle - Phase 1 : Collecte de données
         # Dispatcher → 3 agents en parallèle → collect_data
@@ -219,32 +205,29 @@ class NeedAnalysisWorkflow:
         # Flux séquentiel - Phase 1 : Analyse des besoins
         workflow.add_edge("collect_data", "analyze_needs")
         workflow.add_edge("analyze_needs", "human_validation")
-        workflow.add_edge("human_validation", "check_success")
         
-        # Conditions de branchement - Phase 1
+        # Conditions de branchement - Phase 1 (basé sur l'action utilisateur)
         workflow.add_conditional_edges(
-            "check_success",
-            self._should_continue,
+            "human_validation",
+            self._should_continue_needs,
             {
-                "continue": "analyze_needs",
-                "success": "finalize_results",
-                "max_iterations": END
+                "continue_needs": "analyze_needs",
+                "continue_to_use_cases": "finalize_results"
             }
         )
         
         # Transition vers Phase 2 : Analyse des use cases
-        workflow.add_edge("finalize_results", "analyze_use_cases")
+        workflow.add_edge("finalize_results", "pre_use_case_interrupt")
+        workflow.add_edge("pre_use_case_interrupt", "analyze_use_cases")
         workflow.add_edge("analyze_use_cases", "validate_use_cases")
-        workflow.add_edge("validate_use_cases", "check_use_case_success")
         
-        # Conditions de branchement - Phase 2
+        # Conditions de branchement - Phase 2 (basé sur l'action utilisateur)
         workflow.add_conditional_edges(
-            "check_use_case_success",
+            "validate_use_cases",
             self._should_continue_use_cases,
             {
-                "continue": "analyze_use_cases",
-                "success": "finalize_use_cases",
-                "max_iterations": END
+                "continue_use_cases": "analyze_use_cases",
+                "finalize_use_cases": "finalize_use_cases"
             }
         )
         
@@ -254,13 +237,10 @@ class NeedAnalysisWorkflow:
         # NOUVEAU: Toujours utiliser checkpointer et interrupts (pas seulement en debug)
         compile_kwargs = {
             "checkpointer": MemorySaver(),  # Toujours actif pour gérer les interrupts
-            "interrupt_before": ["human_validation", "validate_use_cases"]  # Points d'arrêt pour validation humaine
+            "interrupt_before": ["human_validation", "pre_use_case_interrupt", "validate_use_cases"]  # Points d'arrêt pour validation humaine
         }
         
-        # Options supplémentaires en mode debug
-        if self.debug_mode:
-            compile_kwargs["interrupt_after"] = ["dispatcher", "collect_data"]
-            compile_kwargs["debug"] = True
+        # Pas d'options supplémentaires en mode dev
         
         return workflow.compile(**compile_kwargs)
     
@@ -322,6 +302,23 @@ class NeedAnalysisWorkflow:
                 print(f"⏩ [PARALLÈLE-1/3] Résultats pré-calculés - skip")
                 return {}
             
+            # MODE DEV: Charger les données mockées depuis le fichier JSON
+            if project_config.is_agent_dev_mode("workshop"):
+                print(f"🔧 [PARALLÈLE-1/3] Mode dev WORKSHOP_DEV_MODE activé - chargement des données mockées")
+                try:
+                    mock_data = project_config.load_mock_data()
+                    workshop_data = mock_data.get("workshop", {})
+                    print(f"✅ [PARALLÈLE-1/3] Données mockées chargées: {len(workshop_data.get('workshops', []))} workshops")
+                    return {"workshop_results": workshop_data}
+                except Exception as e:
+                    print(f"⚠️ [PARALLÈLE-1/3] Erreur lors du chargement des données mockées: {str(e)}")
+                    return {"workshop_results": {"workshops": []}}
+            
+            # Fallback sur dev_mode global pour compatibilité
+            if self.dev_mode:
+                print(f"🔧 [PARALLÈLE-1/3] Mode dev global - retour de données mockées vides")
+                return {"workshop_results": {"workshops": []}}
+            
             workshop_files = state.get("workshop_files", [])
             
             if workshop_files:
@@ -363,6 +360,23 @@ class NeedAnalysisWorkflow:
                 print(f"⏩ [PARALLÈLE-2/3] Résultats pré-calculés - skip")
                 return {}
             
+            # MODE DEV: Charger les données mockées depuis le fichier JSON
+            if project_config.is_agent_dev_mode("transcript"):
+                print(f"🔧 [PARALLÈLE-2/3] Mode dev TRANSCRIPT_DEV_MODE activé - chargement des données mockées")
+                try:
+                    mock_data = project_config.load_mock_data()
+                    transcript_data = mock_data.get("transcript", {})
+                    print(f"✅ [PARALLÈLE-2/3] Données mockées chargées: {len(transcript_data.get('results', []))} transcripts")
+                    return {"transcript_results": transcript_data}
+                except Exception as e:
+                    print(f"⚠️ [PARALLÈLE-2/3] Erreur lors du chargement des données mockées: {str(e)}")
+                    return {"transcript_results": {"results": []}}
+            
+            # Fallback sur dev_mode global pour compatibilité
+            if self.dev_mode:
+                print(f"🔧 [PARALLÈLE-2/3] Mode dev global - retour de données mockées vides")
+                return {"transcript_results": {"results": []}}
+            
             transcript_files = state.get("transcript_files", [])
             
             if transcript_files:
@@ -400,6 +414,23 @@ class NeedAnalysisWorkflow:
             if state.get("skip_agents", False):
                 print(f"⏩ [PARALLÈLE-3/3] Résultats pré-calculés - skip")
                 return {}
+            
+            # MODE DEV: Charger les données mockées depuis le fichier JSON
+            if project_config.is_agent_dev_mode("web_search"):
+                print(f"🔧 [PARALLÈLE-3/3] Mode dev WEB_SEARCH_DEV_MODE activé - chargement des données mockées")
+                try:
+                    mock_data = project_config.load_mock_data()
+                    web_search_data = mock_data.get("web_search", {})
+                    print(f"✅ [PARALLÈLE-3/3] Données mockées chargées pour: {web_search_data.get('nom', 'N/A')}")
+                    return {"web_search_results": web_search_data}
+                except Exception as e:
+                    print(f"⚠️ [PARALLÈLE-3/3] Erreur lors du chargement des données mockées: {str(e)}")
+                    return {"web_search_results": {}}
+            
+            # Fallback sur dev_mode global pour compatibilité
+            if self.dev_mode:
+                print(f"🔧 [PARALLÈLE-3/3] Mode dev global - retour de données mockées vides")
+                return {"web_search_results": {}}
             
             company_info = state.get("company_info", {})
             
@@ -544,66 +575,31 @@ class NeedAnalysisWorkflow:
         print(f"   • web_search_results: {bool(state.get('web_search_results', {}))}")
         
         try:
+            # MODE DEV: Les agents ont déjà retourné des données mockées, on utilise directement les résultats
             if self.dev_mode:
-                # Mode développement - charger les données mockées
-                import json
-                try:
-                    # Charger les données mockées avec gestion d'erreur robuste
-                    with open('/home/addeche/aiko/aikoGPT/workshop_results.json', 'r', encoding='utf-8') as f:
-                        workshop_data = json.load(f)
-                    
-                    # Charger transcript_results avec gestion des caractères de contrôle
-                    try:
-                        with open('/home/addeche/aiko/aikoGPT/transcript_results.json', 'r', encoding='utf-8') as f:
-                            transcript_data = json.load(f)
-                    except json.JSONDecodeError as e:
-                        print(f"⚠️ [DEBUG] Erreur parsing transcript_results.json: {e}")
-                        # Essayer avec une approche plus robuste
-                        with open('/home/addeche/aiko/aikoGPT/transcript_results.json', 'r', encoding='utf-8') as f:
-                            content = f.read()
-                            # Nettoyer les caractères de contrôle
-                            import re
-                            content = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', content)
-                            transcript_data = json.loads(content)
-                    
-                    with open('/home/addeche/aiko/aikoGPT/web_search_cousin_surgery.json', 'r', encoding='utf-8') as f:
-                        web_search_data = json.load(f)
-                    
-                    # Agrégation des données mockées
-                    # SIMPLIFICATION: Utiliser directement workshop_results au lieu de workshop_data
-                    state["workshop_results"] = {"workshops": workshop_data}
-                    
-                    # OPTIMISATION: Ne garder que semantic_analysis dans transcript_data
-                    # pour éviter le doublon avec interesting_parts
-                    
-                    # Extraire la liste "results" du dictionnaire transcript_data
-                    transcript_results = transcript_data.get("results", [])
-                    
-                    filtered_transcripts = []
-                    for transcript in transcript_results:
-                        # Vérifier que transcript est bien un dictionnaire
-                        if not isinstance(transcript, dict):
-                            print(f"⚠️ [DEBUG] Transcript ignoré (type incorrect): {type(transcript)}")
-                            continue
-                        
+                print(f"🔧 [CONVERGENCE] Mode dev - utilisation des résultats mockés des agents")
+                # Les agents ont déjà retourné des données mockées vides
+                # On prépare juste transcript_data pour la suite
+                transcript_results_raw = state.get("transcript_results", {})
+                if isinstance(transcript_results_raw, dict) and "results" in transcript_results_raw:
+                    transcript_results = transcript_results_raw.get("results", [])
+                elif isinstance(transcript_results_raw, list):
+                    transcript_results = transcript_results_raw
+                else:
+                    transcript_results = []
+                
+                filtered_transcripts = []
+                for transcript in transcript_results:
+                    if isinstance(transcript, dict):
                         filtered_transcript = {
                             "pdf_path": transcript.get("pdf_path"),
                             "status": transcript.get("status"),
                             "semantic_analysis": transcript.get("semantic_analysis", {})
                         }
                         filtered_transcripts.append(filtered_transcript)
-                    
-                    state["transcript_data"] = filtered_transcripts
-                    
-                    # Sauvegarder les résultats (web_search_data déjà sauvegardé plus haut)
-                    state["transcript_results"] = transcript_data  # Garder la structure complète
-                    state["web_search_results"] = web_search_data
-                    
-                    print(f"🔍 [DEBUG] Transcripts filtrés: {len(filtered_transcripts)} transcripts (semantic_analysis uniquement)")
-                    
-                except Exception as e:
-                    state["messages"] = state.get("messages", []) + [HumanMessage(content=f"Erreur chargement données mockées: {str(e)}")]
-                    return state
+                
+                state["transcript_data"] = filtered_transcripts
+                print(f"🔍 [CONVERGENCE] Transcripts filtrés: {len(filtered_transcripts)} transcripts")
             else:
                 # Mode normal - agrégation des résultats des 3 agents PARALLÈLES
                 print(f"📊 [CONVERGENCE] Agrégation des résultats des agents parallèles")
@@ -681,38 +677,72 @@ class NeedAnalysisWorkflow:
         try:
             # Vérifier s'il y a des besoins déjà validés
             validated_count = len(state.get("validated_needs", []))
-            remaining_needs = max(0, 10 - validated_count)
             
-            if remaining_needs <= 0:
-                # Tous les besoins sont validés
-                print(f"✅ [DEBUG] Tous les besoins sont déjà validés ({validated_count})")
-                state["identified_needs"] = []
-                return state
-            
-            # MODE DEV: Charger les besoins depuis le JSON
-            if self.dev_mode:
-                print(f"🔧 [DEBUG] Mode dev activé - chargement des besoins depuis le JSON")
+            # MODE DEV: Charger les données mockées depuis le fichier JSON
+            if project_config.is_agent_dev_mode("need_analysis"):
+                print(f"🔧 [DEBUG] Mode dev NEED_ANALYSIS_DEV_MODE activé - chargement des données mockées")
                 try:
-                    with open('/home/addeche/aiko/aikoGPT/need_analysis_results_mock.json', 'r', encoding='utf-8') as f:
-                        mock_data = json.load(f)
-                    
-                    identified_needs = mock_data.get("identified_needs", [])
-                    
-                    # Limiter le nombre de besoins selon les besoins restants
-                    if len(identified_needs) > remaining_needs:
-                        identified_needs = identified_needs[:remaining_needs]
-                    
+                    mock_data = project_config.load_mock_data()
+                    need_analysis_data = mock_data.get("need_analysis", {})
+                    identified_needs = need_analysis_data.get("identified_needs", [])
                     state["identified_needs"] = identified_needs
-                    
-                    print(f"✅ [DEBUG] Besoins chargés depuis le JSON: {len(identified_needs)}")
+                    print(f"✅ [DEBUG] Besoins mockés chargés: {len(identified_needs)}")
                     print(f"📊 [DEBUG] Besoins identifiés: {len(identified_needs)}")
                     print(f"🎯 [DEBUG] Besoins validés total: {len(state.get('validated_needs', []))}")
-                    
                     return state
-                    
                 except Exception as e:
-                    print(f"❌ [DEBUG] Erreur lors du chargement du JSON: {str(e)}")
+                    print(f"⚠️ [DEBUG] Erreur lors du chargement des données mockées: {str(e)}")
                     # Continuer en mode normal si le chargement échoue
+            
+            # Fallback sur dev_mode global pour compatibilité
+            if self.dev_mode:
+                print(f"🔧 [DEBUG] Mode dev global activé - utilisation de debug_needs")
+                # Définir les besoins de debug (même structure que dans app_api.py)
+                debug_needs = [
+                    {
+                        "theme": "Automatisation & Efficacité Opérationnelle",
+                        "quotes": [
+                            "Nous passons trop de temps sur les tâches administratives répétitives",
+                            "L'automatisation nous ferait gagner beaucoup de temps"
+                        ]
+                    },
+                    {
+                        "theme": "Analyse de Données & Amélioration de la Performance",
+                        "quotes": [
+                            "Nous avons besoin de mieux suivre nos performances commerciales",
+                            "Un dashboard en temps réel serait très utile"
+                        ]
+                    },
+                    {
+                        "theme": "Optimisation de la Gestion des Stocks",
+                        "quotes": [
+                            "Nous avons souvent des ruptures de stock",
+                            "Une meilleure prévision nous aiderait"
+                        ]
+                    },
+                    {
+                        "theme": "Amélioration du Recrutement",
+                        "quotes": [
+                            "La formation de nos équipes est un enjeu majeur",
+                            "Nous avons besoin d'un système de suivi des compétences"
+                        ]
+                    },
+                    {
+                        "theme": "Système d'Alerte pour Non-Conformité",
+                        "quotes": [
+                            "La conformité réglementaire est complexe",
+                            "Nous devons améliorer notre traçabilité"
+                        ]
+                    }
+                ]
+                
+                state["identified_needs"] = debug_needs
+                
+                print(f"✅ [DEBUG] Besoins debug utilisés: {len(debug_needs)}")
+                print(f"📊 [DEBUG] Besoins identifiés: {len(debug_needs)}")
+                print(f"🎯 [DEBUG] Besoins validés total: {len(state.get('validated_needs', []))}")
+                
+                return state
             
             # MODE NORMAL: Génération des besoins avec l'IA
             print(f"🤖 [DEBUG] Mode normal - génération des besoins avec l'IA")
@@ -721,10 +751,9 @@ class NeedAnalysisWorkflow:
             user_feedback = state.get("user_feedback", "")
             rejected_needs = state.get("rejected_needs", [])
             previous_needs = state.get("identified_needs", [])
-            iteration = state.get("iteration_count", 0) + 1
             
             if user_feedback or rejected_needs:
-                print(f"\n🔄 Génération de {remaining_needs} nouvelles propositions...")
+                print(f"\n🔄 Génération de nouvelles propositions...")
                 if user_feedback:
                     print(f"💬 En tenant compte du feedback: {user_feedback}")
                 if rejected_needs:
@@ -735,14 +764,14 @@ class NeedAnalysisWorkflow:
             previous_needs_light = None
             rejected_needs_light = None
             
-            if iteration > 1 and previous_needs:
+            if previous_needs:
                 previous_needs_light = [
                     {"id": need.get("id"), "theme": need.get("theme")}
                     for need in previous_needs
                 ]
                 print(f"💰 [OPTIMISATION] Previous needs allégés: {len(previous_needs)} besoins sans quotes")
             
-            if iteration > 1 and rejected_needs:
+            if rejected_needs:
                 rejected_needs_light = [
                     {"id": need.get("id"), "theme": need.get("theme")}
                     for need in rejected_needs
@@ -753,7 +782,6 @@ class NeedAnalysisWorkflow:
                 workshop_data=state["workshop_results"],  # SIMPLIFICATION: utiliser directement workshop_results
                 transcript_data=state["transcript_data"],
                 web_search_data=state["web_search_results"],  # SIMPLIFICATION: utiliser directement web_search_results
-                iteration=iteration,
                 previous_needs=previous_needs_light,
                 rejected_needs=rejected_needs_light,
                 user_feedback=user_feedback,
@@ -765,10 +793,8 @@ class NeedAnalysisWorkflow:
                 state["messages"] = state.get("messages", []) + [HumanMessage(content=f"Erreur analyse: {analysis_result['error']}")]
                 return state
             
-            # Limiter le nombre de besoins générés
+            # Récupérer tous les besoins identifiés (pas de limite)
             identified_needs = analysis_result.get("identified_needs", [])
-            if len(identified_needs) > remaining_needs:
-                identified_needs = identified_needs[:remaining_needs]
             
             state["identified_needs"] = identified_needs
             
@@ -834,6 +860,10 @@ class NeedAnalysisWorkflow:
                 state["rejected_needs"] = existing_rejected + unique_newly_rejected
                 state["user_feedback"] = validation_data.get("user_feedback", "")
                 
+                # Incrémenter le compteur d'itération
+                state["iteration_count"] = state.get("iteration_count", 0) + 1
+                print(f"🔄 [DEBUG] iteration_count incrémenté à {state['iteration_count']}")
+                
                 # Nettoyer le flag
                 state["validation_result"] = {}
                 
@@ -856,47 +886,6 @@ class NeedAnalysisWorkflow:
             state["messages"] = state.get("messages", []) + [HumanMessage(content=f"Erreur validation: {str(e)}")]
             return state
     
-    def _check_success_node(self, state: WorkflowState) -> WorkflowState:
-        """
-        Nœud de vérification du succès.
-        
-        Args:
-            state: État actuel du workflow
-            
-        Returns:
-            État mis à jour
-        """
-        try:
-            print(f"\n🔄 [DEBUG] _check_success_node - DÉBUT")
-            
-            # NE PAS vérifier workflow_paused ici car nous sommes APRÈS validation
-            # Cette vérification empêchait le workflow de progresser
-            
-            # Vérification du succès
-            validated_count = len(state.get("validated_needs", []))
-            success = validated_count >= 5
-            
-            state["success"] = success
-            
-            print(f"📊 Besoins validés: {validated_count}/5")
-            print(f"🎯 Succès: {success}")
-            
-            if not success:
-                # Incrémenter le compteur d'itérations
-                state["iteration_count"] = state.get("iteration_count", 0) + 1
-                
-                print(f"🔄 Itération {state['iteration_count']}/{state.get('max_iterations', 3)}")
-                print(f"💬 Feedback: {state.get('user_feedback', 'Aucun')}")
-            else:
-                print(f"✅ Objectif atteint ! {validated_count} besoins validés")
-            
-            print(f"✅ [DEBUG] _check_success_node - FIN")
-            return state
-            
-        except Exception as e:
-            print(f"❌ [DEBUG] Erreur dans _check_success_node: {str(e)}")
-            state["messages"] = state.get("messages", []) + [HumanMessage(content=f"Erreur vérification: {str(e)}")]
-            return state
     
     def _finalize_results_node(self, state: WorkflowState) -> WorkflowState:
         """
@@ -968,6 +957,10 @@ class NeedAnalysisWorkflow:
             # Sauvegarde des résultats
             self._save_results(state)
             
+            # Initialiser le compteur d'itération pour les use cases
+            state["use_case_iteration_count"] = 0
+            print(f"🔄 [DEBUG] use_case_iteration_count initialisé à 0")
+            
             print(f"✅ [DEBUG] _finalize_results_node - FIN")
             return state
             
@@ -976,23 +969,41 @@ class NeedAnalysisWorkflow:
             state["messages"] = state.get("messages", []) + [HumanMessage(content=f"Erreur finalisation: {str(e)}")]
             return state
     
-    def _should_continue(self, state: WorkflowState) -> str:
+    def _should_continue_needs(self, state: WorkflowState) -> str:
         """
-        Détermine si le workflow doit continuer.
+        Détermine la direction du workflow basée sur l'action de l'utilisateur.
         
         Args:
             state: État actuel du workflow
             
         Returns:
-            Direction à prendre
+            Direction à prendre : "continue_needs" ou "continue_to_use_cases"
         """
-        if state.get("success", False):
-            return "success"
+        user_action = state.get("user_action", "")
         
-        if state.get("iteration_count", 0) >= state.get("max_iterations", 3):
-            return "max_iterations"
+        if user_action == "continue_to_use_cases":
+            return "continue_to_use_cases"
+        else:
+            # Par défaut, continuer avec les besoins
+            return "continue_needs"
+    
+    def _should_continue_use_cases(self, state: WorkflowState) -> str:
+        """
+        Détermine la direction du workflow des use cases basée sur l'action de l'utilisateur.
         
-        return "continue"
+        Args:
+            state: État actuel du workflow
+            
+        Returns:
+            Direction à prendre : "continue_use_cases" ou "finalize_use_cases"
+        """
+        use_case_user_action = state.get("use_case_user_action", "")
+        
+        if use_case_user_action == "finalize_use_cases":
+            return "finalize_use_cases"
+        else:
+            # Par défaut, continuer avec les use cases (régénération)
+            return "continue_use_cases"
     
     def _save_results(self, state: WorkflowState) -> None:
         """
@@ -1006,8 +1017,6 @@ class NeedAnalysisWorkflow:
             # Sauvegarde des besoins finaux
             results = {
                 "final_needs": state.get("final_needs", []),
-                "success": state.get("success", False),
-                "iteration_count": state.get("iteration_count", 0),
                 "timestamp": datetime.now().isoformat()
             }
             
@@ -1095,26 +1104,20 @@ class NeedAnalysisWorkflow:
                 validation_result={},
                 # État du workflow des besoins
                 final_needs=[],
-                success=False,
-                iteration_count=0,
-                max_iterations=3,
                 workflow_paused=False,
+                # Action demandée par l'utilisateur (pour les boutons)
+                user_action="",
                 # Résultats de l'analyse des use cases
-                proposed_quick_wins=[],
-                proposed_structuration_ia=[],
+                proposed_use_cases=[],
+                # Contexte additionnel pour la génération des use cases
+                use_case_additional_context="",
                 # Validation humaine des use cases
-                validated_quick_wins=[],
-                validated_structuration_ia=[],
-                rejected_quick_wins=[],
-                rejected_structuration_ia=[],
+                validated_use_cases=[],
+                rejected_use_cases=[],
                 use_case_user_feedback="",
                 use_case_validation_result={},
                 # État du workflow des use cases
-                final_quick_wins=[],
-                final_structuration_ia=[],
-                use_case_success=False,
-                use_case_iteration=0,
-                max_use_case_iterations=3,
+                final_use_cases=[],
                 use_case_workflow_paused=False
             )
             
@@ -1431,59 +1434,48 @@ class NeedAnalysisWorkflow:
         print(f"📊 Besoins validés en entrée: {len(state.get('final_needs', []))}")
         
         try:
-            # Initialiser les compteurs si première itération
-            if "use_case_iteration" not in state:
-                state["use_case_iteration"] = 0
-                state["max_use_case_iterations"] = 3
-                state["validated_quick_wins"] = []
-                state["validated_structuration_ia"] = []
-                state["rejected_quick_wins"] = []
-                state["rejected_structuration_ia"] = []
-            
-            # Incrémenter l'itération au début de l'analyse
-            state["use_case_iteration"] = state.get("use_case_iteration", 0) + 1
-            
-            print(f"🔄 Itération use case: {state.get('use_case_iteration', 0)}/{state.get('max_use_case_iterations', 3)}")
+            # Initialiser les listes si première fois
+            if "validated_use_cases" not in state:
+                state["validated_use_cases"] = []
+                state["rejected_use_cases"] = []
             
             # Récupérer les besoins validés
             validated_needs = state.get("final_needs", [])
             
             if not validated_needs:
                 print(f"⚠️ [DEBUG] Aucun besoin validé trouvé")
-                state["proposed_quick_wins"] = []
-                state["proposed_structuration_ia"] = []
+                state["proposed_use_cases"] = []
                 return state
             
-            # Calculer les cas d'usage déjà validés
-            validated_qw_count = len(state.get("validated_quick_wins", []))
-            validated_sia_count = len(state.get("validated_structuration_ia", []))
-            
-            print(f"📊 [DEBUG] Quick Wins validés: {validated_qw_count}/5")
-            print(f"📊 [DEBUG] Structuration IA validés: {validated_sia_count}/5")
-            
             # Préparer les données pour la génération
-            iteration = state.get("use_case_iteration", 1)
-            previous_use_cases = None
-            rejected_quick_wins = state.get("rejected_quick_wins", [])
-            rejected_structuration_ia = state.get("rejected_structuration_ia", [])
+            previous_use_cases = state.get("proposed_use_cases", [])
+            rejected_use_cases = state.get("rejected_use_cases", [])
             user_feedback = state.get("use_case_user_feedback", "")
+            additional_context = state.get("use_case_additional_context", "")
             
-            if iteration > 1:
-                # Régénération avec feedback
-                previous_use_cases = {
-                    "quick_wins": state.get("proposed_quick_wins", []),
-                    "structuration_ia": state.get("proposed_structuration_ia", [])
-                }
-                
+            if previous_use_cases:
+                print(f"💬 [DEBUG] Régénération avec feedback")
                 if user_feedback:
                     print(f"💬 [DEBUG] Commentaires utilisateur : {user_feedback[:100]}...")
-                if rejected_quick_wins:
-                    print(f"🚫 [DEBUG] Quick Wins rejetés à éviter : {len(rejected_quick_wins)}")
-                if rejected_structuration_ia:
-                    print(f"🚫 [DEBUG] Structuration IA rejetés à éviter : {len(rejected_structuration_ia)}")
+                if rejected_use_cases:
+                    print(f"🚫 [DEBUG] Cas d'usage rejetés à éviter : {len(rejected_use_cases)}")
+            
+            # MODE DEV: Charger les données mockées depuis le fichier JSON
+            if project_config.is_agent_dev_mode("use_case_analysis"):
+                print(f"🔧 [DEBUG] Mode dev USE_CASE_ANALYSIS_DEV_MODE activé - chargement des données mockées")
+                try:
+                    mock_data = project_config.load_mock_data()
+                    use_case_analysis_data = mock_data.get("use_case_analysis", {})
+                    proposed_use_cases = use_case_analysis_data.get("use_cases", [])
+                    state["proposed_use_cases"] = proposed_use_cases
+                    print(f"✅ [DEBUG] Cas d'usage mockés chargés: {len(proposed_use_cases)}")
+                    print(f"✅ [DEBUG] _analyze_use_cases_node - FIN")
+                    return state
+                except Exception as e:
+                    print(f"⚠️ [DEBUG] Erreur lors du chargement des données mockées: {str(e)}")
+                    # Continuer en mode normal si le chargement échoue
             
             # Récupérer les données sources pour enrichir le contexte
-            # SIMPLIFICATION: Utiliser directement les résultats au lieu des copies
             workshop_results = state.get("workshop_results", {})
             transcript_data = state.get("transcript_data", [])
             web_search_results = state.get("web_search_results", {})
@@ -1492,7 +1484,6 @@ class NeedAnalysisWorkflow:
                   f"{len(transcript_data)} transcripts, web_search présent={bool(web_search_results)}")
             
             # 💰 OPTIMISATION: Filtrer les quotes des validated_needs pour économiser les tokens
-            # Les quotes sont déjà dans workshop/transcript, pas besoin de les dupliquer au LLM
             validated_needs_light = [
                 {"id": need.get("id"), "theme": need.get("theme"), "description": need.get("description", "")}
                 for need in validated_needs
@@ -1506,14 +1497,10 @@ class NeedAnalysisWorkflow:
                 workshop_data=workshop_results,
                 transcript_data=transcript_data,
                 web_search_data=web_search_results,
-                iteration=iteration,
-                previous_use_cases=previous_use_cases,
-                rejected_quick_wins=rejected_quick_wins if iteration > 1 else None,
-                rejected_structuration_ia=rejected_structuration_ia if iteration > 1 else None,
+                previous_use_cases=previous_use_cases if previous_use_cases else None,
+                rejected_use_cases=rejected_use_cases if rejected_use_cases else None,
                 user_feedback=user_feedback,
-                validated_quick_wins_count=validated_qw_count,
-                validated_structuration_ia_count=validated_sia_count,
-                additional_context=state.get("additional_context", "")
+                additional_context=additional_context
             )
             
             if "error" in result:
@@ -1522,12 +1509,22 @@ class NeedAnalysisWorkflow:
                 return state
             
             # Mettre à jour l'état avec les résultats
-            state["proposed_quick_wins"] = result.get("quick_wins", [])
-            state["proposed_structuration_ia"] = result.get("structuration_ia", [])
+            proposed_use_cases = result.get("use_cases", [])
+            
+            # Filtrer les use cases déjà validés pour ne pas les reproposer
+            existing_validated = state.get("validated_use_cases", [])
+            if existing_validated:
+                validated_ids = {uc.get("id", "") for uc in existing_validated}
+                original_count = len(proposed_use_cases)
+                proposed_use_cases = [uc for uc in proposed_use_cases if uc.get("id", "") not in validated_ids]
+                filtered_count = original_count - len(proposed_use_cases)
+                if filtered_count > 0:
+                    print(f"🔍 [FILTER] {filtered_count} cas d'usage déjà validés filtrés ({len(proposed_use_cases)} restants)")
+            
+            state["proposed_use_cases"] = proposed_use_cases
             
             print(f"✅ [DEBUG] _analyze_use_cases_node - FIN")
-            print(f"📊 Quick Wins proposés: {len(state['proposed_quick_wins'])}")
-            print(f"📊 Structuration IA proposés: {len(state['proposed_structuration_ia'])}")
+            print(f"📊 Cas d'usage proposés: {len(state['proposed_use_cases'])}")
             
             # Affichage des coûts après l'analyse des cas d'usage
             self._print_tracker_stats(agent_name="use_case_analysis")
@@ -1560,10 +1557,8 @@ class NeedAnalysisWorkflow:
             État mis à jour avec les use cases validés/rejetés
         """
         print(f"\n🛑 [INTERRUPT] validate_use_cases_node - DÉBUT")
-        print(f"📊 Quick Wins proposés: {len(state.get('proposed_quick_wins', []))}")
-        print(f"📊 Structuration IA proposés: {len(state.get('proposed_structuration_ia', []))}")
-        print(f"📊 Quick Wins validés existants: {len(state.get('validated_quick_wins', []))}")
-        print(f"📊 Structuration IA validés existants: {len(state.get('validated_structuration_ia', []))}")
+        print(f"📊 Cas d'usage proposés: {len(state.get('proposed_use_cases', []))}")
+        print(f"📊 Cas d'usage validés existants: {len(state.get('validated_use_cases', []))}")
         
         try:
             # Vérifier si on a reçu le feedback (injecté par l'API)
@@ -1572,40 +1567,34 @@ class NeedAnalysisWorkflow:
                 validation_data = state["use_case_validation_result"]
                 
                 # Traiter les résultats de validation
-                existing_qw = state.get("validated_quick_wins", [])
-                newly_validated_qw = validation_data.get("validated_quick_wins", [])
-                
-                existing_sia = state.get("validated_structuration_ia", [])
-                newly_validated_sia = validation_data.get("validated_structuration_ia", [])
+                existing_validated = state.get("validated_use_cases", [])
+                newly_validated = validation_data.get("validated_use_cases", [])
                 
                 # Éviter les doublons
-                existing_qw_ids = [uc.get("titre", "") for uc in existing_qw]
-                unique_qw = [uc for uc in newly_validated_qw if uc.get("titre", "") not in existing_qw_ids]
+                existing_ids = [uc.get("id", "") for uc in existing_validated]
+                unique_newly_validated = [uc for uc in newly_validated if uc.get("id", "") not in existing_ids]
                 
-                existing_sia_ids = [uc.get("titre", "") for uc in existing_sia]
-                unique_sia = [uc for uc in newly_validated_sia if uc.get("titre", "") not in existing_sia_ids]
-                
-                state["validated_quick_wins"] = existing_qw + unique_qw
-                state["validated_structuration_ia"] = existing_sia + unique_sia
+                state["validated_use_cases"] = existing_validated + unique_newly_validated
                 
                 # Même chose pour les rejetés
-                existing_rejected_qw = state.get("rejected_quick_wins", [])
-                newly_rejected_qw = validation_data.get("rejected_quick_wins", [])
-                state["rejected_quick_wins"] = existing_rejected_qw + newly_rejected_qw
+                existing_rejected = state.get("rejected_use_cases", [])
+                newly_rejected = validation_data.get("rejected_use_cases", [])
                 
-                existing_rejected_sia = state.get("rejected_structuration_ia", [])
-                newly_rejected_sia = validation_data.get("rejected_structuration_ia", [])
-                state["rejected_structuration_ia"] = existing_rejected_sia + newly_rejected_sia
+                existing_rejected_ids = [uc.get("id", "") for uc in existing_rejected]
+                unique_newly_rejected = [uc for uc in newly_rejected if uc.get("id", "") not in existing_rejected_ids]
                 
+                state["rejected_use_cases"] = existing_rejected + unique_newly_rejected
                 state["use_case_user_feedback"] = validation_data.get("user_feedback", "")
+                
+                # Incrémenter le compteur d'itération
+                state["use_case_iteration_count"] = state.get("use_case_iteration_count", 0) + 1
+                print(f"🔄 [DEBUG] use_case_iteration_count incrémenté à {state['use_case_iteration_count']}")
                 
                 # Nettoyer le flag
                 state["use_case_validation_result"] = {}
                 
-                print(f"📊 [RESUME] Quick Wins nouvellement validés: {len(unique_qw)}")
-                print(f"📊 [RESUME] Structuration IA nouvellement validés: {len(unique_sia)}")
-                print(f"📊 [RESUME] Total Quick Wins validés: {len(state['validated_quick_wins'])}")
-                print(f"📊 [RESUME] Total Structuration IA validés: {len(state['validated_structuration_ia'])}")
+                print(f"📊 [RESUME] Cas d'usage nouvellement validés: {len(unique_newly_validated)}")
+                print(f"📊 [RESUME] Total cas d'usage validés: {len(state['validated_use_cases'])}")
                 print(f"▶️ [RESUME] Workflow continue...")
                 
                 return state
@@ -1625,49 +1614,35 @@ class NeedAnalysisWorkflow:
             state["messages"] = state.get("messages", []) + [HumanMessage(content=f"Erreur validation use cases: {str(e)}")]
             return state
     
-    def _check_use_case_success_node(self, state: WorkflowState) -> WorkflowState:
+    def _pre_use_case_interrupt_node(self, state: WorkflowState) -> WorkflowState:
         """
-        Nœud de vérification du succès de la validation des use cases.
+        Nœud d'interrupt avant la génération des use cases.
+        Affiche un résumé des besoins validés et attend un contexte additionnel.
         
         Args:
             state: État actuel du workflow
             
         Returns:
-            État mis à jour
+            État mis à jour avec le contexte additionnel
         """
+        print(f"\n🛑 [INTERRUPT] pre_use_case_interrupt_node - DÉBUT")
+        print(f"📊 Besoins validés: {len(state.get('final_needs', []))}")
+        
         try:
-            print(f"\n🔄 [DEBUG] _check_use_case_success_node - DÉBUT")
-            
-            # Vérification du succès
-            validated_qw_count = len(state.get("validated_quick_wins", []))
-            validated_sia_count = len(state.get("validated_structuration_ia", []))
-            
-            success = self.use_case_analysis_agent.check_validation_success(
-                validated_qw_count,
-                validated_sia_count
-            )
-            
-            state["use_case_success"] = success
-            
-            print(f"📊 Quick Wins validés: {validated_qw_count}/5")
-            print(f"📊 Structuration IA validés: {validated_sia_count}/5")
-            print(f"🎯 Succès: {success}")
-            
-            if not success:
-                # L'incrémentation est maintenant faite au début de _analyze_use_cases_node
-                print(f"🔄 Itération {state['use_case_iteration']}/{state.get('max_use_case_iterations', 3)}")
-                print(f"💬 Feedback: {state.get('use_case_user_feedback', 'Aucun')}")
+            # Vérifier si on a reçu le contexte additionnel (injecté par l'API)
+            if "use_case_additional_context" in state:
+                context = state.get("use_case_additional_context", "")
+                print(f"✅ [RESUME] Contexte additionnel reçu: {len(context)} caractères")
+                return state
             else:
-                print(f"✅ Objectif atteint ! {validated_qw_count} Quick Wins et {validated_sia_count} Structuration IA validés")
-            
-            print(f"✅ [DEBUG] _check_use_case_success_node - FIN")
-            return state
+                # Première fois : le workflow va s'arrêter ici (interrupt_before)
+                print(f"⏸️ [INTERRUPT] Aucun contexte - le workflow va s'arrêter")
+                print(f"💡 [INTERRUPT] L'API détectera cet arrêt et Streamlit affichera l'interface")
+                return state
             
         except Exception as e:
-            print(f"❌ [DEBUG] Erreur dans _check_use_case_success_node: {str(e)}")
-            import traceback
-            traceback.print_exc()
-            state["messages"] = state.get("messages", []) + [HumanMessage(content=f"Erreur vérification use cases: {str(e)}")]
+            print(f"❌ [ERROR] Erreur dans pre_use_case_interrupt_node: {str(e)}")
+            state["messages"] = state.get("messages", []) + [HumanMessage(content=f"Erreur interrupt: {str(e)}")]
             return state
     
     def _finalize_use_cases_node(self, state: WorkflowState) -> WorkflowState:
@@ -1682,28 +1657,19 @@ class NeedAnalysisWorkflow:
         """
         try:
             print(f"\n🔍 [DEBUG] _finalize_use_cases_node - DÉBUT")
-            print(f"📊 [DEBUG] Quick Wins validés: {len(state.get('validated_quick_wins', []))}")
-            print(f"📊 [DEBUG] Structuration IA validés: {len(state.get('validated_structuration_ia', []))}")
+            print(f"📊 [DEBUG] Cas d'usage validés: {len(state.get('validated_use_cases', []))}")
             
             # Utiliser directement les cas d'usage validés depuis l'état
-            validated_qw = state.get("validated_quick_wins", [])
-            validated_sia = state.get("validated_structuration_ia", [])
+            validated_use_cases = state.get("validated_use_cases", [])
             
-            state["final_quick_wins"] = validated_qw
-            state["final_structuration_ia"] = validated_sia
+            state["final_use_cases"] = validated_use_cases
             
-            print(f"📊 [DEBUG] Final Quick Wins définis: {len(validated_qw)}")
-            print(f"📊 [DEBUG] Final Structuration IA définis: {len(validated_sia)}")
+            print(f"📊 [DEBUG] Final cas d'usage définis: {len(validated_use_cases)}")
             
             # Debug: Afficher les titres des cas d'usage
-            if validated_qw:
-                print(f"📋 [DEBUG] Titres des Quick Wins validés:")
-                for i, uc in enumerate(validated_qw, 1):
-                    print(f"   {i}. {uc.get('titre', 'N/A')}")
-            
-            if validated_sia:
-                print(f"📋 [DEBUG] Titres des Structuration IA validés:")
-                for i, uc in enumerate(validated_sia, 1):
+            if validated_use_cases:
+                print(f"📋 [DEBUG] Titres des cas d'usage validés:")
+                for i, uc in enumerate(validated_use_cases, 1):
                     print(f"   {i}. {uc.get('titre', 'N/A')}")
             
             # Sauvegarde des résultats
@@ -1730,24 +1696,6 @@ class NeedAnalysisWorkflow:
             state["messages"] = state.get("messages", []) + [HumanMessage(content=f"Erreur finalisation use cases: {str(e)}")]
             return state
     
-    def _should_continue_use_cases(self, state: WorkflowState) -> str:
-        """
-        Détermine si le workflow des use cases doit continuer.
-        
-        Args:
-            state: État actuel du workflow
-            
-        Returns:
-            Direction à prendre
-        """
-        if state.get("use_case_success", False):
-            return "success"
-        
-        if state.get("use_case_iteration", 0) >= state.get("max_use_case_iterations", 3):
-            return "max_iterations"
-        
-        return "continue"
-    
     def _save_use_case_results(self, state: WorkflowState) -> None:
         """
         Sauvegarde les résultats des cas d'usage dans le dossier outputs.
@@ -1759,10 +1707,7 @@ class NeedAnalysisWorkflow:
             from datetime import datetime
             # Sauvegarde des cas d'usage finaux
             results = {
-                "final_quick_wins": state.get("final_quick_wins", []),
-                "final_structuration_ia": state.get("final_structuration_ia", []),
-                "use_case_success": state.get("use_case_success", False),
-                "use_case_iteration": state.get("use_case_iteration", 0),
+                "final_use_cases": state.get("final_use_cases", []),
                 "timestamp": datetime.now().isoformat(),
                 # Inclure aussi les besoins pour référence
                 "source_needs": state.get("final_needs", [])
@@ -1781,6 +1726,7 @@ class NeedAnalysisWorkflow:
     def resume_workflow_with_feedback(self, validated_needs: List[Dict[str, Any]], 
                                        rejected_needs: List[Dict[str, Any]], 
                                        user_feedback: str,
+                                       user_action: str,
                                        thread_id: str) -> Dict[str, Any]:
         """
         Reprend le workflow après validation humaine avec le feedback.
@@ -1790,6 +1736,7 @@ class NeedAnalysisWorkflow:
             validated_needs: Besoins validés par l'utilisateur
             rejected_needs: Besoins rejetés par l'utilisateur
             user_feedback: Commentaires de l'utilisateur
+            user_action: Action demandée par l'utilisateur ("continue_needs" ou "continue_to_use_cases")
             thread_id: ID du thread pour récupérer l'état depuis le checkpointer
         
         Returns:
@@ -1799,6 +1746,7 @@ class NeedAnalysisWorkflow:
         print(f"✅ Validés: {len(validated_needs)}")
         print(f"❌ Rejetés: {len(rejected_needs)}")
         print(f"💬 Feedback: {user_feedback[:100] if user_feedback else 'Aucun'}")
+        print(f"🎯 Action: {user_action}")
         print(f"🔑 Thread ID: {thread_id}")
         
         try:
@@ -1820,11 +1768,12 @@ class NeedAnalysisWorkflow:
                 "user_feedback": user_feedback
             }
             
-            # Mettre à jour l'état avec le feedback de validation
+            # Mettre à jour l'état avec le feedback de validation et l'action utilisateur
             self.graph.update_state(
                 config,
                 {
-                    "validation_result": validation_result
+                    "validation_result": validation_result,
+                    "user_action": user_action
                 }
             )
             
@@ -1861,7 +1810,6 @@ class NeedAnalysisWorkflow:
                         "total_needs": len(state.get("final_needs", [])),
                         "themes": list(set([need.get("theme", "") for need in state.get("final_needs", []) if need.get("theme")])),
                     },
-                    "iteration_count": state.get("iteration_count", 0),
                     "workshop_results": state.get("workshop_results", {}),
                     "transcript_results": state.get("transcript_results", []),
                     "web_search_results": state.get("web_search_results", {}),
@@ -1880,11 +1828,26 @@ class NeedAnalysisWorkflow:
                         "total_needs": 0,
                         "themes": [],
                     },
-                    "iteration_count": state.get("iteration_count", 0),
                     "workshop_results": state.get("workshop_results", {}),
                     "transcript_results": state.get("transcript_results", []),
                     "web_search_results": state.get("web_search_results", {}),
                     "messages": ["Nouvelle validation requise"]
+                }
+            elif "pre_use_case_interrupt" in next_nodes:
+                # Transition vers interrupt avant génération des use cases
+                print(f"⏸️ [API] Workflow en pause - contexte additionnel requis")
+                return {
+                    "success": False,
+                    "workflow_paused": True,
+                    "final_needs": state.get("final_needs", []),
+                    "summary": {
+                        "total_needs": len(state.get("final_needs", [])),
+                        "themes": list(set([need.get("theme", "") for need in state.get("final_needs", []) if need.get("theme")])),
+                    },
+                    "workshop_results": state.get("workshop_results", {}),
+                    "transcript_results": state.get("transcript_results", []),
+                    "web_search_results": state.get("web_search_results", {}),
+                    "messages": ["Phase 1 terminée - contexte additionnel requis pour génération des use cases"]
                 }
             elif "validate_use_cases" in next_nodes:
                 # Transition vers validation des use cases
@@ -1894,17 +1857,15 @@ class NeedAnalysisWorkflow:
                     "workflow_paused": True,
                     "use_case_workflow_paused": True,
                     "final_needs": state.get("final_needs", []),
-                    "proposed_quick_wins": state.get("proposed_quick_wins", []),
-                    "proposed_structuration_ia": state.get("proposed_structuration_ia", []),
+                    "proposed_use_cases": state.get("proposed_use_cases", []),
                     "summary": {
                         "total_needs": len(state.get("final_needs", [])),
                         "themes": list(set([need.get("theme", "") for need in state.get("final_needs", []) if need.get("theme")])),
                     },
-                    "iteration_count": state.get("iteration_count", 0),
                     "workshop_results": state.get("workshop_results", {}),
                     "transcript_results": state.get("transcript_results", []),
                     "web_search_results": state.get("web_search_results", {}),
-                    "messages": ["Phase 1 terminée - validation des use cases requise"]
+                    "messages": ["Validation des use cases requise"]
                 }
             else:
                 # Autre cas
@@ -1913,7 +1874,6 @@ class NeedAnalysisWorkflow:
                     "success": False,
                     "error": f"État inattendu: {next_nodes}",
                     "final_needs": [],
-                    "iteration_count": state.get("iteration_count", 0),
                     "messages": [f"État inattendu: {next_nodes}"]
                 }
         
@@ -1925,34 +1885,22 @@ class NeedAnalysisWorkflow:
                 "success": False,
                 "error": str(e),
                 "final_needs": [],
-                "iteration_count": 0,
                 "messages": [f"Erreur reprise workflow: {str(e)}"]
             }
     
-    def resume_use_case_workflow_with_feedback(self, validated_quick_wins: List[Dict[str, Any]],
-                                                validated_structuration_ia: List[Dict[str, Any]],
-                                                rejected_quick_wins: List[Dict[str, Any]],
-                                                rejected_structuration_ia: List[Dict[str, Any]],
-                                                user_feedback: str,
-                                                thread_id: str) -> Dict[str, Any]:
+    def resume_pre_use_case_interrupt_with_context(self, use_case_additional_context: str, thread_id: str) -> Dict[str, Any]:
         """
-        Reprend le workflow après validation des use cases avec le feedback.
-        NOUVELLE VERSION pour architecture API avec LangGraph checkpointer.
+        Reprend le workflow après l'interrupt pre_use_case_interrupt avec le contexte additionnel.
         
         Args:
-            validated_quick_wins: Quick Wins validés
-            validated_structuration_ia: Structuration IA validés
-            rejected_quick_wins: Quick Wins rejetés
-            rejected_structuration_ia: Structuration IA rejetés
-            user_feedback: Commentaires de l'utilisateur
+            use_case_additional_context: Contexte additionnel pour la génération des use cases
             thread_id: ID du thread pour récupérer l'état depuis le checkpointer
         
         Returns:
-            Résultats finaux du workflow
+            Résultats du workflow
         """
-        print(f"\n🔄 [API] resume_use_case_workflow_with_feedback() appelé")
-        print(f"✅ Quick Wins validés: {len(validated_quick_wins)}")
-        print(f"✅ Structuration IA validés: {len(validated_structuration_ia)}")
+        print(f"\n🔄 [API] resume_pre_use_case_interrupt_with_context() appelé")
+        print(f"💡 Contexte: {len(use_case_additional_context)} caractères")
         print(f"🔑 Thread ID: {thread_id}")
         
         try:
@@ -1964,25 +1912,116 @@ class NeedAnalysisWorkflow:
             state = snapshot.values
             
             print(f"📊 [API] État récupéré depuis le checkpointer")
-            print(f"📊 [API] Quick Wins proposés: {len(state.get('proposed_quick_wins', []))}")
-            print(f"📊 [API] Structuration IA proposés: {len(state.get('proposed_structuration_ia', []))}")
-            print(f"📊 [API] Quick Wins déjà validés: {len(state.get('validated_quick_wins', []))}")
-            print(f"📊 [API] Structuration IA déjà validés: {len(state.get('validated_structuration_ia', []))}")
             
-            # Créer le résultat de validation
-            validation_result = {
-                "validated_quick_wins": validated_quick_wins,
-                "validated_structuration_ia": validated_structuration_ia,
-                "rejected_quick_wins": rejected_quick_wins,
-                "rejected_structuration_ia": rejected_structuration_ia,
-                "user_feedback": user_feedback
-            }
-            
-            # Mettre à jour l'état avec le feedback de validation
+            # Mettre à jour l'état avec le contexte additionnel
             self.graph.update_state(
                 config,
                 {
-                    "use_case_validation_result": validation_result
+                    "use_case_additional_context": use_case_additional_context
+                }
+            )
+            
+            print(f"✅ [API] État mis à jour avec le contexte additionnel")
+            
+            # Reprendre l'exécution du workflow
+            print(f"▶️ [API] Reprise du workflow...")
+            
+            final_state = None
+            for chunk in self.graph.stream(None, config):
+                print(f"📊 [API] Chunk reçu: {list(chunk.keys())}")
+                for node_name, node_state in chunk.items():
+                    print(f"  • Nœud '{node_name}' exécuté")
+                    final_state = node_state
+            
+            # Récupérer l'état final depuis le checkpointer
+            snapshot = self.graph.get_state(config)
+            state = snapshot.values
+            
+            print(f"📊 [API] Workflow terminé ou en pause")
+            print(f"📊 [API] Next nodes: {snapshot.next}")
+            
+            # Vérifier si le workflow est terminé ou en pause
+            next_nodes = list(snapshot.next) if snapshot.next else []
+            
+            if "validate_use_cases" in next_nodes:
+                # En attente de validation des use cases
+                print(f"⏸️ [API] Workflow en pause - validation des use cases requise")
+                return {
+                    "success": False,
+                    "workflow_paused": True,
+                    "use_case_workflow_paused": True,
+                    "final_needs": state.get("final_needs", []),
+                    "proposed_use_cases": state.get("proposed_use_cases", []),
+                    "messages": ["Validation des use cases requise"]
+                }
+            else:
+                # Autre cas
+                print(f"⚠️ [API] État inattendu: {next_nodes}")
+                return {
+                    "success": False,
+                    "error": f"État inattendu: {next_nodes}",
+                    "messages": [f"État inattendu: {next_nodes}"]
+                }
+        
+        except Exception as e:
+            print(f"❌ [API] Erreur dans resume_pre_use_case_interrupt_with_context(): {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return {
+                "success": False,
+                "error": str(e),
+                "messages": [f"Erreur reprise workflow: {str(e)}"]
+            }
+    
+    def resume_use_case_workflow_with_feedback(self, validated_use_cases: List[Dict[str, Any]],
+                                                rejected_use_cases: List[Dict[str, Any]],
+                                                user_feedback: str,
+                                                use_case_user_action: str,
+                                                thread_id: str) -> Dict[str, Any]:
+        """
+        Reprend le workflow après validation des use cases avec le feedback.
+        NOUVELLE VERSION pour architecture API avec LangGraph checkpointer.
+        
+        Args:
+            validated_use_cases: Cas d'usage validés
+            rejected_use_cases: Cas d'usage rejetés
+            user_feedback: Commentaires de l'utilisateur
+            use_case_user_action: Action demandée par l'utilisateur ("continue_use_cases" ou "finalize_use_cases")
+            thread_id: ID du thread pour récupérer l'état depuis le checkpointer
+        
+        Returns:
+            Résultats finaux du workflow
+        """
+        print(f"\n🔄 [API] resume_use_case_workflow_with_feedback() appelé")
+        print(f"✅ Cas d'usage validés: {len(validated_use_cases)}")
+        print(f"🎯 Action: {use_case_user_action}")
+        print(f"🔑 Thread ID: {thread_id}")
+        
+        try:
+            # Configuration pour récupérer l'état depuis le checkpointer
+            config = {"configurable": {"thread_id": thread_id}}
+            
+            # Récupérer l'état actuel depuis le checkpointer
+            snapshot = self.graph.get_state(config)
+            state = snapshot.values
+            
+            print(f"📊 [API] État récupéré depuis le checkpointer")
+            print(f"📊 [API] Cas d'usage proposés: {len(state.get('proposed_use_cases', []))}")
+            print(f"📊 [API] Cas d'usage déjà validés: {len(state.get('validated_use_cases', []))}")
+            
+            # Créer le résultat de validation
+            validation_result = {
+                "validated_use_cases": validated_use_cases,
+                "rejected_use_cases": rejected_use_cases,
+                "user_feedback": user_feedback
+            }
+            
+            # Mettre à jour l'état avec le feedback de validation et l'action utilisateur
+            self.graph.update_state(
+                config,
+                {
+                    "use_case_validation_result": validation_result,
+                    "use_case_user_action": use_case_user_action
                 }
             )
             
@@ -2026,16 +2065,12 @@ class NeedAnalysisWorkflow:
                 return {
                     "success": True,
                     "final_needs": state.get("final_needs", []),
-                    "final_quick_wins": state.get("final_quick_wins", []),
-                    "final_structuration_ia": state.get("final_structuration_ia", []),
+                    "final_use_cases": state.get("final_use_cases", []),
                     "summary": {
                         "total_needs": len(state.get("final_needs", [])),
-                        "total_quick_wins": len(state.get("final_quick_wins", [])),
-                        "total_structuration_ia": len(state.get("final_structuration_ia", [])),
+                        "total_use_cases": len(state.get("final_use_cases", [])),
                         "themes": list(set([need.get("theme", "") for need in state.get("final_needs", []) if need.get("theme")])),
                     },
-                    "iteration_count": state.get("iteration_count", 0),
-                    "use_case_iteration": state.get("use_case_iteration", 0),
                     "workshop_results": state.get("workshop_results", {}),
                     "transcript_results": state.get("transcript_results", []),
                     "web_search_results": state.get("web_search_results", {}),
@@ -2048,16 +2083,12 @@ class NeedAnalysisWorkflow:
                     "success": False,
                     "use_case_workflow_paused": True,
                     "final_needs": state.get("final_needs", []),
-                    "proposed_quick_wins": state.get("proposed_quick_wins", []),
-                    "proposed_structuration_ia": state.get("proposed_structuration_ia", []),
-                    "validated_quick_wins": state.get("validated_quick_wins", []),
-                    "validated_structuration_ia": state.get("validated_structuration_ia", []),
+                    "proposed_use_cases": state.get("proposed_use_cases", []),
+                    "validated_use_cases": state.get("validated_use_cases", []),
                     "summary": {
                         "total_needs": len(state.get("final_needs", [])),
                         "themes": list(set([need.get("theme", "") for need in state.get("final_needs", []) if need.get("theme")])),
                     },
-                    "iteration_count": state.get("iteration_count", 0),
-                    "use_case_iteration": state.get("use_case_iteration", 0),
                     "workshop_results": state.get("workshop_results", {}),
                     "transcript_results": state.get("transcript_results", []),
                     "web_search_results": state.get("web_search_results", {}),
@@ -2070,10 +2101,7 @@ class NeedAnalysisWorkflow:
                     "success": False,
                     "error": f"État inattendu: {next_nodes}",
                     "final_needs": [],
-                    "final_quick_wins": [],
-                    "final_structuration_ia": [],
-                    "iteration_count": state.get("iteration_count", 0),
-                    "use_case_iteration": state.get("use_case_iteration", 0),
+                    "final_use_cases": [],
                     "messages": [f"État inattendu: {next_nodes}"]
                 }
         
@@ -2085,10 +2113,7 @@ class NeedAnalysisWorkflow:
                 "success": False,
                 "error": str(e),
                 "final_needs": [],
-                "final_quick_wins": [],
-                "final_structuration_ia": [],
-                "iteration_count": 0,
-                "use_case_iteration": 0,
+                "final_use_cases": [],
                 "messages": [f"Erreur reprise workflow use cases: {str(e)}"]
             }
     

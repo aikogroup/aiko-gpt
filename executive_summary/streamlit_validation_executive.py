@@ -35,15 +35,14 @@ class StreamlitExecutiveValidation:
         if key_suffix is None:
             key_suffix = str(len(identified_challenges))
         
+        # NE PLUS nettoyer les clés de session_state automatiquement
+        # Cela empêchait les checkboxes de conserver leur état
+        # Le nettoyage se fait uniquement après validation dans _process_challenges_validation
+        
         st.subheader("Validation des Enjeux Stratégiques")
         
         if validated_count > 0:
-            st.success(f"Vous avez déjà validé {validated_count} enjeux")
-            remaining = max(0, 5 - validated_count)
-            if remaining > 0:
-                st.info(f"Il vous faut valider {remaining} enjeux supplémentaires pour terminer")
-            else:
-                st.success("Vous avez atteint le minimum requis (5 enjeux)")
+            st.info(f"Vous avez déjà validé {validated_count} enjeu(x)")
         
         st.markdown("---")
         
@@ -68,9 +67,9 @@ class StreamlitExecutiveValidation:
                 if desc_key not in st.session_state:
                     st.session_state[desc_key] = original_description
                 
-                # Champ éditable pour le titre
+                # Champ éditable pour le titre (sans afficher l'ID)
                 modified_titre = st.text_input(
-                    f"**Titre** ({ch_id})",
+                    f"**Enjeu {i+1}**",
                     key=titre_key,
                     label_visibility="visible"
                 )
@@ -113,9 +112,9 @@ class StreamlitExecutiveValidation:
                     if desc_key not in st.session_state:
                         st.session_state[desc_key] = original_description
                     
-                    # Champ éditable pour le titre
+                    # Champ éditable pour le titre (sans afficher l'ID)
                     modified_titre = st.text_input(
-                        f"**Titre** ({ch_id})",
+                        f"**Enjeu {i+2}**",
                         key=titre_key,
                         label_visibility="visible"
                     )
@@ -170,29 +169,56 @@ class StreamlitExecutiveValidation:
             height=100
         )
         
-        # Bouton de validation
+        # Boutons de validation
         st.markdown("---")
         
-        if st.button("✅ Valider la sélection", type="primary", disabled=selected_count == 0, width="stretch"):
-            if selected_count == 0:
-                st.warning("Veuillez sélectionner au moins un enjeu")
-            else:
-                # Lire l'état des checkboxes directement
-                selected_challenges = []
-                for i in range(1, len(identified_challenges) + 1):
-                    checkbox_key = f"validate_challenge_{i}_{key_suffix}"
-                    if st.session_state.get(checkbox_key, False):
-                        selected_challenges.append(i)
-                
-                # Traiter la validation et retourner le résultat
-                result = self._process_challenges_validation(
-                    identified_challenges, 
-                    selected_challenges, 
-                    comments, 
-                    validated_count, 
-                    key_suffix
-                )
-                return result  # Retourner le résultat pour que app_api.py puisse l'envoyer à l'API
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if st.button("✅ Valider et proposer de nouveaux enjeux", type="primary", disabled=selected_count == 0, use_container_width=True):
+                if selected_count == 0:
+                    st.warning("Veuillez sélectionner au moins un enjeu")
+                else:
+                    # Lire l'état des checkboxes directement
+                    selected_challenges = []
+                    for i in range(1, len(identified_challenges) + 1):
+                        checkbox_key = f"validate_challenge_{i}_{key_suffix}"
+                        if st.session_state.get(checkbox_key, False):
+                            selected_challenges.append(i)
+                    
+                    # Traiter la validation et retourner le résultat avec l'action
+                    result = self._process_challenges_validation(
+                        identified_challenges, 
+                        selected_challenges, 
+                        comments, 
+                        validated_count, 
+                        key_suffix
+                    )
+                    result["challenges_user_action"] = "continue_challenges"
+                    return result
+        
+        with col2:
+            if st.button("✅ Valider et passer aux recommandations", type="secondary", disabled=selected_count == 0, use_container_width=True):
+                if selected_count == 0:
+                    st.warning("Veuillez sélectionner au moins un enjeu")
+                else:
+                    # Lire l'état des checkboxes directement
+                    selected_challenges = []
+                    for i in range(1, len(identified_challenges) + 1):
+                        checkbox_key = f"validate_challenge_{i}_{key_suffix}"
+                        if st.session_state.get(checkbox_key, False):
+                            selected_challenges.append(i)
+                    
+                    # Traiter la validation et retourner le résultat avec l'action
+                    result = self._process_challenges_validation(
+                        identified_challenges, 
+                        selected_challenges, 
+                        comments, 
+                        validated_count, 
+                        key_suffix
+                    )
+                    result["challenges_user_action"] = "continue_to_maturity"
+                    return result
         
         # Retour par défaut (en attente de validation)
         return None
@@ -251,13 +277,11 @@ class StreamlitExecutiveValidation:
         
         # Calculer le total
         total_validated = validated_count + len(validated_new)
-        success = total_validated >= 5
         
         result = {
             "validated_challenges": validated_new,  # Seulement les nouveaux enjeux validés
             "rejected_challenges": rejected_new,
             "challenges_feedback": comments,
-            "success": success,  # Succès seulement si on atteint 5 enjeux au total
             "total_validated": total_validated,
             "newly_validated": validated_new,
             "newly_rejected": rejected_new
@@ -296,15 +320,14 @@ class StreamlitExecutiveValidation:
         if key_suffix is None:
             key_suffix = str(len(recommendations))
         
+        # NE PLUS nettoyer les clés de session_state automatiquement
+        # Cela empêchait les checkboxes de conserver leur état
+        # Le nettoyage se fait uniquement après validation dans _process_recommendations_validation
+        
         st.subheader("Validation des Recommandations")
         
         if validated_count > 0:
-            st.success(f"Vous avez déjà validé {validated_count} recommandations")
-            remaining = max(0, 4 - validated_count)
-            if remaining > 0:
-                st.info(f"Il vous faut valider {remaining} recommandation(s) supplémentaire(s) pour terminer")
-            else:
-                st.success("Vous avez atteint le minimum requis (4 recommandations)")
+            st.info(f"Vous avez déjà validé {validated_count} recommandation(s)")
         
         st.markdown("---")
         
@@ -391,29 +414,56 @@ class StreamlitExecutiveValidation:
             height=100
         )
         
-        # Bouton de validation
+        # Boutons de validation
         st.markdown("---")
         
-        if st.button("✅ Valider la sélection", type="primary", disabled=selected_count == 0, width="stretch"):
-            if selected_count == 0:
-                st.warning("Veuillez sélectionner au moins une recommandation")
-            else:
-                # Lire l'état des checkboxes directement
-                selected_recommendations = []
-                for i in range(1, len(recommendations) + 1):
-                    checkbox_key = f"validate_recommendation_{i}_{key_suffix}"
-                    if st.session_state.get(checkbox_key, False):
-                        selected_recommendations.append(i)
-                
-                # Traiter la validation et retourner le résultat
-                result = self._process_recommendations_validation(
-                    recommendations, 
-                    selected_recommendations, 
-                    comments, 
-                    validated_count, 
-                    key_suffix
-                )
-                return result  # Retourner le résultat pour que app_api.py puisse l'envoyer à l'API
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if st.button("✅ Valider et proposer de nouvelles recommandations", type="primary", disabled=selected_count == 0, use_container_width=True):
+                if selected_count == 0:
+                    st.warning("Veuillez sélectionner au moins une recommandation")
+                else:
+                    # Lire l'état des checkboxes directement
+                    selected_recommendations = []
+                    for i in range(1, len(recommendations) + 1):
+                        checkbox_key = f"validate_recommendation_{i}_{key_suffix}"
+                        if st.session_state.get(checkbox_key, False):
+                            selected_recommendations.append(i)
+                    
+                    # Traiter la validation et retourner le résultat avec l'action
+                    result = self._process_recommendations_validation(
+                        recommendations, 
+                        selected_recommendations, 
+                        comments, 
+                        validated_count, 
+                        key_suffix
+                    )
+                    result["recommendations_user_action"] = "continue_recommendations"
+                    return result
+        
+        with col2:
+            if st.button("✅ Valider et finaliser le rapport", type="secondary", disabled=selected_count == 0, use_container_width=True):
+                if selected_count == 0:
+                    st.warning("Veuillez sélectionner au moins une recommandation")
+                else:
+                    # Lire l'état des checkboxes directement
+                    selected_recommendations = []
+                    for i in range(1, len(recommendations) + 1):
+                        checkbox_key = f"validate_recommendation_{i}_{key_suffix}"
+                        if st.session_state.get(checkbox_key, False):
+                            selected_recommendations.append(i)
+                    
+                    # Traiter la validation et retourner le résultat avec l'action
+                    result = self._process_recommendations_validation(
+                        recommendations, 
+                        selected_recommendations, 
+                        comments, 
+                        validated_count, 
+                        key_suffix
+                    )
+                    result["recommendations_user_action"] = "continue_to_finalize"
+                    return result
         
         # Retour par défaut (en attente de validation)
         return None
@@ -463,13 +513,11 @@ class StreamlitExecutiveValidation:
         
         # Calculer le total
         total_validated = validated_count + len(validated_new)
-        success = total_validated >= 4
         
         result = {
             "validated_recommendations": validated_new,  # Seulement les nouvelles recommandations validées
             "rejected_recommendations": rejected_new,
             "recommendations_feedback": comments,
-            "success": success,  # Succès seulement si on atteint 4 recommandations au total
             "total_validated": total_validated,
             "newly_validated": validated_new,
             "newly_rejected": rejected_new

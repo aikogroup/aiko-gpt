@@ -209,21 +209,27 @@ class WorkshopAgent:
                             
                             # Tenter de fermer les chaînes et objets JSON ouverts
                             try:
-                                # Compter les guillemets pour fermer les chaînes non fermées
-                                quote_count = json_str.count('"')
-                                if quote_count % 2 != 0:
-                                    # Trouver la dernière position où on peut fermer la chaîne
-                                    last_quote_pos = json_str.rfind('"')
-                                    if last_quote_pos != -1:
-                                        # Vérifier si c'est une échappement
-                                        escape_count = 0
-                                        pos = last_quote_pos - 1
-                                        while pos >= 0 and json_str[pos] == '\\':
-                                            escape_count += 1
-                                            pos -= 1
-                                        # Si nombre pair d'échappements, c'est une vraie quote de fermeture
-                                        if escape_count % 2 == 0:
-                                            json_str += '"'
+                                # Méthode améliorée : trouver la dernière chaîne non fermée
+                                # Chercher toutes les positions de guillemets non échappés
+                                quote_positions = []
+                                i = 0
+                                while i < len(json_str):
+                                    if json_str[i] == '"' and (i == 0 or json_str[i-1] != '\\'):
+                                        quote_positions.append(i)
+                                    i += 1
+                                
+                                # Si nombre impair de guillemets, fermer la dernière chaîne
+                                if len(quote_positions) % 2 != 0:
+                                    # Trouver où se termine la dernière chaîne (avant le prochain caractère spécial)
+                                    last_quote = quote_positions[-1]
+                                    # Chercher la fin de la chaîne (avant : ou , ou } ou ])
+                                    end_pos = len(json_str)
+                                    for char in [':', ',', '}', ']', '\n']:
+                                        pos = json_str.find(char, last_quote + 1)
+                                        if pos != -1 and pos < end_pos:
+                                            end_pos = pos
+                                    # Fermer la chaîne avant le caractère spécial
+                                    json_str = json_str[:end_pos] + '"' + json_str[end_pos:]
                                 
                                 # Fermer les objets/tableaux non fermés
                                 open_braces = json_str.count('{') - json_str.count('}')
@@ -250,9 +256,31 @@ class WorkshopAgent:
                                     return workshop_result
                                 except Exception as repair_error:
                                     logger.error(f"❌ Impossible de créer l'objet depuis le JSON réparé: {repair_error}")
+                                    # Essayer d'extraire au moins le thème
+                                    theme_match = re.search(r'"theme"\s*:\s*"([^"]*)', json_str)
+                                    if theme_match:
+                                        extracted_theme = theme_match.group(1)
+                                        logger.warning(f"⚠️ Extraction partielle du thème: {extracted_theme}")
+                                        workshop_result = WorkshopData(
+                                            workshop_id=workshop_id,
+                                            theme=extracted_theme,
+                                            use_cases=[]
+                                        )
+                                        return workshop_result
                             except json.JSONDecodeError as json_error:
                                 logger.error(f"❌ JSON non réparable: {json_error}")
                                 logger.error(f"JSON partiel (premiers 2000 caractères): {json_str[:2000]}")
+                                # Essayer d'extraire au moins le thème
+                                theme_match = re.search(r'"theme"\s*:\s*"([^"]*)', json_str)
+                                if theme_match:
+                                    extracted_theme = theme_match.group(1)
+                                    logger.warning(f"⚠️ Extraction partielle du thème: {extracted_theme}")
+                                    workshop_result = WorkshopData(
+                                        workshop_id=workshop_id,
+                                        theme=extracted_theme,
+                                        use_cases=[]
+                                    )
+                                    return workshop_result
                     else:
                         logger.warning("Impossible d'accéder à la réponse brute pour diagnostic")
                 except Exception as diagnostic_error:

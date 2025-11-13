@@ -48,16 +48,18 @@ class SpeakerClassifier:
         # Cache en mémoire pour la session (évite les appels LLM répétés dans la même session)
         self._classification_cache: Dict[str, str] = {}
         
-        # Cache persistant entre les réunions
+        # Cache persistant entre les réunions - CHARGEMENT LAZY
         if cache_file is None:
             cache_file = "outputs/speaker_classification_cache.json"
         self.cache_file = Path(cache_file)
-        self._persistent_cache: Dict[str, str] = self._load_persistent_cache()
+        self._persistent_cache: Optional[Dict[str, str]] = None  # Chargé de manière lazy
+        self._persistent_cache_loaded = False  # Flag pour savoir si le cache a été chargé
         
-        # Cache pour les rôles exacts (speaker_name -> role)
+        # Cache pour les rôles exacts (speaker_name -> role) - CHARGEMENT LAZY
         self._role_cache: Dict[str, str] = {}
         self._role_cache_file = Path("outputs/speaker_roles_cache.json")
-        self._persistent_role_cache: Dict[str, str] = self._load_persistent_role_cache()
+        self._persistent_role_cache: Optional[Dict[str, str]] = None  # Chargé de manière lazy
+        self._persistent_role_cache_loaded = False  # Flag pour savoir si le cache a été chargé
     
     def classify_speakers(self, interventions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
@@ -91,13 +93,18 @@ class SpeakerClassifier:
         speaker_levels = {}
         new_classifications = {}  # Pour sauvegarder les nouvelles classifications
         
+        # Charger le cache persistant de manière lazy si nécessaire
+        if not self._persistent_cache_loaded:
+            self._persistent_cache = self._load_persistent_cache()
+            self._persistent_cache_loaded = True
+        
         for speaker in interviewee_speakers:
             # Vérifier d'abord le cache en mémoire (session courante)
             if speaker in self._classification_cache:
                 speaker_levels[speaker] = self._classification_cache[speaker]
                 logger.info(f"✓ {speaker}: {speaker_levels[speaker]} (depuis cache session)")
             # Sinon, vérifier le cache persistant (réunions précédentes)
-            elif speaker in self._persistent_cache:
+            elif self._persistent_cache and speaker in self._persistent_cache:
                 speaker_levels[speaker] = self._persistent_cache[speaker]
                 self._classification_cache[speaker] = speaker_levels[speaker]  # Mettre aussi dans le cache session
                 logger.info(f"✓ {speaker}: {speaker_levels[speaker]} (depuis cache persistant)")
@@ -240,7 +247,8 @@ Réponds UNIQUEMENT par "direction", "métier" ou "inconnu".
     
     def _load_persistent_cache(self) -> Dict[str, str]:
         """
-        Charge le cache persistant depuis le fichier JSON
+        Charge le cache persistant depuis le fichier JSON.
+        CHARGEMENT LAZY : appelé seulement quand nécessaire, pas dans __init__.
         
         Returns:
             Dictionnaire speaker_name -> level
@@ -250,10 +258,13 @@ Réponds UNIQUEMENT par "direction", "métier" ou "inconnu".
             return {}
         
         try:
+            # Lecture synchrone simple - maintenant appelée seulement quand nécessaire
+            # (pas dans __init__ donc pas de blocking call au démarrage)
             with open(self.cache_file, 'r', encoding='utf-8') as f:
                 cache = json.load(f)
-                logger.info(f"Cache persistant chargé: {len(cache)} speakers")
-                return cache
+            
+            logger.info(f"Cache persistant chargé: {len(cache)} speakers")
+            return cache
         except Exception as e:
             logger.error(f"Erreur lors du chargement du cache persistant: {e}")
             return {}
@@ -282,8 +293,12 @@ Réponds UNIQUEMENT par "direction", "métier" ou "inconnu".
             with open(self.cache_file, 'w', encoding='utf-8') as f:
                 json.dump(current_cache, f, ensure_ascii=False, indent=2)
             
-            # Mettre à jour aussi le cache en mémoire
-            self._persistent_cache.update(new_classifications)
+            # Mettre à jour aussi le cache en mémoire (charger si nécessaire)
+            if not self._persistent_cache_loaded:
+                self._persistent_cache = current_cache
+                self._persistent_cache_loaded = True
+            else:
+                self._persistent_cache.update(new_classifications)
             
             logger.info(f"Cache persistant mis à jour: {len(new_classifications)} nouvelles classifications sauvegardées")
             
@@ -317,8 +332,13 @@ Réponds UNIQUEMENT par "direction", "métier" ou "inconnu".
             logger.info(f"✓ {speaker_name}: {role} (depuis cache session)")
             return role
         
+        # Charger le cache persistant des rôles de manière lazy si nécessaire
+        if not self._persistent_role_cache_loaded:
+            self._persistent_role_cache = self._load_persistent_role_cache()
+            self._persistent_role_cache_loaded = True
+        
         # Vérifier le cache persistant
-        if speaker_name in self._persistent_role_cache:
+        if self._persistent_role_cache and speaker_name in self._persistent_role_cache:
             role = self._persistent_role_cache[speaker_name]
             self._role_cache[speaker_name] = role  # Mettre aussi dans le cache session
             logger.info(f"✓ {speaker_name}: {role} (depuis cache persistant)")
@@ -380,7 +400,8 @@ INSTRUCTIONS IMPORTANTES :
     
     def _load_persistent_role_cache(self) -> Dict[str, str]:
         """
-        Charge le cache persistant des rôles depuis le fichier JSON
+        Charge le cache persistant des rôles depuis le fichier JSON.
+        CHARGEMENT LAZY : appelé seulement quand nécessaire, pas dans __init__.
         
         Returns:
             Dictionnaire speaker_name -> role
@@ -390,10 +411,13 @@ INSTRUCTIONS IMPORTANTES :
             return {}
         
         try:
+            # Lecture synchrone simple - maintenant appelée seulement quand nécessaire
+            # (pas dans __init__ donc pas de blocking call au démarrage)
             with open(self._role_cache_file, 'r', encoding='utf-8') as f:
                 cache = json.load(f)
-                logger.info(f"Cache persistant des rôles chargé: {len(cache)} speakers")
-                return cache
+            
+            logger.info(f"Cache persistant des rôles chargé: {len(cache)} speakers")
+            return cache
         except Exception as e:
             logger.error(f"Erreur lors du chargement du cache persistant des rôles: {e}")
             return {}
@@ -422,8 +446,12 @@ INSTRUCTIONS IMPORTANTES :
             with open(self._role_cache_file, 'w', encoding='utf-8') as f:
                 json.dump(current_cache, f, ensure_ascii=False, indent=2)
             
-            # Mettre à jour aussi le cache en mémoire
-            self._persistent_role_cache.update(new_roles)
+            # Mettre à jour aussi le cache en mémoire (charger si nécessaire)
+            if not self._persistent_role_cache_loaded:
+                self._persistent_role_cache = current_cache
+                self._persistent_role_cache_loaded = True
+            else:
+                self._persistent_role_cache.update(new_roles)
             
             logger.info(f"Cache persistant des rôles mis à jour: {len(new_roles)} nouveaux rôles sauvegardés")
             

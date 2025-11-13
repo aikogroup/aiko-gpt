@@ -76,6 +76,10 @@ DEFAULT_INTERVIEWERS = ["Christella Umuhoza", "Adrien Fabry"]
 
 # ==================== AUTHENTIFICATION ====================
 
+def is_dev_mode() -> bool:
+    """Vérifie si le mode DEV est activé"""
+    return os.getenv("DEV_MODE", "0") == "1"
+
 def get_auth_username() -> str:
     """Récupère le nom d'utilisateur depuis les variables d'environnement"""
     return os.getenv("AUTH_USERNAME", "").strip()
@@ -97,6 +101,11 @@ def check_authentication() -> bool:
     Returns:
         True si l'utilisateur est authentifié, False sinon
     """
+    # En mode DEV, auto-login (bypasser l'authentification et marquer comme authentifié)
+    if is_dev_mode():
+        st.session_state.authenticated = True
+        return True
+    
     # Si l'authentification n'est pas configurée, autoriser l'accès
     if not is_auth_enabled():
         return True
@@ -133,7 +142,7 @@ def display_login_page():
         
         # Logo si disponible
         import config
-        logo_path = config.get_logo_path()
+        logo_path = config.get_white_logo_path()
         if logo_path.exists():
             st.image(str(logo_path), width=300)
         
@@ -216,6 +225,64 @@ def save_interviewers(interviewers: List[str]) -> bool:
         st.error(f"❌ Erreur lors de la sauvegarde des intervieweurs : {str(e)}")
         return False
 
+def init_debug_data():
+    """Initialise les données simulées en mode DEV"""
+    if not is_dev_mode():
+        return
+    
+    # Marquer que le DEBUG a été initialisé
+    if 'debug_data_initialized' not in st.session_state:
+        st.session_state.debug_data_initialized = False
+    
+    # Ne pas réinitialiser si déjà fait
+    if st.session_state.debug_data_initialized:
+        return
+    
+    # Simuler des transcripts uploadés (utiliser des fichiers réels du dossier inputs/)
+    inputs_dir = Path(__file__).parent.parent / "inputs"
+    if inputs_dir.exists():
+        # Chercher des fichiers PDF dans inputs/
+        pdf_files = list(inputs_dir.glob("*.pdf"))
+        if pdf_files:
+            # Prendre les 2 premiers PDF
+            for pdf_file in pdf_files[:2]:
+                transcript_data = {
+                    "file_path": str(pdf_file.absolute()),
+                    "speakers": [
+                        {"name": "Jean Dupont", "role": "Directeur Commercial"},
+                        {"name": "Marie Martin", "role": "Responsable R&D"}
+                    ]
+                }
+                st.session_state.uploaded_transcripts.append(transcript_data)
+        
+        # Chercher des fichiers Excel dans inputs/
+        excel_files = list(inputs_dir.glob("*.xlsx"))
+        if excel_files:
+            # Prendre le premier Excel
+            for excel_file in excel_files[:1]:
+                st.session_state.uploaded_workshops.append(str(excel_file.absolute()))
+    
+    # Simuler la validation des informations de l'entreprise
+    st.session_state.validated_company_info = {
+        "nom": "Entreprise Test DEBUG",
+        "url": "https://example.com",
+        "description": "Entreprise simulée pour les tests en mode DEBUG"
+    }
+    st.session_state.company_name = "Entreprise Test DEBUG"
+    st.session_state.company_url = "https://example.com"
+    st.session_state.company_description = "Entreprise simulée pour les tests en mode DEBUG"
+    
+    # Simuler les résultats de web search pour éviter l'appel API
+    st.session_state.web_search_results = {
+        "company_name": "Entreprise Test DEBUG",
+        "company_url": "https://example.com",
+        "company_description": "Entreprise simulée pour les tests en mode DEBUG",
+        "summary": "Données simulées en mode DEBUG - pas d'appel API réel"
+    }
+    
+    # Marquer comme initialisé
+    st.session_state.debug_data_initialized = True
+
 def init_session_state():
     """Initialise l'état de session"""
     # Authentification
@@ -249,6 +316,10 @@ def init_session_state():
         st.session_state.executive_workflow_status = None
     if 'executive_workflow_state' not in st.session_state:
         st.session_state.executive_workflow_state = {}
+    if 'executive_final_results' not in st.session_state:
+        st.session_state.executive_final_results = None
+    if 'executive_final_results_cached' not in st.session_state:
+        st.session_state.executive_final_results_cached = False
     if 'rappel_mission' not in st.session_state:
         st.session_state.rappel_mission = ""
     if 'rappel_mission_company' not in st.session_state:
@@ -268,13 +339,16 @@ def init_session_state():
                 print(f"⚠️ Erreur lors de l'initialisation de WebSearchAgent: {e}")
     if 'web_search_counter' not in st.session_state:
         st.session_state.web_search_counter = 0
+    
+    # Initialiser les données DEBUG si le mode est activé
+    init_debug_data()
 
 def get_transcript_file_paths(transcripts: List[Any]) -> List[str]:
     """
     Extrait les file_paths depuis la liste de transcripts (nouvelle structure)
     
     Args:
-        transcripts: Liste de dictionnaires avec structure {nom, file_path, speakers}
+        transcripts: Liste de dictionnaires avec structure {file_path, speakers}
                      ou liste de strings (ancienne structure)
         
     Returns:
@@ -398,8 +472,13 @@ def poll_workflow_status():
         # Note: state["next"] peut être une liste, un tuple ou vide
         next_nodes = list(state["next"]) if state["next"] else []
         
+        # Debug: afficher les next_nodes détectés
+        print(f"🔍 [DEBUG] poll_workflow_status - next_nodes: {next_nodes}")
+        
         if "human_validation" in next_nodes:
             return "waiting_validation"
+        elif "pre_use_case_interrupt" in next_nodes:
+            return "waiting_pre_use_case_context"
         elif "validate_use_cases" in next_nodes:
             return "waiting_use_case_validation"
         elif len(next_nodes) == 0:
@@ -466,7 +545,7 @@ def poll_executive_workflow_status():
         return "error"
 
 def send_validation_feedback_api_call(validated_needs: List[Dict], rejected_needs: List[Dict], 
-                                      user_feedback: str, thread_id: str, result_queue: queue.Queue):
+                                      user_feedback: str, user_action: str, thread_id: str, result_queue: queue.Queue):
     """
     Envoie le feedback de validation à l'API dans un thread séparé.
     """
@@ -476,7 +555,8 @@ def send_validation_feedback_api_call(validated_needs: List[Dict], rejected_need
             json={
                 "validated_needs": validated_needs,
                 "rejected_needs": rejected_needs,
-                "user_feedback": user_feedback
+                "user_feedback": user_feedback,
+                "user_action": user_action
             },
             timeout=600  # 10 minutes pour la validation et la reprise du workflow
         )
@@ -486,9 +566,29 @@ def send_validation_feedback_api_call(validated_needs: List[Dict], rejected_need
     except Exception as e:
         result_queue.put((False, str(e)))
 
-def send_use_case_validation_feedback_api_call(validated_qw: List[Dict], validated_sia: List[Dict],
-                                                rejected_qw: List[Dict], rejected_sia: List[Dict], 
-                                                user_feedback: str, thread_id: str, result_queue: queue.Queue):
+def send_pre_use_case_context_api_call(additional_context: str, thread_id: str, result_queue: queue.Queue):
+    """
+    Envoie le contexte additionnel pour la génération des use cases à l'API dans un thread séparé.
+    """
+    try:
+        response = requests.post(
+            f"{API_URL}/threads/{thread_id}/pre-use-case-context",
+            json={
+                "use_case_additional_context": additional_context
+            },
+            timeout=600
+        )
+        response.raise_for_status()
+        result_queue.put((True, None))
+    
+    except Exception as e:
+        result_queue.put((False, str(e)))
+
+def send_use_case_validation_feedback_api_call(validated_use_cases: List[Dict],
+                                                rejected_use_cases: List[Dict], 
+                                                user_feedback: str, 
+                                                use_case_user_action: str,
+                                                thread_id: str, result_queue: queue.Queue):
     """
     Envoie le feedback de validation des use cases à l'API dans un thread séparé.
     """
@@ -496,29 +596,30 @@ def send_use_case_validation_feedback_api_call(validated_qw: List[Dict], validat
         response = requests.post(
             f"{API_URL}/threads/{thread_id}/use-case-validation",
             json={
-                "validated_quick_wins": validated_qw,
-                "validated_structuration_ia": validated_sia,
-                "rejected_quick_wins": rejected_qw,
-                "rejected_structuration_ia": rejected_sia,
-                "user_feedback": user_feedback
+                "validated_use_cases": validated_use_cases,
+                "rejected_use_cases": rejected_use_cases,
+                "user_feedback": user_feedback,
+                "use_case_user_action": use_case_user_action
             },
             timeout=600  # 10 minutes pour la validation finale
         )
         response.raise_for_status()
-        
-        result = response.json()
-        result_queue.put((True, result.get("success"), None))
+        result_queue.put((True, None))
     
     except Exception as e:
-        result_queue.put((False, None, str(e)))
+        result_queue.put((False, str(e)))
 
 # ==================== INTERFACE STREAMLIT ====================
 
 def display_home_page():
     """Affiche la page d'accueil avec le logo et le message de bienvenue"""
+    # Afficher le mode DEV en haut si activé
+    if is_dev_mode():
+        st.warning("🔧 **MODE DEV ACTIVÉ** - Connexion automatique et upload de documents simulé")
+    
     # Charger le logo depuis config.py (détection automatique)
     import config
-    logo_path = config.get_logo_path()
+    logo_path = config.get_white_logo_path()
     
     # Centrer le contenu
     col1, col2, col3 = st.columns([1, 2, 1])
@@ -781,14 +882,29 @@ def display_diagnostic_section():
     
     st.info("💡 Cette section génère l'analyse des besoins et des cas d'usage. Les fichiers sont chargés depuis la section 'Upload de documents'.")
     
-    # Vérifier que les fichiers sont uploadés
-    if not st.session_state.uploaded_transcripts and not st.session_state.uploaded_workshops:
-        st.warning("⚠️ Veuillez d'abord uploader des fichiers dans la section 'Upload de documents'.")
-        return
+    # En mode DEV, skip la vérification des fichiers uploadés
+    if not is_dev_mode():
+        # Vérifier que les fichiers sont uploadés
+        if not st.session_state.uploaded_transcripts and not st.session_state.uploaded_workshops:
+            st.warning("⚠️ Veuillez d'abord uploader des fichiers dans la section 'Upload de documents'.")
+            return
     
-    if not st.session_state.company_name:
-        st.warning("⚠️ Veuillez d'abord saisir le nom de l'entreprise dans la section 'Upload de documents'.")
-        return
+    # Vérifier le nom d'entreprise (depuis company_name ou validated_company_info)
+    company_name = st.session_state.get("company_name") or (
+        st.session_state.get("validated_company_info", {}).get("nom", "")
+    )
+    # En mode DEV, utiliser un nom par défaut si pas de nom d'entreprise
+    if not company_name:
+        if is_dev_mode():
+            company_name = "Entreprise Test"
+            st.session_state.company_name = company_name
+        else:
+            st.warning("⚠️ Veuillez d'abord saisir et valider le nom de l'entreprise dans la section 'Contexte de l'entreprise'.")
+            return
+    
+    # Synchroniser company_name si nécessaire
+    if not st.session_state.company_name and company_name:
+        st.session_state.company_name = company_name
     
     # Afficher les fichiers sélectionnés
     st.subheader("📋 Fichiers sélectionnés")
@@ -799,10 +915,9 @@ def display_diagnostic_section():
             with st.expander("Voir les fichiers"):
                 for transcript in st.session_state.uploaded_transcripts:
                     if isinstance(transcript, dict):
-                        transcript_name = transcript.get("nom", "Sans nom")
                         file_path = transcript.get("file_path", "")
                         filename = os.path.basename(file_path) if file_path else "Fichier inconnu"
-                        st.text(f"• {transcript_name} ({filename})")
+                        st.text(f"• {filename}")
                     else:
                         # Ancienne structure (string)
                         st.text(f"• {os.path.basename(transcript)}")
@@ -813,7 +928,7 @@ def display_diagnostic_section():
                 for path in st.session_state.uploaded_workshops:
                     st.text(f"• {os.path.basename(path)}")
     
-    st.metric("Entreprise", st.session_state.company_name)
+    st.metric("Entreprise", company_name)
     
     # Zone : Informations supplémentaires
     st.subheader("💡 Informations Supplémentaires")
@@ -876,6 +991,89 @@ def display_diagnostic_section():
                         if st.session_state.company_name and st.session_state.company_name.strip():
                             st.session_state.company_name_input = st.session_state.company_name.strip()
                             print(f"💾 [APP] Nom d'entreprise sauvegardé dans session_state: {st.session_state.company_name.strip()}")
+                        
+                        # En mode DEV, pré-remplir les besoins identifiés pour gagner du temps
+                        if is_dev_mode():
+                            debug_needs = [
+                                {
+                                    "theme": "Automatisation des processus administratifs",
+                                    "quotes": [
+                                        "Nous passons trop de temps sur les tâches administratives répétitives",
+                                        "L'automatisation nous ferait gagner beaucoup de temps"
+                                    ]
+                                },
+                                {
+                                    "theme": "Optimisation de la performance commerciale",
+                                    "quotes": [
+                                        "Nous avons besoin de mieux suivre nos performances commerciales",
+                                        "Un dashboard en temps réel serait très utile"
+                                    ]
+                                },
+                                {
+                                    "theme": "Gestion proactive des stocks",
+                                    "quotes": [
+                                        "Nous avons souvent des ruptures de stock",
+                                        "Une meilleure prévision nous aiderait"
+                                    ]
+                                },
+                                {
+                                    "theme": "Formation et gestion des talents",
+                                    "quotes": [
+                                        "La formation de nos équipes est un enjeu majeur",
+                                        "Nous avons besoin d'un système de suivi des compétences"
+                                    ]
+                                },
+                                {
+                                    "theme": "Amélioration de la qualité et conformité",
+                                    "quotes": [
+                                        "La conformité réglementaire est complexe",
+                                        "Nous devons améliorer notre traçabilité"
+                                    ]
+                                },
+                                {
+                                    "theme": "Analyse prédictive des ventes",
+                                    "quotes": [
+                                        "Nous aimerions mieux prévoir nos ventes",
+                                        "L'IA pourrait nous aider à anticiper les tendances"
+                                    ]
+                                },
+                                {
+                                    "theme": "Optimisation de la chaîne logistique",
+                                    "quotes": [
+                                        "Notre chaîne logistique peut être optimisée",
+                                        "Nous cherchons à réduire les délais de livraison"
+                                    ]
+                                },
+                                {
+                                    "theme": "Amélioration de l'expérience client",
+                                    "quotes": [
+                                        "L'expérience client est notre priorité",
+                                        "Nous voulons mieux comprendre nos clients"
+                                    ]
+                                },
+                                {
+                                    "theme": "Gestion intelligente des données",
+                                    "quotes": [
+                                        "Nous avons beaucoup de données mais ne savons pas les exploiter",
+                                        "Un système de BI serait très utile"
+                                    ]
+                                },
+                                {
+                                    "theme": "Automatisation des réponses aux appels entrants",
+                                    "quotes": [
+                                        "Nous recevons beaucoup d'appels répétitifs",
+                                        "Un chatbot pourrait nous aider"
+                                    ]
+                                }
+                            ]
+                            
+                            # Initialiser workflow_state avec les besoins pré-remplis
+                            if "workflow_state" not in st.session_state:
+                                st.session_state.workflow_state = {}
+                            
+                            st.session_state.workflow_state["identified_needs"] = debug_needs
+                            print(f"🔧 [DEBUG] {len(debug_needs)} besoins pré-remplis en mode DEBUG")
+                        
                         status_placeholder.success(f"✅ Workflow démarré ! Thread ID: {thread_id[:8]}...")
                         time.sleep(1)
                         st.rerun()
@@ -896,6 +1094,9 @@ def display_workflow_progress():
     # Poll le statut
     status = poll_workflow_status()
     
+    # Debug: afficher le statut détecté
+    print(f"🔍 [DEBUG] display_workflow_progress - Statut détecté: {status}")
+    
     if status == "running":
         st.info("⚙️ Le workflow est en cours d'exécution...")
         st.markdown("#### Étapes en cours :")
@@ -911,9 +1112,35 @@ def display_workflow_progress():
         st.rerun()
     
     elif status == "waiting_validation":
+        # Vérifier si identified_needs est vide (workflow peut être passé à l'étape suivante)
+        identified_needs = st.session_state.workflow_state.get("identified_needs", [])
+        if not identified_needs:
+            # Si identified_needs est vide, le workflow a probablement passé à l'étape suivante
+            # Faire plusieurs tentatives pour vérifier le statut (le checkpointer peut prendre du temps)
+            print(f"🔍 [DEBUG] display_workflow_progress - identified_needs vide, re-vérification du statut")
+            max_retries = 3
+            for attempt in range(max_retries):
+                time.sleep(1)
+                status = poll_workflow_status()
+                print(f"🔍 [DEBUG] display_workflow_progress - Tentative {attempt + 1}/{max_retries} - Statut: {status}")
+                # Si le statut a changé, faire un rerun pour afficher la bonne interface
+                if status != "waiting_validation":
+                    print(f"✅ [DEBUG] display_workflow_progress - Statut changé vers: {status}")
+                    st.rerun()
+                    return
+            # Si après toutes les tentatives, le statut est toujours waiting_validation mais identified_needs est vide,
+            # c'est probablement une erreur - afficher un message d'info
+            print(f"⚠️ [DEBUG] display_workflow_progress - Statut toujours waiting_validation après {max_retries} tentatives")
+        
         st.warning("⏸️ **Validation requise !**")
-        display_needs_validation_interface()
+        display_needs_validation_interface(status)
         # Pas de rerun automatique ici, l'utilisateur doit valider
+        # Le rerun sera déclenché par display_needs_validation_interface() après la validation
+    
+    elif status == "waiting_pre_use_case_context":
+        st.info("💡 **Préparation de la génération des cas d'usage**")
+        display_pre_use_case_interrupt_interface()
+        # Pas de rerun automatique ici, l'utilisateur doit fournir le contexte
     
     elif status == "waiting_use_case_validation":
         st.warning("⏸️ **Validation des cas d'usage requise !**")
@@ -939,11 +1166,27 @@ def display_workflow_progress():
         time.sleep(3)
         st.rerun()
 
-def display_needs_validation_interface():
+def display_needs_validation_interface(current_status: str = None):
     """
     Affiche l'interface de validation des besoins.
     Utilise StreamlitValidationInterface et envoie le résultat à l'API.
+    
+    Args:
+        current_status: Le statut actuel du workflow (optionnel, sera vérifié si non fourni)
     """
+    
+    # Vérifier le statut actuel si non fourni
+    if current_status is None:
+        current_status = poll_workflow_status()
+    
+    # Debug: afficher le statut
+    print(f"🔍 [DEBUG] display_needs_validation_interface - Statut: {current_status}")
+    
+    # Si le workflow n'est plus en attente de validation, ne pas afficher l'interface
+    # Laisser display_workflow_progress() gérer l'affichage de l'étape suivante
+    if current_status != "waiting_validation":
+        print(f"🔍 [DEBUG] display_needs_validation_interface - Retour silencieux, statut={current_status}")
+        return
     
     st.markdown("### Validation des Besoins Identifiés")
     
@@ -951,37 +1194,30 @@ def display_needs_validation_interface():
     validated_count = len(st.session_state.workflow_state.get("validated_needs", []))
     iteration_count = st.session_state.workflow_state.get("iteration_count", 0)
     
-    # Nettoyer les anciennes clés de checkbox de l'itération précédente
-    if 'last_needs_iteration' not in st.session_state or st.session_state.last_needs_iteration != iteration_count:
-        # Nouvelle itération - nettoyer UNIQUEMENT les anciennes clés (avec l'ancien iteration_count)
-        if 'last_needs_iteration' in st.session_state:
-            old_iteration = st.session_state.last_needs_iteration
-            for key in list(st.session_state.keys()):
-                if key.startswith("validate_need_") and key.endswith(f"_{old_iteration}"):
-                    del st.session_state[key]
-        st.session_state.last_needs_iteration = iteration_count
-    
-    # Affichage du message de progression
-    remaining_to_validate = max(0, 5 - validated_count)
-    
-    if iteration_count == 0:
-        st.info(f"**Première proposition** : {len(identified_needs)} besoins identifiés - Veuillez en valider au moins 5")
-    else:
-        st.info(f"**Itération {iteration_count}** : Vous avez déjà validé **{validated_count}/5** besoins. "
-                f"Il vous reste **{remaining_to_validate} besoins à valider** parmi les **{len(identified_needs)} nouveaux besoins** proposés.")
+    # Si identified_needs est vide, ne pas afficher l'interface de validation
+    # Cela peut arriver si tous les besoins ont été validés/rejetés et que le workflow est passé à l'étape suivante
+    if not identified_needs:
+        # Si identified_needs est vide ET que le statut n'est pas waiting_validation,
+        # c'est que le workflow est passé à l'étape suivante
+        # Ne pas afficher de message, juste retourner silencieusement
+        # display_workflow_progress() gérera l'affichage de l'étape suivante
+        print(f"🔍 [DEBUG] display_needs_validation_interface - identified_needs vide, statut={current_status}")
+        return
     
     st.markdown("---")
     
     # ✅ UTILISER LA CLASSE pour afficher l'interface de validation
-    # La classe retourne le résultat si l'utilisateur clique sur "Valider"
+    # La classe retourne le résultat si l'utilisateur clique sur un bouton
     result = validation_interface.display_needs_for_validation(
         identified_needs=identified_needs,
         validated_count=validated_count,
-        key_suffix=str(iteration_count)  # Utiliser iteration_count comme suffixe
+        key_suffix=f"needs_{iteration_count}"  # Utiliser iteration_count pour réinitialiser les checkboxes
     )
     
     # Si un résultat est retourné, envoyer à l'API avec messages rotatifs
     if result is not None:
+        user_action = result.get("user_action", "continue_needs")
+        
         # Envoyer à l'API avec messages rotatifs
         validation_messages = [
             "📤 Envoi de votre validation...",
@@ -999,6 +1235,7 @@ def display_needs_validation_interface():
                 result['validated_needs'],
                 result['rejected_needs'],
                 result['user_feedback'],
+                user_action,
                 st.session_state.thread_id,
                 result_queue
             )
@@ -1016,13 +1253,153 @@ def display_needs_validation_interface():
                 
                 if success:
                     status_placeholder.success("✅ Validation envoyée ! Le workflow reprend...")
+                    
+                    # Gestion différente selon l'action de l'utilisateur
+                    if user_action == "continue_to_use_cases":
+                        # Pour "passer aux use cases", attendre plus longtemps car le workflow doit passer à pre_use_case_interrupt
+                        # Le checkpointer peut prendre du temps à sauvegarder l'état
+                        max_retries = 5
+                        retry_delay = 1.5
+                        new_status = None
+                        
+                        for attempt in range(max_retries):
+                            time.sleep(retry_delay)
+                            try:
+                                new_status = poll_workflow_status()
+                                print(f"🔍 [DEBUG] Tentative {attempt + 1}/{max_retries} - Statut: {new_status}")
+                                
+                                if new_status == "waiting_pre_use_case_context":
+                                    print(f"✅ [DEBUG] Statut correct détecté après {attempt + 1} tentatives")
+                                    time.sleep(0.5)
+                                    st.rerun()
+                                    return
+                            except Exception as e:
+                                print(f"⚠️ [DEBUG] Erreur lors du polling (tentative {attempt + 1}): {e}")
+                        
+                        # Si après toutes les tentatives, le statut n'est toujours pas bon, faire un rerun quand même
+                        # display_workflow_progress() gérera l'affichage avec la vérification supplémentaire
+                        print(f"⚠️ [DEBUG] Statut final après {max_retries} tentatives: {new_status}")
+                        time.sleep(0.5)
+                        st.rerun()
+                    else:
+                        # Pour "continue_needs", logique normale
+                        time.sleep(2)
+                        try:
+                            new_status = poll_workflow_status()
+                            time.sleep(0.5)
+                            st.rerun()
+                        except Exception as e:
+                            print(f"⚠️ [DEBUG] Erreur lors du polling après validation: {e}")
+                            time.sleep(1.5)
+                            st.rerun()
+                else:
+                    status_placeholder.error(f"❌ Erreur : {error_msg}")
+            
+            except queue.Empty:
+                status_placeholder.error("❌ Timeout lors de la validation")
+
+def display_pre_use_case_interrupt_interface():
+    """
+    Affiche l'interface avant la génération des use cases.
+    Affiche les besoins validés avec leurs citations et un champ pour le contexte additionnel.
+    """
+    st.markdown("### 📋 Besoins Validés - Préparation de la Génération des Cas d'Usage")
+    
+    # Afficher les besoins validés avec leurs citations
+    final_needs = st.session_state.workflow_state.get("final_needs", [])
+    
+    if not final_needs:
+        # Essayer aussi validated_needs si final_needs est vide
+        final_needs = st.session_state.workflow_state.get("validated_needs", [])
+    
+    if final_needs:
+        st.success(f"✅ **{len(final_needs)} besoin(s) validé(s)**")
+        st.markdown("---")
+        
+        # Afficher les besoins avec leurs citations - 2 par ligne
+        for i in range(0, len(final_needs), 2):
+            col1, col2 = st.columns(2, gap="large")
+            
+            # Premier besoin de la ligne
+            with col1:
+                need = final_needs[i]
+                theme = need.get('theme', 'Thème non défini')
+                quotes = need.get('quotes', [])
+                
+                st.markdown(f"**{i+1}. {theme}**")
+                
+                # Afficher les citations si disponibles
+                if quotes:
+                    st.markdown("*Citations:*")
+                    for quote in quotes:
+                        st.text(f"• {quote}")
+                else:
+                    st.info("Aucune citation disponible")
+            
+            # Deuxième besoin de la ligne (si existant)
+            if i + 1 < len(final_needs):
+                with col2:
+                    need = final_needs[i + 1]
+                    theme = need.get('theme', 'Thème non défini')
+                    quotes = need.get('quotes', [])
+                    
+                    st.markdown(f"**{i+2}. {theme}**")
+                    
+                    # Afficher les citations si disponibles
+                    if quotes:
+                        st.markdown("*Citations:*")
+                        for quote in quotes:
+                            st.text(f"• {quote}")
+                    else:
+                        st.info("Aucune citation disponible")
+            
+            # Ligne de séparation fine entre les besoins
+            st.markdown("---")
+    else:
+        st.warning("⚠️ Aucun besoin validé trouvé")
+        st.markdown("---")
+    
+    # Champ pour le contexte additionnel
+    st.markdown("#### 💡 Instructions pour la Génération des Cas d'Usage")
+    st.markdown("Ajoutez des commentaires ou instructions pour guider la génération des cas d'usage :")
+    
+    additional_context = st.text_area(
+        "Commentaires et instructions (optionnel) :",
+        placeholder="Ex: Génère 15 cas d'usage en priorisant l'automatisation des processus métier. Classifie par famille : automatisation, prédiction, optimisation...",
+        height=150,
+        key="use_case_additional_context_input"
+    )
+    
+    st.markdown("---")
+    
+    # Bouton pour continuer
+    if st.button("✅ Générer les Cas d'Usage", type="primary", use_container_width=True):
+        # Envoyer le contexte additionnel à l'API
+        status_placeholder = st.empty()
+        result_queue = queue.Queue()
+        
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(
+                send_pre_use_case_context_api_call,
+                additional_context,
+                st.session_state.thread_id,
+                result_queue
+            )
+            
+            status_placeholder.info("🔄 Envoi du contexte...")
+            
+            try:
+                success, error_msg = result_queue.get(timeout=180)  # 3 minutes pour permettre la génération des cas d'usage
+                
+                if success:
+                    status_placeholder.success("✅ Contexte envoyé ! Génération des cas d'usage en cours...")
                     time.sleep(1)
                     st.rerun()
                 else:
                     status_placeholder.error(f"❌ Erreur : {error_msg}")
             
             except queue.Empty:
-                status_placeholder.error("❌ Timeout lors de la validation")
+                status_placeholder.error("❌ Timeout lors de l'envoi")
 
 def display_use_cases_validation_interface():
     """
@@ -1030,41 +1407,20 @@ def display_use_cases_validation_interface():
     Utilise StreamlitUseCaseValidation et envoie le résultat à l'API.
     """
     
-    st.markdown("### Validation des Cas d'Usage IA")
+    st.markdown("### Validation des Cas d'Usage")
     
-    proposed_qw = st.session_state.workflow_state.get("proposed_quick_wins", [])
-    proposed_sia = st.session_state.workflow_state.get("proposed_structuration_ia", [])
-    validated_qw_count = len(st.session_state.workflow_state.get("validated_quick_wins", []))
-    validated_sia_count = len(st.session_state.workflow_state.get("validated_structuration_ia", []))
-    use_case_iteration = st.session_state.workflow_state.get("use_case_iteration", 0)
-    
-    # Nettoyer les anciennes clés de checkbox de l'itération précédente
-    if 'last_uc_iteration' not in st.session_state or st.session_state.last_uc_iteration != use_case_iteration:
-        # Nouvelle itération - nettoyer UNIQUEMENT les anciennes clés
-        if 'last_uc_iteration' in st.session_state:
-            old_iteration = st.session_state.last_uc_iteration
-            for key in list(st.session_state.keys()):
-                if (key.startswith("validate_qw_") or key.startswith("validate_sia_")) and key.endswith(f"_{old_iteration}"):
-                    del st.session_state[key]
-        st.session_state.last_uc_iteration = use_case_iteration
-    
-    # Message de progression
-    remaining_qw = max(0, 5 - validated_qw_count)
-    remaining_sia = max(0, 5 - validated_sia_count)
-    
-    st.info(f"**Quick Wins** : {validated_qw_count}/5 validés (encore {remaining_qw} requis) | "
-            f"**Structuration IA** : {validated_sia_count}/5 validés (encore {remaining_sia} requis)")
+    proposed_use_cases = st.session_state.workflow_state.get("proposed_use_cases", [])
+    validated_count = len(st.session_state.workflow_state.get("validated_use_cases", []))
+    use_case_iteration_count = st.session_state.workflow_state.get("use_case_iteration_count", 0)
     
     st.markdown("---")
     
     # ✅ UTILISER LA CLASSE pour afficher l'interface de validation
     # La classe retourne le résultat si l'utilisateur clique sur "Valider"
     result = use_case_validation.display_use_cases_for_validation(
-        quick_wins=proposed_qw,
-        structuration_ia=proposed_sia,
-        validated_qw_count=validated_qw_count,
-        validated_sia_count=validated_sia_count,
-        key_suffix=str(use_case_iteration)  # Utiliser use_case_iteration comme suffixe
+        use_cases=proposed_use_cases,
+        validated_count=validated_count,
+        key_suffix=f"use_cases_{use_case_iteration_count}"  # Utiliser use_case_iteration_count pour réinitialiser les checkboxes
     )
     
     # Si un résultat est retourné, envoyer à l'API avec messages rotatifs
@@ -1081,14 +1437,14 @@ def display_use_cases_validation_interface():
         result_queue = queue.Queue()
         
         # Lancer l'appel API dans un thread
+        use_case_user_action = result.get("use_case_user_action", "finalize_use_cases")
         with ThreadPoolExecutor(max_workers=1) as executor:
             future = executor.submit(
                 send_use_case_validation_feedback_api_call,
-                result['validated_quick_wins'],
-                result['validated_structuration_ia'],
-                result['rejected_quick_wins'],
-                result['rejected_structuration_ia'],
+                result['validated_use_cases'],
+                result['rejected_use_cases'],
                 result['user_feedback'],
+                use_case_user_action,
                 st.session_state.thread_id,
                 result_queue
             )
@@ -1102,15 +1458,15 @@ def display_use_cases_validation_interface():
             
             # Récupérer le résultat
             try:
-                success, is_completed, error_msg = result_queue.get(timeout=1)
+                success, error_msg = result_queue.get(timeout=1)
                 
                 if success:
-                    if is_completed:
+                    # Déterminer le message selon l'action
+                    if use_case_user_action == "finalize_use_cases":
                         st.session_state.workflow_status = "completed"
                         status_placeholder.success("✅ Validation envoyée ! Le workflow est terminé !")
                     else:
-                        st.session_state.workflow_status = "paused"
-                        status_placeholder.warning("⏸️ Validation envoyée ! Nouvelle validation requise...")
+                        status_placeholder.success("✅ Validation envoyée ! Régénération des use cases en cours...")
                     time.sleep(1)
                     st.rerun()
                 else:
@@ -1163,11 +1519,10 @@ def generate_word_report():
             
             # Récupérer les données depuis workflow_state
             final_needs = workflow_state.get('final_needs', [])
-            final_quick_wins = workflow_state.get('final_quick_wins', [])
-            final_structuration_ia = workflow_state.get('final_structuration_ia', [])
+            final_use_cases = workflow_state.get('final_use_cases', [])
             
             # Vérifier qu'on a au moins des données à exporter
-            if not final_needs and not final_quick_wins and not final_structuration_ia:
+            if not final_needs and not final_use_cases:
                 st.warning("⚠️ Aucune donnée à exporter. Veuillez d'abord valider des besoins et des cas d'usage.")
                 return
             
@@ -1178,8 +1533,7 @@ def generate_word_report():
             output_path = report_generator.generate_report(
                 company_name=company_name,
                 final_needs=final_needs,
-                final_quick_wins=final_quick_wins,
-                final_structuration_ia=final_structuration_ia
+                final_use_cases=final_use_cases
             )
             
             st.success(f"✅ Rapport généré avec succès !")
@@ -1205,20 +1559,16 @@ def display_final_results():
     st.markdown("### Résultats Finaux")
     
     final_needs = st.session_state.workflow_state.get("final_needs", [])
-    final_qw = st.session_state.workflow_state.get("final_quick_wins", [])
-    final_sia = st.session_state.workflow_state.get("final_structuration_ia", [])
+    final_use_cases = st.session_state.workflow_state.get("final_use_cases", [])
     
     # Affichage des métriques
-    col1, col2, col3 = st.columns(3)
+    col1, col2 = st.columns(2)
     
     with col1:
         st.metric("📋 Besoins Validés", len(final_needs))
     
     with col2:
-        st.metric("⚡ Quick Wins", len(final_qw))
-    
-    with col3:
-        st.metric("🏗️ Structuration IA", len(final_sia))
+        st.metric("🎯 Cas d'Usage Validés", len(final_use_cases))
     
     # Afficher les besoins validés
     if final_needs:
@@ -1232,32 +1582,27 @@ def display_final_results():
                         st.markdown(f"• {quote}")
                 st.markdown("---")
     
-    # Afficher les Quick Wins
-    if final_qw:
-        with st.expander("⚡ Voir les Quick Wins validés", expanded=True):
-            for i, uc in enumerate(final_qw, 1):
+    # Afficher les cas d'usage validés
+    if final_use_cases:
+        with st.expander("🎯 Voir les cas d'usage validés", expanded=True):
+            for i, uc in enumerate(final_use_cases, 1):
                 st.markdown(f"### {i}. {uc.get('titre', 'N/A')}")
                 st.markdown(f"**Description :** {uc.get('description', 'N/A')}")
-                st.markdown("---")
-    
-    # Afficher les Structuration IA
-    if final_sia:
-        with st.expander("🏗️ Voir les Structuration IA validés", expanded=True):
-            for i, uc in enumerate(final_sia, 1):
-                st.markdown(f"### {i}. {uc.get('titre', 'N/A')}")
-                st.markdown(f"**Description :** {uc.get('description', 'N/A')}")
+                # Afficher la famille si elle existe
+                famille = uc.get('famille', '')
+                if famille:
+                    st.markdown(f"**Famille :** {famille}")
                 st.markdown("---")
     
     # Boutons de téléchargement
-    if final_needs or final_qw or final_sia:
+    if final_needs or final_use_cases:
         col1, col2 = st.columns(2)
         
         with col1:
             # Bouton de téléchargement JSON
             results_json = {
                 "final_needs": final_needs,
-                "final_quick_wins": final_qw,
-                "final_structuration_ia": final_sia
+                "final_use_cases": final_use_cases
             }
             st.download_button(
                 label="📥 Télécharger les résultats (JSON)",
@@ -1275,7 +1620,7 @@ def display_final_results():
     st.markdown("---")
     
     # Bouton pour recommencer
-    if st.button("🔄 Nouvelle Analyse", width="stretch"):
+    if st.button("Nouvelle Analyse", width="stretch"):
         st.session_state.thread_id = None
         st.session_state.workflow_status = None
         st.session_state.uploaded_files = {}
@@ -1284,7 +1629,7 @@ def display_final_results():
 
 def display_upload_documents_section():
     """Section pour uploader et gérer les documents de manière persistante (session)"""
-    st.header("📁 Upload de Documents")
+    st.header("Upload de Documents")
     st.info("💡 Uploadez vos fichiers ici. Ils seront conservés pendant toute la session et réutilisables dans les workflows.")
     
     # Initialiser le tracking des fichiers déjà uploadés
@@ -1294,56 +1639,64 @@ def display_upload_documents_section():
     # Initialiser l'état pour le formulaire de transcript
     if 'current_transcript_file_path' not in st.session_state:
         st.session_state.current_transcript_file_path = None
-    if 'current_transcript_name' not in st.session_state:
-        st.session_state.current_transcript_name = ""
     if 'current_transcript_speakers' not in st.session_state:
         st.session_state.current_transcript_speakers = []
     if 'transcript_classification_in_progress' not in st.session_state:
         st.session_state.transcript_classification_in_progress = False
     
     # Upload Transcripts - un par un
-    st.subheader("📄 Transcriptions (PDF ou JSON)")
+    st.subheader("Transcriptions (PDF ou JSON)")
     
     # Si on a un transcript en cours de traitement, afficher le formulaire
     if st.session_state.current_transcript_file_path and st.session_state.current_transcript_speakers:
         st.markdown("---")
-        st.markdown("### 📝 Configuration du transcript")
+        st.markdown("### Configuration du transcript")
         
-        # Nom du transcript (non modifiable)
-        st.text_input(
-            "Nom du transcript",
-            value=st.session_state.current_transcript_name,
-            disabled=True,
-            key="transcript_name_display"
-        )
+        # Afficher le nom du fichier
+        filename = os.path.basename(st.session_state.current_transcript_file_path)
+        st.caption(f"Fichier: {filename}")
         
         # Formulaire pour les speakers
         st.markdown("**Intervenants :**")
         st.caption("💡 Vous pouvez supprimer les speakers qui ne sont pas des participants directs (ex: personnes citées)")
         
-        # Gérer la suppression de speakers
-        if 'delete_speaker_idx' in st.session_state:
-            idx_to_delete = st.session_state.delete_speaker_idx
-            if 0 <= idx_to_delete < len(st.session_state.current_transcript_speakers):
-                st.session_state.current_transcript_speakers.pop(idx_to_delete)
-            del st.session_state.delete_speaker_idx
+        # Ajouter un identifiant unique à chaque speaker s'il n'existe pas déjà
+        if 'current_transcript_speakers' in st.session_state:
+            for speaker in st.session_state.current_transcript_speakers:
+                if 'unique_id' not in speaker:
+                    speaker['unique_id'] = str(uuid.uuid4())
+        
+        # Gérer la suppression de speakers par identifiant unique
+        if 'delete_speaker_id' in st.session_state:
+            speaker_id_to_delete = st.session_state.delete_speaker_id
+            st.session_state.current_transcript_speakers = [
+                s for s in st.session_state.current_transcript_speakers 
+                if s.get('unique_id') != speaker_id_to_delete
+            ]
+            del st.session_state.delete_speaker_id
             st.rerun()
         
         updated_speakers = []
         
         for idx, speaker in enumerate(st.session_state.current_transcript_speakers):
+            # S'assurer que chaque speaker a un identifiant unique
+            if 'unique_id' not in speaker:
+                speaker['unique_id'] = str(uuid.uuid4())
+            
+            speaker_unique_id = speaker.get('unique_id')
+            
             col1, col2, col3, col4 = st.columns([3, 3, 1, 1])
             with col1:
                 speaker_name = st.text_input(
                     "Nom",
                     value=speaker.get("name", ""),
-                    key=f"speaker_name_{idx}"
+                    key=f"speaker_name_{speaker_unique_id}"
                 )
             with col2:
                 speaker_role = st.text_input(
                     "Rôle",
                     value=speaker.get("role", ""),
-                    key=f"speaker_role_{idx}"
+                    key=f"speaker_role_{speaker_unique_id}"
                 )
             with col3:
                 is_interviewer = speaker.get("is_interviewer", False)
@@ -1356,14 +1709,15 @@ def display_upload_documents_section():
             with col4:
                 # Bouton supprimer (sauf pour les interviewers)
                 if not is_interviewer:
-                    if st.button("🗑️", key=f"delete_speaker_{idx}", help="Supprimer ce speaker"):
-                        st.session_state.delete_speaker_idx = idx
+                    if st.button("🗑️", key=f"delete_speaker_{speaker_unique_id}", help="Supprimer ce speaker"):
+                        st.session_state.delete_speaker_id = speaker_unique_id
                         st.rerun()
             
             updated_speakers.append({
                 "name": speaker_name,
                 "role": speaker_role,
-                "is_interviewer": is_interviewer
+                "is_interviewer": is_interviewer,
+                "unique_id": speaker_unique_id
             })
         
         st.session_state.current_transcript_speakers = updated_speakers
@@ -1390,7 +1744,8 @@ def display_upload_documents_section():
                     new_speaker = {
                         "name": new_speaker_name.strip(),
                         "role": new_speaker_role.strip() if new_speaker_role else "",
-                        "is_interviewer": False
+                        "is_interviewer": False,
+                        "unique_id": str(uuid.uuid4())
                     }
                     st.session_state.current_transcript_speakers.append(new_speaker)
                     st.rerun()
@@ -1403,7 +1758,6 @@ def display_upload_documents_section():
             if st.button("✅ Valider", type="primary", key="validate_transcript"):
                 # Sauvegarder le transcript dans la liste
                 transcript_data = {
-                    "nom": st.session_state.current_transcript_name,
                     "file_path": st.session_state.current_transcript_file_path,
                     "speakers": [
                         {"name": s["name"], "role": s["role"]}
@@ -1419,7 +1773,6 @@ def display_upload_documents_section():
                 
                 # Réinitialiser l'état pour permettre un nouvel upload
                 st.session_state.current_transcript_file_path = None
-                st.session_state.current_transcript_name = ""
                 st.session_state.current_transcript_speakers = []
                 st.session_state.transcript_classification_in_progress = False
                 
@@ -1430,7 +1783,6 @@ def display_upload_documents_section():
             if st.button("❌ Annuler", key="cancel_transcript"):
                 # Réinitialiser l'état
                 st.session_state.current_transcript_file_path = None
-                st.session_state.current_transcript_name = ""
                 st.session_state.current_transcript_speakers = []
                 st.session_state.transcript_classification_in_progress = False
                 st.rerun()
@@ -1447,80 +1799,68 @@ def display_upload_documents_section():
         )
         
         if uploaded_transcript:
-            # Champ pour le nom du transcript
-            transcript_name = st.text_input(
-                "Nom du transcript *",
-                placeholder="Ex: Echange Direction Commerciale",
-                key="transcript_name_input"
-            )
-            
             if st.button("🔍 Classifier les speakers", type="primary", key="classify_speakers"):
-                if not transcript_name:
-                    st.error("⚠️ Veuillez saisir un nom pour le transcript")
-                else:
-                    # Upload le fichier
-                    with st.spinner("📤 Upload du fichier..."):
-                        try:
-                            transcript_paths = upload_files_to_api([uploaded_transcript])
-                            new_paths = transcript_paths.get("transcript", [])
+                # Upload le fichier
+                with st.spinner("Upload du fichier..."):
+                    try:
+                        transcript_paths = upload_files_to_api([uploaded_transcript])
+                        new_paths = transcript_paths.get("transcript", [])
+                        
+                        if not new_paths:
+                            st.error("❌ Erreur lors de l'upload du fichier")
+                        else:
+                            file_path = new_paths[0]
                             
-                            if not new_paths:
-                                st.error("❌ Erreur lors de l'upload du fichier")
-                            else:
-                                file_path = new_paths[0]
-                                
-                                # Construire le dictionnaire des rôles connus depuis les transcripts précédents
-                                known_speakers = {}
-                                if 'uploaded_transcripts' in st.session_state:
-                                    for transcript in st.session_state.uploaded_transcripts:
-                                        for speaker in transcript.get("speakers", []):
-                                            speaker_name = speaker.get("name", "")
-                                            speaker_role = speaker.get("role", "")
-                                            if speaker_name and speaker_role:
-                                                known_speakers[speaker_name] = speaker_role
-                                
-                                # Appeler l'API pour classifier les speakers
-                                st.session_state.transcript_classification_in_progress = True
-                                with st.spinner("🔍 Classification des speakers en cours..."):
-                                    try:
-                                        response = requests.post(
-                                            f"{API_URL}/transcripts/classify-speakers",
-                                            json={
-                                                "file_path": file_path,
-                                                "interviewer_names": None,  # Utiliser les valeurs par défaut
-                                                "known_speakers": known_speakers
-                                            }
-                                        )
-                                        response.raise_for_status()
-                                        result = response.json()
-                                        
-                                        # Sauvegarder les données dans session_state
-                                        st.session_state.current_transcript_file_path = file_path
-                                        st.session_state.current_transcript_name = transcript_name
-                                        st.session_state.current_transcript_speakers = result.get("speakers", [])
-                                        st.session_state.transcript_classification_in_progress = False
-                                        
-                                        st.success("✅ Classification terminée !")
-                                        st.rerun()
-                                        
-                                    except requests.exceptions.RequestException as e:
-                                        st.error(f"❌ Erreur lors de la classification: {str(e)}")
-                                        st.session_state.transcript_classification_in_progress = False
-                                        
-                        except Exception as e:
-                            st.error(f"❌ Erreur lors de l'upload: {str(e)}")
-                            st.session_state.transcript_classification_in_progress = False
+                            # Construire le dictionnaire des rôles connus depuis les transcripts précédents
+                            known_speakers = {}
+                            if 'uploaded_transcripts' in st.session_state:
+                                for transcript in st.session_state.uploaded_transcripts:
+                                    for speaker in transcript.get("speakers", []):
+                                        speaker_name = speaker.get("name", "")
+                                        speaker_role = speaker.get("role", "")
+                                        if speaker_name and speaker_role:
+                                            known_speakers[speaker_name] = speaker_role
+                            
+                            # Appeler l'API pour classifier les speakers
+                            st.session_state.transcript_classification_in_progress = True
+                            with st.spinner("🔍 Classification des speakers en cours..."):
+                                try:
+                                    response = requests.post(
+                                        f"{API_URL}/transcripts/classify-speakers",
+                                        json={
+                                            "file_path": file_path,
+                                            "interviewer_names": None,  # Utiliser les valeurs par défaut
+                                            "known_speakers": known_speakers
+                                        }
+                                    )
+                                    response.raise_for_status()
+                                    result = response.json()
+                                    
+                                    # Sauvegarder les données dans session_state
+                                    st.session_state.current_transcript_file_path = file_path
+                                    st.session_state.current_transcript_speakers = result.get("speakers", [])
+                                    st.session_state.transcript_classification_in_progress = False
+                                    
+                                    st.success("✅ Classification terminée !")
+                                    st.rerun()
+                                    
+                                except requests.exceptions.RequestException as e:
+                                    st.error(f"❌ Erreur lors de la classification: {str(e)}")
+                                    st.session_state.transcript_classification_in_progress = False
+                                    
+                    except Exception as e:
+                        st.error(f"❌ Erreur lors de l'upload: {str(e)}")
+                        st.session_state.transcript_classification_in_progress = False
     
     # Afficher les transcripts déjà uploadés et validés
     if st.session_state.get("uploaded_transcripts"):
         st.markdown("---")
-        st.markdown("**📋 Transcripts sauvegardés :**")
+        st.markdown("**Transcripts sauvegardés :**")
         for idx, transcript in enumerate(st.session_state.uploaded_transcripts):
             col1, col2 = st.columns([4, 1])
             with col1:
-                st.markdown(f"**{transcript.get('nom', 'Sans nom')}**")
                 filename = os.path.basename(transcript.get("file_path", ""))
-                st.caption(f"Fichier: {filename}")
+                st.markdown(f"**{filename}**")
                 speakers_text = " | ".join([
                     f"{s.get('name', '')} | {s.get('role', '')}"
                     for s in transcript.get("speakers", [])
@@ -1535,7 +1875,7 @@ def display_upload_documents_section():
     st.markdown("---")
     
     # Upload Workshops
-    st.subheader("📝 Ateliers (Fichiers Excel)")
+    st.subheader("Ateliers (Fichiers Excel)")
     uploaded_workshops = st.file_uploader(
         "Uploadez vos fichiers d'ateliers",
         type=["xlsx"],
@@ -1591,6 +1931,19 @@ def display_company_context_section():
     """Section pour configurer le contexte de l'entreprise avec recherche web"""
     st.header("🏢 Contexte de l'entreprise")
     st.info("💡 Configurez les informations sur l'entreprise et lancez une recherche web pour obtenir des informations détaillées.")
+    
+    # En mode DEV, auto-valider les informations de l'entreprise si pas déjà fait
+    if is_dev_mode() and not st.session_state.get("validated_company_info"):
+        st.session_state.validated_company_info = {
+            "nom": "Entreprise Test",
+            "secteur": "Technologie",
+            "chiffre_affaires": "",
+            "nombre_employes": "",
+            "description": "Entreprise simulée pour les tests en mode DEV"
+        }
+        if not st.session_state.get("company_name"):
+            st.session_state.company_name = "Entreprise Test"
+        st.success("✅ Mode DEV : Informations de l'entreprise auto-validées")
     
     # Initialiser les variables pour suivre les changements
     if 'company_context_name' not in st.session_state:
@@ -1747,6 +2100,9 @@ def display_company_context_section():
                     
                     # Sauvegarder dans session_state
                     st.session_state.validated_company_info = validated_data
+                    # Synchroniser le nom d'entreprise pour la section "Générer les Use Cases"
+                    if validated_data.get("nom"):
+                        st.session_state.company_name = validated_data["nom"]
                     st.success("✅ Informations validées et sauvegardées !")
                     st.rerun()
     
@@ -1873,9 +2229,9 @@ def display_executive_workflow_progress():
     st.markdown("---")
     st.header("🔄 Progression du Workflow Executive Summary")
     
-    # Si le workflow est déjà terminé dans session_state, ne plus poller
+    # Si le workflow est déjà terminé dans session_state, afficher la page de résultats finale
     if st.session_state.get("executive_workflow_status") == "completed":
-        display_executive_results()
+        display_executive_final_summary()
         return
     
     # Poll le statut
@@ -1901,14 +2257,43 @@ def display_executive_workflow_progress():
         display_challenges_validation_interface()
         # Pas de rerun automatique ici, l'utilisateur doit valider
     
+    elif status == "waiting_pre_recommendations_context":
+        st.info("💡 **Préparation de la génération des recommandations**")
+        display_pre_recommendations_interrupt_interface()
+        # Pas de rerun automatique ici, l'utilisateur doit fournir le contexte
+    
     elif status == "waiting_validation_recommendations":
         st.warning("⏸️ **Validation des recommandations requise !**")
         display_recommendations_validation_interface()
         # Pas de rerun automatique ici, l'utilisateur doit valider
     
     elif status == "completed":
-        # Ne plus faire de rerun automatique quand le workflow est terminé
-        display_executive_results()
+        # Récupérer l'état final UNE SEULE FOIS et le stocker
+        if not st.session_state.get("executive_final_results_cached"):
+            thread_id = st.session_state.get("executive_thread_id")
+            if thread_id:
+                try:
+                    state_response = requests.get(
+                        f"{API_URL}/executive-summary/threads/{thread_id}/state",
+                        timeout=60
+                    )
+                    state_response.raise_for_status()
+                    state_data = state_response.json()
+                    
+                    # Stocker les résultats finaux dans session_state
+                    st.session_state.executive_final_results = {
+                        "validated_challenges": state_data.get("validated_challenges", []),
+                        "validated_recommendations": state_data.get("validated_recommendations", []),
+                        "maturity_score": state_data.get("maturity_score", 3),
+                        "maturity_summary": state_data.get("maturity_summary", "")
+                    }
+                    st.session_state.executive_final_results_cached = True
+                except Exception as e:
+                    st.error(f"❌ Erreur lors de la récupération des résultats: {str(e)}")
+        
+        # Mettre à jour le statut pour ne plus poller
+        st.session_state.executive_workflow_status = "completed"
+        st.rerun()
     
     elif status == "error":
         st.error("❌ Une erreur s'est produite")
@@ -1924,6 +2309,80 @@ def display_executive_workflow_progress():
         # Auto-refresh pour détecter les changements de statut
         time.sleep(3)
         st.rerun()
+
+def display_executive_final_summary():
+    """
+    Affiche une page simple avec les résultats finaux de l'Executive Summary.
+    N'effectue AUCUN appel API - utilise uniquement les données en cache.
+    """
+    st.success("✅ **Workflow terminé avec succès !**")
+    st.markdown("---")
+    
+    # Titre principal
+    st.title("📊 Résumé Executive Summary")
+    st.markdown("")
+    
+    # Récupérer les résultats depuis session_state (déjà chargés)
+    final_results = st.session_state.get("executive_final_results", {})
+    
+    if not final_results:
+        st.warning("⚠️ Aucun résultat disponible")
+        return
+    
+    validated_challenges = final_results.get("validated_challenges", [])
+    validated_recommendations = final_results.get("validated_recommendations", [])
+    
+    # Section Enjeux validés
+    st.header("🎯 Enjeux Validés")
+    if validated_challenges:
+        for i, challenge in enumerate(validated_challenges, 1):
+            titre = challenge.get("titre", f"Enjeu {i}")
+            st.markdown(f"**{i}. {titre}**")
+        st.markdown("")
+    else:
+        st.info("Aucun enjeu validé")
+    
+    st.markdown("---")
+    
+    # Section Recommandations validées
+    st.header("💡 Recommandations Validées")
+    if validated_recommendations:
+        for i, recommendation in enumerate(validated_recommendations, 1):
+            # Les recommandations sont des strings simples
+            st.markdown(f"**{i}. {recommendation}**")
+        st.markdown("")
+    else:
+        st.info("Aucune recommandation validée")
+    
+    st.markdown("---")
+    
+    # Boutons d'action
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("🔄 Recommencer un nouveau workflow", type="secondary", use_container_width=True):
+            # Réinitialiser le workflow
+            st.session_state.executive_thread_id = None
+            st.session_state.executive_workflow_status = None
+            st.session_state.executive_final_results = None
+            st.session_state.executive_final_results_cached = False
+            st.rerun()
+    
+    with col2:
+        # Préparer les données pour le téléchargement
+        results_json = {
+            "validated_challenges": validated_challenges,
+            "validated_recommendations": validated_recommendations,
+            "generated_at": str(date.today())
+        }
+        st.download_button(
+            label="📥 Télécharger les résultats (JSON)",
+            data=json.dumps(results_json, indent=2, ensure_ascii=False),
+            file_name=f"executive_summary_{date.today()}.json",
+            mime="application/json",
+            type="primary",
+            use_container_width=True
+        )
 
 def display_challenges_validation_interface():
     """
@@ -1944,28 +2403,10 @@ def display_challenges_validation_interface():
     workflow_state = st.session_state.executive_workflow_state
     identified_challenges = workflow_state.get("identified_challenges", [])
     validated_challenges = workflow_state.get("validated_challenges", [])
-    extracted_needs = workflow_state.get("extracted_needs", [])
-    iteration_count = workflow_state.get("challenges_iteration_count", 0)
     
-    # Nettoyer les anciennes clés de checkbox de l'itération précédente
-    if 'last_challenges_iteration' not in st.session_state or st.session_state.last_challenges_iteration != iteration_count:
-        # Nouvelle itération - nettoyer UNIQUEMENT les anciennes clés
-        if 'last_challenges_iteration' in st.session_state:
-            old_iteration = st.session_state.last_challenges_iteration
-            for key in list(st.session_state.keys()):
-                if key.startswith("validate_challenge_") and key.endswith(f"_{old_iteration}"):
-                    del st.session_state[key]
-        st.session_state.last_challenges_iteration = iteration_count
-    
-    # Affichage du message de progression
-    validated_count = len(validated_challenges)
-    remaining_to_validate = max(0, 5 - validated_count)
-    
-    if iteration_count == 0:
-        st.info(f"**Première proposition** : {len(identified_challenges)} enjeux identifiés - Veuillez en valider au moins 5")
-    else:
-        st.info(f"**Itération {iteration_count}** : Vous avez déjà validé **{validated_count}/5** enjeux. "
-                f"Il vous reste **{remaining_to_validate} enjeux à valider** parmi les **{len(identified_challenges)} nouveaux enjeux** proposés.")
+    # Créer un compteur d'itération pour réinitialiser les checkboxes
+    if "challenges_iteration_count" not in st.session_state:
+        st.session_state.challenges_iteration_count = 0
     
     st.markdown("---")
     
@@ -1973,7 +2414,7 @@ def display_challenges_validation_interface():
     result = validation_interface.display_challenges_for_validation(
         identified_challenges=identified_challenges,
         validated_challenges=validated_challenges,
-        key_suffix=str(iteration_count)
+        key_suffix=f"challenges_{st.session_state.challenges_iteration_count}"
     )
     
     # Si un résultat est retourné, envoyer à l'API avec messages rotatifs
@@ -2017,6 +2458,8 @@ def display_challenges_validation_interface():
                 if success:
                     status_placeholder.success("✅ Validation envoyée ! Le workflow reprend...")
                     st.session_state.executive_workflow_status = "running"
+                    # Incrémenter le compteur pour réinitialiser les checkboxes à la prochaine itération
+                    st.session_state.challenges_iteration_count += 1
                     time.sleep(1)
                     st.rerun()
                 else:
@@ -2024,6 +2467,106 @@ def display_challenges_validation_interface():
             
             except queue.Empty:
                 status_placeholder.error("❌ Timeout lors de la validation")
+
+def display_pre_recommendations_interrupt_interface():
+    """
+    Affiche l'interface avant la génération des recommandations.
+    Affiche les enjeux validés et un champ pour le contexte additionnel.
+    """
+    st.markdown("### 📋 Enjeux Validés - Préparation de la Génération des Recommandations")
+    
+    # Afficher les enjeux validés
+    validated_challenges = st.session_state.executive_workflow_state.get("validated_challenges", [])
+    
+    if validated_challenges:
+        st.success(f"✅ **{len(validated_challenges)} enjeu(x) validé(s)**")
+        st.markdown("---")
+        
+        # Afficher les enjeux - 2 par ligne
+        for i in range(0, len(validated_challenges), 2):
+            col1, col2 = st.columns(2, gap="large")
+            
+            with col1:
+                challenge = validated_challenges[i]
+                st.markdown(f"**{challenge.get('titre', 'Enjeu')}**")
+                st.text(challenge.get('description', ''))
+                
+                # Afficher les besoins liés
+                besoins_lies = challenge.get('besoins_lies', [])
+                if besoins_lies:
+                    st.caption(f"**Besoins liés:** {', '.join(besoins_lies)}")
+            
+            # Deuxième enjeu de la ligne (si existant)
+            if i + 1 < len(validated_challenges):
+                with col2:
+                    challenge = validated_challenges[i + 1]
+                    st.markdown(f"**{challenge.get('titre', 'Enjeu')}**")
+                    st.text(challenge.get('description', ''))
+                    
+                    # Afficher les besoins liés
+                    besoins_lies = challenge.get('besoins_lies', [])
+                    if besoins_lies:
+                        st.caption(f"**Besoins liés:** {', '.join(besoins_lies)}")
+            
+            st.markdown("---")
+    else:
+        st.warning("Aucun enjeu validé")
+    
+    st.markdown("### 💬 Instructions pour la Génération des Recommandations")
+    st.markdown("Ajoutez des commentaires ou instructions pour guider la génération des recommandations :")
+    
+    additional_context = st.text_area(
+        "Commentaires et instructions (optionnel) :",
+        placeholder="Ex: Focalise-toi sur les recommandations quick-win, priorise la formation des équipes, etc.",
+        height=150,
+        key="recommendations_additional_context_input"
+    )
+    
+    st.markdown("---")
+    
+    # Bouton pour continuer
+    if st.button("✅ Générer les Recommandations", type="primary", use_container_width=True):
+        # Envoyer le contexte additionnel à l'API
+        status_placeholder = st.empty()
+        result_queue = queue.Queue()
+        
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(
+                send_pre_recommendations_context_api_call,
+                additional_context,
+                st.session_state.executive_thread_id,
+                result_queue
+            )
+            
+            status_placeholder.info("🔄 Envoi du contexte...")
+            
+            try:
+                success, error_msg = result_queue.get(timeout=180)  # 3 minutes
+                
+                if success:
+                    status_placeholder.success("✅ Contexte envoyé ! Génération des recommandations en cours...")
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    status_placeholder.error(f"❌ Erreur : {error_msg}")
+            
+            except queue.Empty:
+                status_placeholder.error("❌ Timeout lors de l'envoi")
+
+def send_pre_recommendations_context_api_call(additional_context: str, thread_id: str, result_queue: queue.Queue):
+    """Envoie le feedback pour les recommandations dans un thread séparé"""
+    try:
+        response = requests.post(
+            f"{API_URL}/executive-summary/threads/{thread_id}/continue",
+            json={
+                "recommendations_feedback": additional_context or ""
+            },
+            timeout=600  # 10 minutes
+        )
+        response.raise_for_status()
+        result_queue.put((True, None))
+    except Exception as e:
+        result_queue.put((False, str(e)))
 
 def display_recommendations_validation_interface():
     """Affiche l'interface de validation des recommandations"""
@@ -2035,32 +2578,15 @@ def display_recommendations_validation_interface():
     workflow_state = st.session_state.executive_workflow_state
     recommendations = workflow_state.get("recommendations", [])
     validated_recommendations = workflow_state.get("validated_recommendations", [])
-    iteration_count = workflow_state.get("recommendations_iteration_count", 0)
     
-    # Nettoyer les anciennes clés de checkbox, texte et commentaires de l'itération précédente
-    if 'last_recommendations_iteration' not in st.session_state or st.session_state.last_recommendations_iteration != iteration_count:
-        # Nouvelle itération - nettoyer UNIQUEMENT les anciennes clés (avec l'ancien iteration_count)
-        if 'last_recommendations_iteration' in st.session_state:
-            old_iteration = st.session_state.last_recommendations_iteration
-            for key in list(st.session_state.keys()):
-                if (key.startswith("validate_recommendation_") or 
-                    key.startswith("recommendation_text_") or 
-                    key.startswith("recommendations_comments_")) and key.endswith(f"_{old_iteration}"):
-                    del st.session_state[key]
-        st.session_state.last_recommendations_iteration = iteration_count
-    
-    # Affichage du message de progression
-    remaining_to_validate = max(0, 4 - len(validated_recommendations))
-    
-    if iteration_count == 0:
-        st.info(f"💡 Validez au moins 4 recommandations parmi les {len(recommendations)} proposées.")
-    else:
-        st.warning(f"🔄 Itération {iteration_count + 1} : {remaining_to_validate} recommandation(s) supplémentaire(s) à valider.")
+    # Créer un compteur d'itération pour réinitialiser les checkboxes
+    if "recommendations_iteration_count" not in st.session_state:
+        st.session_state.recommendations_iteration_count = 0
     
     result = validation_interface.display_recommendations_for_validation(
         recommendations=recommendations,
         validated_recommendations=validated_recommendations,
-        key_suffix=str(iteration_count)
+        key_suffix=f"recommendations_{st.session_state.recommendations_iteration_count}"
     )
     
     # Si un résultat est retourné, envoyer à l'API avec messages rotatifs
@@ -2070,24 +2596,12 @@ def display_recommendations_validation_interface():
             st.error("❌ Aucun thread ID disponible")
             return
         
-        # Vérifier si on a atteint le minimum requis
-        total_validated = result.get("total_validated", 0)
-        if total_validated < 4:
-            # Pas encore assez de recommandations validées - régénération nécessaire
-            validation_messages = [
-                "📤 Envoi de votre validation...",
-                "🔄 Régénération des recommandations...",
-                "🤖 L'IA analyse votre feedback...",
-                "💡 Génération de nouvelles recommandations..."
-            ]
-        else:
-            # Assez de recommandations validées - finalisation
-            validation_messages = [
-                "📤 Envoi de votre validation finale...",
-                "🤖 L'IA finalise l'analyse...",
-                "📊 Génération du rapport final...",
-                "⚙️ Derniers ajustements..."
-            ]
+        # Messages de validation
+        validation_messages = [
+            "📤 Envoi de votre validation...",
+            "🤖 L'IA analyse vos retours...",
+            "⚙️ Traitement en cours..."
+        ]
         
         status_placeholder = st.empty()
         result_queue = queue.Queue()
@@ -2114,12 +2628,10 @@ def display_recommendations_validation_interface():
                 success, error_msg = result_queue.get(timeout=1)
                 
                 if success:
-                    if total_validated >= 4:
-                        status_placeholder.success("✅ Validation envoyée ! Le workflow est terminé !")
-                        st.session_state.executive_workflow_status = "completed"
-                    else:
-                        status_placeholder.success("✅ Validation envoyée ! Le workflow reprend...")
-                        st.session_state.executive_workflow_status = "running"
+                    status_placeholder.success("✅ Validation envoyée ! Le workflow reprend...")
+                    st.session_state.executive_workflow_status = "running"
+                    # Incrémenter le compteur pour réinitialiser les checkboxes à la prochaine itération
+                    st.session_state.recommendations_iteration_count += 1
                     time.sleep(1)
                     st.rerun()
                 else:
@@ -2218,7 +2730,7 @@ def display_executive_results():
     validated_recommendations = workflow_state.get("validated_recommendations", [])
     
     # Debug: afficher ce qui a été récupéré
-    if st.session_state.get("debug_mode", False):
+    if is_dev_mode():
         with st.expander("🔍 Debug - État récupéré", expanded=False):
             st.json({
                 "validated_challenges_count": len(validated_challenges),

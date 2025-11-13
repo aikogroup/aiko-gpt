@@ -14,7 +14,10 @@ Tu dois être précis, factuel et orienté résultats. Utilise un langage profes
 """
 
 IDENTIFY_CHALLENGES_PROMPT = """
-Analyse les données suivantes et identifie 5 enjeux stratégiques de l'IA pour l'entreprise, en te mettant dans la peau d'un expert en transformation digitale.
+Analyse les données suivantes et identifie les enjeux stratégiques de l'IA pour l'entreprise, en te mettant dans la peau d'un expert en transformation digitale.
+
+NOTE DE L'INTERVIEWER (Contexte et insights clés) :
+{interviewer_note}
 
 DONNÉES TRANSCRIPTS (Entretiens avec les collaborateurs) :
 {transcript_content}
@@ -29,14 +32,19 @@ RÈGLE CRITIQUE POUR LES BESOINS LIÉS :
 Les besoins liés que tu indiques DOIVENT correspondre EXACTEMENT aux titres listés ci-dessus.
 Tu ne peux PAS inventer de nouveaux besoins. Utilise UNIQUEMENT les titres de la liste fournie.
 
+NOMBRE D'ENJEUX :
+- Le nombre d'enjeux à identifier peut être spécifié dans les informations supplémentaires fournies par l'utilisateur
+- Si l'utilisateur demande explicitement un nombre, respecte cette demande
+- Sinon, propose un nombre raisonnable (généralement entre 6 et 8 enjeux) en fonction de la richesse des données
+
 CONTEXTE :
 Les enjeux de l'IA représentent les grands défis stratégiques que l'entreprise doit relever. Chaque enjeu doit être lié à au moins un besoin identifié lors des entretiens et ateliers.
 
 INSTRUCTIONS :
-1. Identifie 5 enjeux stratégiques spécifiques et concrets pour l'entreprise
+1. Identifie les enjeux stratégiques spécifiques et concrets pour l'entreprise (nombre défini par l'utilisateur ou raisonnable selon les données)
 2. Base-toi sur les données réelles des transcripts, ateliers et SURTOUT les besoins identifiés
 3. Pour chaque enjeu, fournis :
-   - Un ID unique (E1, E2, E3, E4, E5)
+   - Un ID unique (E1, E2, E3, ...)
    - Un TITRE court et percutant (max 10 mots)
    - Une DESCRIPTION détaillée en 3-5 lignes expliquant l'enjeu, son impact et sa valeur stratégique
    - Les BESOINS LIÉS : liste des titres EXACTS des besoins de la liste ci-dessus qui se rattachent à cet enjeu
@@ -78,8 +86,16 @@ COMMENTAIRES DE L'UTILISATEUR :
 {challenges_feedback}
 
 RÉSUMÉ DE LA VALIDATION :
-- Enjeux validés : {validated_count} / 5 minimum requis
+- Enjeux validés : {validated_count}
 - Enjeux rejetés : {rejected_count}
+
+NOMBRE D'ENJEUX :
+- Le nombre d'enjeux à identifier peut être spécifié dans les informations supplémentaires fournies par l'utilisateur
+- Si l'utilisateur demande explicitement un nombre, respecte cette demande
+- Sinon, propose un nombre raisonnable (généralement entre 6 et 8 enjeux) en fonction de la richesse des données
+
+NOTE DE L'INTERVIEWER (Contexte et insights clés) :
+{interviewer_note}
 
 DONNÉES TRANSCRIPTS :
 {transcript_content}
@@ -109,12 +125,12 @@ OBLIGATIONS :
 4. Explorer des DOMAINES STRATÉGIQUES COMPLÈTEMENT DIFFÉRENTS de ceux déjà proposés
 5. Identifier des ENJEUX NON ENCORE COUVERTS dans les données
 6. Proposer des enjeux plus concrets, actionnables et mieux sourcés depuis les transcripts et ateliers
-7. Générer EXACTEMENT 5 nouveaux enjeux DISTINCTS (toujours 5, indépendamment du nombre déjà validé)
+7. Générer de nouveaux enjeux DISTINCTS (nombre défini par l'utilisateur ou raisonnable selon les données)
 8. Chaque enjeu doit être unique et spécifique au contexte de l'entreprise
 
 RÈGLES DE FORMAT :
 9. VÉRIFIE L'UNICITÉ DES THÈMES : Assure-toi qu'aucun thème n'est utilisé deux fois dans ta proposition ET qu'aucun thème ne ressemble aux enjeux déjà proposés
-10. Chaque enjeu doit avoir un ID unique (E1, E2, E3, E4, E5)
+10. Chaque enjeu doit avoir un ID unique (E1, E2, E3, ...)
 11. Chaque enjeu doit avoir un TITRE court et percutant (max 10 mots)
 12. Chaque enjeu doit avoir une DESCRIPTION détaillée en 3-5 lignes
 13. Chaque enjeu doit avoir des BESOINS_LIÉS : liste des titres EXACTS des besoins de la liste fournie qui se rattachent à cet enjeu
@@ -125,9 +141,7 @@ STRATÉGIE DE DIVERSIFICATION :
 - Cherche dans les TRANSCRIPTS et ATELIERS des aspects complètement différents
 - Si un domaine a déjà été exploré (ex: connaissances, qualité), passe à un autre domaine (ex: commercial, supply chain, R&D, formation, etc.)
 
-Itération actuelle : {current_iteration} / {max_iterations}
-
-🚀 OBJECTIF : Génère TOUJOURS 5 nouveaux enjeux avec des THÈMES VRAIMENT DIFFÉRENTS de tous les enjeux déjà proposés (validés ou rejetés). VÉRIFIE que chaque thème est UNIQUE et DISTINCT de TOUS les enjeux déjà proposés. Les enjeux validés sont conservés séparément, donc génère toujours 5 nouveaux enjeux à chaque itération.
+🚀 OBJECTIF : Génère de nouveaux enjeux avec des THÈMES VRAIMENT DIFFÉRENTS de tous les enjeux déjà proposés (validés ou rejetés). VÉRIFIE que chaque thème est UNIQUE et DISTINCT de TOUS les enjeux déjà proposés. Les enjeux validés sont conservés séparément, donc génère de nouveaux enjeux à chaque itération.
 """
 
 EVALUATE_MATURITY_PROMPT = """
@@ -142,11 +156,8 @@ DONNÉES ATELIERS (Ateliers de co-création) :
 BESOINS IDENTIFIÉS :
 {final_needs}
 
-QUICK WINS PROPOSÉS :
-{final_quick_wins}
-
-STRUCTURATION IA PROPOSÉE :
-{final_structuration_ia}
+CAS D'USAGE IA PROPOSÉS :
+{final_use_cases}
 
 INSTRUCTIONS D'ÉVALUATION :
 1. Analyse la culture numérique de l'entreprise (mentions d'outils digitaux, compétences IA, ouverture au changement)
@@ -164,7 +175,7 @@ Phrase résumant: [phrase décrivant la maturité IA avec détails sur les donn�
 """
 
 GENERATE_RECOMMENDATIONS_PROMPT = """
-Génère 4 recommandations clés personnalisées selon la maturité IA de l'entreprise :
+Génère des recommandations clés personnalisées selon la maturité IA de l'entreprise :
 
 MATURITÉ IA ÉVALUÉE :
 {maturite_ia}
@@ -172,18 +183,24 @@ MATURITÉ IA ÉVALUÉE :
 BESOINS IDENTIFIÉS :
 {final_needs}
 
-QUICK WINS PROPOSÉS :
-{final_quick_wins}
+CAS D'USAGE IA PROPOSÉS :
+{final_use_cases}
 
-STRUCTURATION IA PROPOSÉE :
-{final_structuration_ia}
+INSTRUCTIONS ET COMMENTAIRES DE L'UTILISATEUR :
+{recommendations_feedback}
+
+NOMBRE DE RECOMMANDATIONS :
+- Le nombre de recommandations à identifier peut être spécifié dans les informations supplémentaires fournies par l'utilisateur
+- Si l'utilisateur demande explicitement un nombre, respecte cette demande
+- Sinon, propose un nombre raisonnable (généralement entre 6 et 8 recommandations) en fonction de la richesse des données
 
 INSTRUCTIONS :
-1. Génère 4 recommandations personnalisées selon la maturité IA évaluée
+1. Génère des recommandations personnalisées selon la maturité IA évaluée (nombre défini par l'utilisateur ou raisonnable selon les données)
 2. Adapte les recommandations au niveau de maturité de l'entreprise
 3. Base-toi sur les besoins et cas d'usage identifiés
-4. Sois concret et actionnable
-5. Chaque recommandation doit avoir un ID unique (R1, R2, R3, R4) et un texte clair et actionnable
+4. Prends en compte les instructions et commentaires de l'utilisateur ci-dessus pour orienter la génération des recommandations
+5. Sois concret et actionnable
+6. Chaque recommandation doit avoir un ID unique (R1, R2, R3, ...) et un texte clair et actionnable
 
 Les recommandations seront automatiquement structurées selon le format attendu.
 """
@@ -207,9 +224,8 @@ COMMENTAIRES DE L'UTILISATEUR :
 {recommendations_feedback}
 
 RÉSUMÉ DE LA VALIDATION :
-- Recommandations validées : {validated_count} / 4 minimum requis
+- Recommandations validées : {validated_count}
 - Recommandations rejetées : {rejected_count}
-- Recommandations restantes à générer : {remaining_count}
 
 MATURITÉ IA ÉVALUÉE :
 {maturite_ia}
@@ -217,11 +233,8 @@ MATURITÉ IA ÉVALUÉE :
 BESOINS IDENTIFIÉS :
 {final_needs}
 
-QUICK WINS PROPOSÉS :
-{final_quick_wins}
-
-STRUCTURATION IA PROPOSÉE :
-{final_structuration_ia}
+CAS D'USAGE IA PROPOSÉS :
+{final_use_cases}
 
 INSTRUCTIONS CRITIQUES POUR LA NOUVELLE ITÉRATION :
 
@@ -234,16 +247,21 @@ INTERDICTIONS ABSOLUES :
    - NE PAS proposer "Centraliser les données clients" (même domaine)
    - PLUTÔT explorer d'autres domaines : formation, automatisation, analyse de données, innovation, etc.
 
+NOMBRE DE RECOMMANDATIONS :
+- Le nombre de recommandations à identifier peut être spécifié dans les informations supplémentaires fournies par l'utilisateur
+- Si l'utilisateur demande explicitement un nombre, respecte cette demande
+- Sinon, propose un nombre raisonnable (généralement entre 6 et 8 recommandations) en fonction de la richesse des données
+
 OBLIGATIONS :
 4. Explorer des DOMAINES COMPLÈTEMENT DIFFÉRENTS de ceux déjà proposés
 5. Identifier des RECOMMANDATIONS NON ENCORE COUVERTS dans les données
 6. Proposer des recommandations plus concrètes, actionnables et mieux adaptées à la maturité IA
-7. Générer EXACTEMENT {remaining_count} nouvelles recommandations DISTINCTES pour atteindre l'objectif de 4 validations
+7. Générer de nouvelles recommandations DISTINCTES (nombre défini par l'utilisateur ou raisonnable selon les données)
 8. Chaque recommandation doit être unique et spécifique au contexte de l'entreprise
 
 RÈGLES DE FORMAT :
 9. VÉRIFIE L'UNICITÉ DES THÈMES : Assure-toi qu'aucun thème n'est utilisé deux fois dans ta proposition ET qu'aucun thème ne ressemble aux recommandations déjà proposées
-10. Chaque recommandation doit avoir un ID unique (R1, R2, R3, R4) et un texte clair et actionnable
+10. Chaque recommandation doit avoir un ID unique (R1, R2, R3, ...) et un texte clair et actionnable
 11. Sois concret et actionnable
 12. Adapte les recommandations au niveau de maturité IA évalué
 13. Les recommandations seront automatiquement structurées selon le format attendu
@@ -253,9 +271,7 @@ STRATÉGIE DE DIVERSIFICATION :
 - Cherche dans les BESOINS, QUICK WINS et STRUCTURATION IA des aspects complètement différents
 - Si un domaine a déjà été exploré (ex: CRM, données), passe à un autre domaine (ex: formation, automatisation, innovation, etc.)
 
-Itération actuelle : {current_iteration} / {max_iterations}
-
-OBJECTIF : Génère {remaining_count} nouvelles recommandations avec des THÈMES VRAIMENT DIFFÉRENTS de toutes les recommandations déjà proposées (validées ou rejetées). VÉRIFIE que chaque thème est UNIQUE et DISTINCT de TOUTES les recommandations déjà proposées. Assure-toi d'avoir exactement 4 recommandations au total (validées + nouvelles).
+OBJECTIF : Génère de nouvelles recommandations avec des THÈMES VRAIMENT DIFFÉRENTS de toutes les recommandations déjà proposées (validées ou rejetées). VÉRIFIE que chaque thème est UNIQUE et DISTINCT de TOUTES les recommandations déjà proposées.
 """
 
 EXTRACT_ENJEUX_CITATIONS_PROMPT = """
@@ -340,12 +356,11 @@ RAPPORT WORD (texte extrait) :
 
 INSTRUCTIONS :
 1. Identifie la section "LES BESOINS IDENTIFIÉS" et extrait tous les besoins avec leurs citations
-2. Identifie la section "LES CAS D'USAGES IA PRIORITAIRES" et extrais :
-   - Les Quick Wins (famille "Quick Wins")
-   - Les Structuration IA (famille "Structuration IA")
-3. Pour chaque besoin, conserve : theme, quotes
-4. Pour chaque cas d'usage, conserve : titre, description
-5. Si le document a été modifié manuellement, adapte-toi à la structure actuelle
+2. Identifie la section "LES CAS D'USAGES IA PRIORITAIRES" et extrais tous les cas d'usage
+3. Pour chaque besoin, conserve : titre (theme), description
+4. Pour chaque cas d'usage, conserve : titre, description, et famille optionnelle
+5. La famille peut être présente comme préfixe dans la description sous la forme [Famille], extrais-la si présente
+6. Si le document a été modifié manuellement, adapte-toi à la structure actuelle
 
 Extrais les données au format structuré.
 """

@@ -63,8 +63,7 @@ class ReportGenerator:
         self,
         company_name: str,
         final_needs: List[Dict[str, Any]],
-        final_quick_wins: List[Dict[str, Any]],
-        final_structuration_ia: List[Dict[str, Any]],
+        final_use_cases: List[Dict[str, Any]],
         output_dir: str = None
     ) -> str:
         """
@@ -73,8 +72,7 @@ class ReportGenerator:
         Args:
             company_name: Nom de l'entreprise
             final_needs: Liste des besoins identifiés
-            final_quick_wins: Liste des cas d'usage Quick Wins
-            final_structuration_ia: Liste des cas d'usage Structuration IA
+            final_use_cases: Liste des cas d'usage IA
             output_dir: Dossier de sortie
             
         Returns:
@@ -104,7 +102,7 @@ class ReportGenerator:
         
         # Ajouter le contenu (utiliser le nom formaté)
         self._add_needs_section(doc, company_name_formatted, final_needs)
-        self._add_use_cases_section(doc, company_name_formatted, final_quick_wins, final_structuration_ia)
+        self._add_use_cases_section(doc, company_name_formatted, final_use_cases)
         
         # Générer le nom du fichier (utiliser le nom formaté)
         date_str = datetime.now().strftime("%d%m")
@@ -223,8 +221,7 @@ class ReportGenerator:
         self,
         doc: Document,
         company_name: str,
-        quick_wins: List[Dict[str, Any]],
-        structuration_ia: List[Dict[str, Any]]
+        use_cases: List[Dict[str, Any]]
     ):
         """
         Ajoute la section des cas d'usage IA.
@@ -232,8 +229,7 @@ class ReportGenerator:
         Args:
             doc: Document docx
             company_name: Nom de l'entreprise
-            quick_wins: Liste des Quick Wins
-            structuration_ia: Liste des cas Structuration IA
+            use_cases: Liste des cas d'usage IA
         """
         # Titre principal
         doc.add_heading("LES CAS D'USAGES IA PRIORITAIRES", level=2)
@@ -247,47 +243,26 @@ class ReportGenerator:
         )
         doc.add_paragraph(intro_text)
         
-        # Quick Wins
-        if quick_wins:
-            doc.add_heading('Famille "Quick Wins" – Automatisation & assistance intelligente', level=2)
-            for i, uc in enumerate(quick_wins, start=1):
+        # Lister tous les cas d'usage
+        if use_cases:
+            for i, uc in enumerate(use_cases, start=1):
                 title = uc.get('titre', 'N/A')
                 description = uc.get('description', 'N/A')
+                famille = uc.get('famille', '').strip() if uc.get('famille') else None
+                
+                # Ajouter la famille comme préfixe si elle existe
+                if famille:
+                    description = f"[{famille}] {description}"
 
-                # titre : on force style Normal pour éviter héritage
+                # Titre : on force style Normal pour éviter héritage
                 title_para = doc.add_paragraph(style='Normal')
                 run_title = title_para.add_run(f"{i}. {title}")
                 run_title.bold = True
 
-                # retirer toute numérotation automatique cachée
+                # Retirer toute numérotation automatique cachée
                 self._remove_numbering_from_paragraph(title_para)
 
-                # saut de ligne visuel (optionnel) -- ici on laisse une ligne entre titre et description
-                # description : run 1 en gras pour "Description : ", run 2 pour le texte
-                desc_para = doc.add_paragraph(style='Normal')
-                desc_para.paragraph_format.left_indent = Inches(0.4)
-                desc_para.paragraph_format.space_after = Pt(12)
-
-                run_desc_label = desc_para.add_run("Description : ")
-                run_desc_label.bold = True
-                run_desc = desc_para.add_run(description)
-        
-        # Structuration IA (même logique)
-        if structuration_ia:
-            doc.add_heading(
-                'Famille "Structuration IA à moyen et long terme" – Scalabilité & qualité prédictive',
-                level=2
-            )
-            for i, uc in enumerate(structuration_ia, start=1):
-                title = uc.get('titre', 'N/A')
-                description = uc.get('description', 'N/A')
-
-                title_para = doc.add_paragraph(style='Normal')
-                run_title = title_para.add_run(f"{i}. {title}")
-                run_title.bold = True
-
-                self._remove_numbering_from_paragraph(title_para)
-
+                # Description : run 1 en gras pour "Description : ", run 2 pour le texte
                 desc_para = doc.add_paragraph(style='Normal')
                 desc_para.paragraph_format.left_indent = Inches(0.4)
                 desc_para.paragraph_format.space_after = Pt(12)
@@ -344,24 +319,28 @@ class ReportGenerator:
         try:
             with open(use_cases_json_path, 'r', encoding='utf-8') as f:
                 use_cases_data = json.load(f)
-            final_quick_wins = use_cases_data.get('final_quick_wins', [])
-            final_structuration_ia = use_cases_data.get('final_structuration_ia', [])
-            print(f"✅ [REPORT] {len(final_quick_wins)} Quick Wins et {len(final_structuration_ia)} Structuration IA chargés")
+            # Tenter de charger final_use_cases (nouveau format)
+            final_use_cases = use_cases_data.get('final_use_cases', [])
+            # Si absent, essayer l'ancien format pour rétrocompatibilité
+            if not final_use_cases:
+                final_quick_wins = use_cases_data.get('final_quick_wins', [])
+                final_structuration_ia = use_cases_data.get('final_structuration_ia', [])
+                final_use_cases = final_quick_wins + final_structuration_ia
+                print(f"✅ [REPORT] {len(final_use_cases)} cas d'usage chargés (ancien format)")
+            else:
+                print(f"✅ [REPORT] {len(final_use_cases)} cas d'usage chargés")
         except FileNotFoundError:
             print(f"⚠️ [REPORT] Fichier des cas d'usage non trouvé : {use_cases_json_path}")
-            final_quick_wins = []
-            final_structuration_ia = []
+            final_use_cases = []
         except Exception as e:
             print(f"❌ [REPORT] Erreur lors du chargement des cas d'usage : {str(e)}")
-            final_quick_wins = []
-            final_structuration_ia = []
+            final_use_cases = []
         
         # Générer le rapport
         return self.generate_report(
             company_name=company_name,
             final_needs=final_needs,
-            final_quick_wins=final_quick_wins,
-            final_structuration_ia=final_structuration_ia,
+            final_use_cases=final_use_cases,
             output_dir=output_dir
         )
 

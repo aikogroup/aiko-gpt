@@ -25,9 +25,7 @@ logger = logging.getLogger(__name__)
 class UseCaseAnalysisAgent:
     """
     Agent responsable de l'identification des cas d'usage IA à partir des besoins validés.
-    Propose 2 familles de cas d'usage :
-    - Quick Wins (8) : automatisation rapide, ROI immédiat
-    - Structuration IA (10) : solutions avancées, ROI moyen/long terme
+    Génère une liste unifiée de cas d'usage sans distinction de catégorie.
     """
     
     def __init__(self, api_key: str, tracker: Optional[TokenTracker] = None):
@@ -50,13 +48,9 @@ class UseCaseAnalysisAgent:
         workshop_data: Dict = None,
         transcript_data: List[Dict] = None,
         web_search_data: Dict = None,
-        iteration: int = 1,
-        previous_use_cases: Optional[Dict] = None,
-        rejected_quick_wins: Optional[List[Dict]] = None,
-        rejected_structuration_ia: Optional[List[Dict]] = None,
+        previous_use_cases: Optional[List[Dict]] = None,
+        rejected_use_cases: Optional[List[Dict]] = None,
         user_feedback: str = "",
-        validated_quick_wins_count: int = 0,
-        validated_structuration_ia_count: int = 0,
         additional_context: str = ""
     ) -> Dict[str, Any]:
         """
@@ -67,19 +61,16 @@ class UseCaseAnalysisAgent:
             workshop_data: Données des workshops (contexte entreprise)
             transcript_data: Données des transcripts (contexte métier)
             web_search_data: Données web search (contexte marché)
-            iteration: Numéro de l'itération actuelle
             previous_use_cases: Cas d'usage proposés lors de l'itération précédente
-            rejected_quick_wins: Quick Wins rejetés par l'utilisateur
-            rejected_structuration_ia: Structuration IA rejetés par l'utilisateur
+            rejected_use_cases: Cas d'usage rejetés par l'utilisateur
             user_feedback: Commentaires de l'utilisateur
-            validated_quick_wins_count: Nombre de Quick Wins validés
-            validated_structuration_ia_count: Nombre de Structuration IA validés
+            additional_context: Contexte additionnel fourni par l'utilisateur pour guider la génération
             
         Returns:
-            Dict contenant les cas d'usage identifiés (quick_wins et structuration_ia)
+            Dict contenant les cas d'usage identifiés (use_cases)
         """
         try:
-            logger.info(f"Début de l'analyse des cas d'usage - Itération {iteration}")
+            logger.info(f"Début de l'analyse des cas d'usage")
             logger.info(f"Nombre de besoins validés en entrée : {len(validated_needs)}")
             
             # LOG DÉTAILLÉ : Afficher les besoins reçus
@@ -119,9 +110,9 @@ class UseCaseAnalysisAgent:
             print(f"  📈 Total: {len(validated_needs_str) + len(workshop_str) + len(transcript_str) + len(web_search_str)} caractères")
             print()
             
-            # Choix du prompt selon l'itération
-            if iteration == 1:
-                logger.info("Première itération - Génération initiale des cas d'usage")
+            # Choix du prompt selon qu'il y a des cas d'usage précédents
+            if previous_use_cases is None or len(previous_use_cases) == 0:
+                logger.info("Génération initiale des cas d'usage")
                 user_prompt = USE_CASE_ANALYSIS_USER_PROMPT.format(
                     validated_needs=validated_needs_str,
                     workshop_data=workshop_str,
@@ -130,18 +121,13 @@ class UseCaseAnalysisAgent:
                     additional_context=additional_context if additional_context else "Aucune information supplémentaire fournie."
                 )
             else:
-                logger.info(f"Itération {iteration} - Régénération avec feedback")
-                logger.info(f"Quick Wins validés : {validated_quick_wins_count} / 5")
-                logger.info(f"Structuration IA validés : {validated_structuration_ia_count} / 5")
+                logger.info(f"Régénération avec feedback")
                 
                 if user_feedback:
                     logger.info(f"Commentaires utilisateur : {user_feedback[:100]}...")
                 
-                rejected_qw_count = len(rejected_quick_wins or [])
-                rejected_sia_count = len(rejected_structuration_ia or [])
-                
-                logger.info(f"Quick Wins rejetés : {rejected_qw_count}")
-                logger.info(f"Structuration IA rejetés : {rejected_sia_count}")
+                rejected_count = len(rejected_use_cases or [])
+                logger.info(f"Cas d'usage rejetés : {rejected_count}")
                 
                 previous_use_cases_str = json.dumps(
                     self._safe_serialize(previous_use_cases), 
@@ -149,12 +135,8 @@ class UseCaseAnalysisAgent:
                     indent=2
                 )
                 
-                rejected_use_cases = {
-                    "rejected_quick_wins": rejected_quick_wins or [],
-                    "rejected_structuration_ia": rejected_structuration_ia or []
-                }
                 rejected_use_cases_str = json.dumps(
-                    self._safe_serialize(rejected_use_cases),
+                    self._safe_serialize(rejected_use_cases or []),
                     ensure_ascii=False,
                     indent=2
                 )
@@ -163,16 +145,10 @@ class UseCaseAnalysisAgent:
                     previous_use_cases=previous_use_cases_str,
                     rejected_use_cases=rejected_use_cases_str,
                     user_feedback=user_feedback if user_feedback else "Aucun commentaire spécifique",
-                    validated_quick_wins_count=validated_quick_wins_count,
-                    validated_structuration_ia_count=validated_structuration_ia_count,
-                    rejected_quick_wins_count=rejected_qw_count,
-                    rejected_structuration_ia_count=rejected_sia_count,
                     validated_needs=validated_needs_str,
                     workshop_data=workshop_str,
                     transcript_data=transcript_str,
                     web_search_data=web_search_str,
-                    current_iteration=iteration,
-                    max_iterations=3,
                     additional_context=additional_context if additional_context else "Aucune information supplémentaire fournie."
                 )
             
@@ -196,7 +172,7 @@ class UseCaseAnalysisAgent:
             
             # Tracking des tokens et coûts
             if self.tracker:
-                operation = f"analyze_use_cases_iteration_{iteration}"
+                operation = "analyze_use_cases"
                 self.tracker.track_response(
                     response,
                     agent_name="use_case_analysis",
@@ -209,13 +185,11 @@ class UseCaseAnalysisAgent:
             
             # Conversion en dictionnaire pour compatibilité avec le reste du code
             result = {
-                "quick_wins": [qw.model_dump() for qw in parsed_response.quick_wins],
-                "structuration_ia": [sia.model_dump() for sia in parsed_response.structuration_ia],
+                "use_cases": [uc.model_dump() for uc in parsed_response.use_cases],
                 "summary": parsed_response.summary.model_dump()
             }
             
-            logger.info(f"Cas d'usage générés : {len(result['quick_wins'])} Quick Wins, "
-                       f"{len(result['structuration_ia'])} Structuration IA")
+            logger.info(f"Cas d'usage générés : {len(result['use_cases'])} cas d'usage")
             
             return result
             
@@ -223,11 +197,8 @@ class UseCaseAnalysisAgent:
             logger.error(f"Erreur lors de l'analyse des cas d'usage : {str(e)}", exc_info=True)
             return {
                 "error": f"Erreur lors de l'analyse des cas d'usage: {str(e)}",
-                "quick_wins": [],
-                "structuration_ia": [],
+                "use_cases": [],
                 "summary": {
-                    "total_quick_wins": 0,
-                    "total_structuration_ia": 0,
                     "total_use_cases": 0,
                     "main_themes": []
                 }
@@ -254,31 +225,4 @@ class UseCaseAnalysisAgent:
         else:
             return obj
     
-    def check_validation_success(
-        self, 
-        validated_quick_wins_count: int, 
-        validated_structuration_ia_count: int
-    ) -> bool:
-        """
-        Vérifie si la validation est un succès.
-        Succès = au moins 5 Quick Wins validés ET au moins 5 Structuration IA validés.
-        
-        Args:
-            validated_quick_wins_count: Nombre de Quick Wins validés
-            validated_structuration_ia_count: Nombre de Structuration IA validés
-            
-        Returns:
-            True si succès, False sinon
-        """
-        success = (
-            validated_quick_wins_count >= 5 and 
-            validated_structuration_ia_count >= 5
-        )
-        
-        logger.info(f"Vérification du succès de validation : "
-                   f"Quick Wins={validated_quick_wins_count}/5, "
-                   f"Structuration IA={validated_structuration_ia_count}/5, "
-                   f"Succès={success}")
-        
-        return success
 

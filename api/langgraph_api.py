@@ -64,14 +64,18 @@ class ValidationFeedback(BaseModel):
     validated_needs: List[Dict[str, Any]]
     rejected_needs: List[Dict[str, Any]]
     user_feedback: str = ""
+    user_action: str = "continue_needs"  # "continue_needs" ou "continue_to_use_cases"
+
+class PreUseCaseContextInput(BaseModel):
+    """Input pour le contexte additionnel avant génération des use cases"""
+    use_case_additional_context: str = ""
 
 class UseCaseValidationFeedback(BaseModel):
     """Feedback de validation des use cases"""
-    validated_quick_wins: List[Dict[str, Any]]
-    validated_structuration_ia: List[Dict[str, Any]]
-    rejected_quick_wins: List[Dict[str, Any]]
-    rejected_structuration_ia: List[Dict[str, Any]]
+    validated_use_cases: List[Dict[str, Any]]
+    rejected_use_cases: List[Dict[str, Any]]
     user_feedback: str = ""
+    use_case_user_action: str = "finalize_use_cases"  # "continue_use_cases" ou "finalize_use_cases"
 
 class ExecutiveSummaryInput(BaseModel):
     """Input pour démarrer un workflow Executive Summary"""
@@ -259,10 +263,11 @@ async def create_run(thread_id: str, workflow_input: WorkflowInput):
         if thread_id not in workflows:
             # Nouveau workflow
             api_key = os.getenv("OPENAI_API_KEY")
+            # Vérifier si DEV_MODE est activé
+            dev_mode = os.getenv("DEV_MODE", "0") == "1"
             workflow = NeedAnalysisWorkflow(
                 api_key=api_key,
-                dev_mode=False,
-                debug_mode=False  # Mode production
+                dev_mode=dev_mode  # Activer dev_mode si DEV_MODE=1
             )
             workflows[thread_id] = {
                 "workflow": workflow,
@@ -330,6 +335,7 @@ async def create_run(thread_id: str, workflow_input: WorkflowInput):
 async def get_state(thread_id: str):
     """
     Récupère l'état actuel du workflow.
+    Utilise le snapshot LangGraph pour déterminer le vrai prochain nœud.
     
     Returns:
         {
@@ -343,30 +349,51 @@ async def get_state(thread_id: str):
         raise HTTPException(status_code=404, detail="Thread non trouvé")
     
     workflow_data = workflows[thread_id]
-    state = workflow_data.get("state", {})
+    workflow = workflow_data["workflow"]
     
-    # Déterminer le prochain nœud en fonction de l'état
-    next_node = []
-    if workflow_data["status"] == "paused":
-        # Vérifier où le workflow est en pause
-        if state.get("use_case_workflow_paused"):
-            # Priorité à use_case car c'est la phase 2
-            next_node = ("validate_use_cases",)  # Tuple pour être cohérent avec LangGraph
-        elif state.get("workflow_paused"):
-            next_node = ("human_validation",)
-        elif state.get("identified_needs"):
-            # Si on a des besoins identifiés mais pas encore de flag workflow_paused
-            next_node = ("human_validation",)
-        elif state.get("proposed_quick_wins") or state.get("proposed_structuration_ia"):
-            # Si on a des use cases proposés
-            next_node = ("validate_use_cases",)
+    # Récupérer l'état actuel depuis le checkpointer LangGraph
+    config = {"configurable": {"thread_id": thread_id}}
+    snapshot = workflow.graph.get_state(config)
     
-    return {
-        "thread_id": thread_id,
-        "status": workflow_data["status"],
-        "values": state,
-        "next": next_node
-    }
+    if snapshot and snapshot.values:
+        state = snapshot.values
+        workflow_data["state"] = state
+        
+        # Déterminer le prochain nœud depuis le snapshot LangGraph
+        next_nodes = []
+        if snapshot.next:
+            if isinstance(snapshot.next, (list, tuple)):
+                next_nodes = list(snapshot.next)
+            else:
+                next_nodes = [snapshot.next]
+        
+        # Mettre à jour le statut en fonction du prochain nœud
+        if "human_validation" in next_nodes:
+            workflow_data["status"] = "paused"
+        elif "pre_use_case_interrupt" in next_nodes:
+            workflow_data["status"] = "paused"
+        elif "validate_use_cases" in next_nodes:
+            workflow_data["status"] = "paused"
+        elif len(next_nodes) == 0:
+            workflow_data["status"] = "completed"
+        else:
+            workflow_data["status"] = "running"
+        
+        return {
+            "thread_id": thread_id,
+            "status": workflow_data["status"],
+            "values": state,
+            "next": tuple(next_nodes) if next_nodes else []
+        }
+    else:
+        # Fallback si pas de snapshot
+        state = workflow_data.get("state", {})
+        return {
+            "thread_id": thread_id,
+            "status": workflow_data.get("status", "paused"),
+            "values": state,
+            "next": []
+        }
 
 
 @app.post("/threads/{thread_id}/validation")
@@ -394,18 +421,88 @@ async def send_validation(thread_id: str, feedback: ValidationFeedback):
         print(f"\n📝 [API] Réception du feedback de validation pour thread {thread_id}")
         print(f"✅ Validés: {len(feedback.validated_needs)}")
         print(f"❌ Rejetés: {len(feedback.rejected_needs)}")
+        print(f"🎯 Action utilisateur: {feedback.user_action}")
         
         # Reprendre le workflow avec le feedback
         result = workflow.resume_workflow_with_feedback(
             validated_needs=feedback.validated_needs,
             rejected_needs=feedback.rejected_needs,
             user_feedback=feedback.user_feedback,
+            user_action=feedback.user_action,
             thread_id=thread_id
         )
         
         # Mettre à jour l'état
         workflow_data["state"] = result
-        workflow_data["status"] = "completed" if result.get("success") else "paused"
+        
+        # Récupérer le snapshot LangGraph pour déterminer le vrai statut
+        config = {"configurable": {"thread_id": thread_id}}
+        snapshot = workflow.graph.get_state(config)
+        
+        if snapshot and snapshot.next:
+            next_nodes = list(snapshot.next) if isinstance(snapshot.next, (list, tuple)) else [snapshot.next]
+            
+            # Mettre à jour le statut en fonction du prochain nœud réel
+            if "pre_use_case_interrupt" in next_nodes:
+                workflow_data["status"] = "paused"  # Va s'arrêter à pre_use_case_interrupt
+            elif "human_validation" in next_nodes:
+                workflow_data["status"] = "paused"  # Va s'arrêter à human_validation
+            elif len(next_nodes) == 0:
+                workflow_data["status"] = "completed"
+            else:
+                workflow_data["status"] = "running"
+        else:
+            # Fallback : déterminer le statut selon l'action utilisateur
+            if feedback.user_action == "continue_to_use_cases":
+                workflow_data["status"] = "paused"  # Va s'arrêter à pre_use_case_interrupt
+            else:
+                workflow_data["status"] = "paused"  # Va continuer avec analyze_needs
+        
+        return {
+            "status": "resumed",
+            "thread_id": thread_id,
+            "workflow_status": workflow_data["status"]
+        }
+    
+    except Exception as e:
+        print(f"❌ [API] Erreur: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Erreur reprise workflow: {str(e)}")
+
+
+@app.post("/threads/{thread_id}/pre-use-case-context")
+async def send_pre_use_case_context(thread_id: str, context_input: PreUseCaseContextInput):
+    """
+    Envoie le contexte additionnel avant la génération des use cases et reprend le workflow.
+    
+    Args:
+        thread_id: ID du thread
+        context_input: Contexte additionnel
+    
+    Returns:
+        {
+            "status": "resumed",
+            "thread_id": "uuid"
+        }
+    """
+    if thread_id not in workflows:
+        raise HTTPException(status_code=404, detail="Thread non trouvé")
+    
+    try:
+        workflow_data = workflows[thread_id]
+        workflow = workflow_data["workflow"]
+        
+        print(f"\n📝 [API] Réception du contexte additionnel pour thread {thread_id}")
+        print(f"💡 Contexte: {len(context_input.use_case_additional_context)} caractères")
+        
+        # Reprendre le workflow avec le contexte
+        result = workflow.resume_pre_use_case_interrupt_with_context(
+            use_case_additional_context=context_input.use_case_additional_context,
+            thread_id=thread_id
+        )
+        
+        # Mettre à jour l'état
+        workflow_data["state"] = result
+        workflow_data["status"] = "running"  # Le workflow va générer les use cases
         
         return {
             "status": "resumed",
@@ -441,34 +538,33 @@ async def send_use_case_validation(thread_id: str, feedback: UseCaseValidationFe
         workflow = workflow_data["workflow"]
         
         print(f"\n📝 [API] Réception du feedback use cases pour thread {thread_id}")
-        print(f"✅ Quick Wins validés: {len(feedback.validated_quick_wins)}")
-        print(f"✅ Structuration IA validés: {len(feedback.validated_structuration_ia)}")
+        print(f"✅ Cas d'usage validés: {len(feedback.validated_use_cases)}")
+        print(f"🎯 Action: {feedback.use_case_user_action}")
         
         # Reprendre le workflow avec le feedback
         result = workflow.resume_use_case_workflow_with_feedback(
-            validated_quick_wins=feedback.validated_quick_wins,
-            validated_structuration_ia=feedback.validated_structuration_ia,
-            rejected_quick_wins=feedback.rejected_quick_wins,
-            rejected_structuration_ia=feedback.rejected_structuration_ia,
+            validated_use_cases=feedback.validated_use_cases,
+            rejected_use_cases=feedback.rejected_use_cases,
             user_feedback=feedback.user_feedback,
+            use_case_user_action=feedback.use_case_user_action,
             thread_id=thread_id
         )
         
         # Mettre à jour l'état
         workflow_data["state"] = result
-        # Mettre à jour le statut en fonction du résultat
-        if result.get("success"):
+        
+        # Déterminer le statut selon l'action utilisateur
+        if feedback.use_case_user_action == "finalize_use_cases":
             workflow_data["status"] = "completed"
-        elif result.get("use_case_workflow_paused"):
-            workflow_data["status"] = "paused"
         else:
-            workflow_data["status"] = "error"
+            workflow_data["status"] = "paused"  # Va continuer avec analyze_use_cases
         
         return {
             "status": workflow_data["status"],
             "thread_id": thread_id,
             "final_results": result,
-            "success": result.get("success", False)
+            "success": result.get("success", False),
+            "workflow_status": workflow_data["status"]
         }
     
     except Exception as e:
@@ -572,8 +668,7 @@ async def create_executive_run(thread_id: str, workflow_input: ExecutiveSummaryI
             api_key = os.getenv("OPENAI_API_KEY")
             workflow = ExecutiveSummaryWorkflow(
                 api_key=api_key,
-                dev_mode=False,
-                debug_mode=False
+                dev_mode=False
             )
             executive_workflows[thread_id] = {
                 "workflow": workflow,
@@ -608,9 +703,9 @@ async def create_executive_run(thread_id: str, workflow_input: ExecutiveSummaryI
                 workflow_data["status"] = "waiting_validation_recommendations"
             else:
                 workflow_data["status"] = "paused"
-        elif result.get("challenges_success") and result.get("recommendations_success"):
-            workflow_data["status"] = "completed"
         else:
+            # Par défaut, le workflow est en cours d'exécution
+            # (le statut sera mis à jour par get_executive_status en fonction de snapshot.next)
             workflow_data["status"] = "running"
         
         return {
@@ -648,39 +743,35 @@ async def get_executive_status(thread_id: str):
             else:
                 next_nodes = [snapshot.next]
         
-        # Si le prochain nœud est une validation, mettre à jour les flags
-        if "human_validation_enjeux" in next_nodes:
+        # PRIORITÉ 1: Si pas de nœuds suivants, le workflow est terminé
+        if not next_nodes or len(next_nodes) == 0:
+            workflow_data["status"] = "completed"
+            state["workflow_paused"] = False
+            state["validation_type"] = ""
+            workflow.graph.update_state(config, state)
+            workflow_data["state"] = state
+        # PRIORITÉ 2: Si le prochain nœud est une validation ou un interrupt, mettre à jour les flags
+        elif "human_validation_enjeux" in next_nodes:
             state["workflow_paused"] = True
             state["validation_type"] = "challenges"
             workflow.graph.update_state(config, state)
             workflow_data["state"] = state
             workflow_data["status"] = "waiting_validation_challenges"
+        elif "pre_recommendations_interrupt" in next_nodes:
+            state["workflow_paused"] = True
+            state["validation_type"] = "pre_recommendations"
+            workflow.graph.update_state(config, state)
+            workflow_data["state"] = state
+            workflow_data["status"] = "waiting_pre_recommendations_context"
         elif "human_validation_recommendations" in next_nodes:
             state["workflow_paused"] = True
             state["validation_type"] = "recommendations"
             workflow.graph.update_state(config, state)
             workflow_data["state"] = state
             workflow_data["status"] = "waiting_validation_recommendations"
-        # Sinon, déterminer le statut en fonction de l'état actuel
-        elif state.get("workflow_paused"):
-            validation_type = state.get("validation_type", "")
-            if validation_type == "challenges":
-                workflow_data["status"] = "waiting_validation_challenges"
-            elif validation_type == "recommendations":
-                workflow_data["status"] = "waiting_validation_recommendations"
-            else:
-                workflow_data["status"] = "paused"
-        elif state.get("challenges_success") and state.get("recommendations_success"):
-            workflow_data["status"] = "completed"
-            # S'assurer que l'état est bien stocké dans workflow_data
-            workflow_data["state"] = state
-        elif next_nodes:
-            # Il y a des nœuds suivants, le workflow est en cours
-            workflow_data["status"] = "running"
+        # PRIORITÉ 3: Il y a des nœuds suivants, le workflow est en cours
         else:
-            # Pas de nœuds suivants et pas de pause, donc terminé
-            workflow_data["status"] = "completed"
-            # S'assurer que l'état est bien stocké dans workflow_data
+            workflow_data["status"] = "running"
             workflow_data["state"] = state
     
     return {"status": workflow_data["status"]}
@@ -735,6 +826,110 @@ async def get_executive_state(thread_id: str):
         "validation_type": state.get("validation_type", "")
     }
 
+
+@app.post("/executive-summary/threads/{thread_id}/continue")
+async def continue_executive(thread_id: str, context_data: dict):
+    """Continue le workflow après l'interrupt pre_recommendations"""
+    import time
+    api_start_time = time.time()
+    print(f"⏱️ [TIMING] continue_executive - DÉBUT ({time.strftime('%H:%M:%S.%f', time.localtime(api_start_time))[:-3]})")
+    
+    if thread_id not in executive_workflows:
+        raise HTTPException(status_code=404, detail="Thread non trouvé")
+    
+    try:
+        workflow_data = executive_workflows[thread_id]
+        workflow = workflow_data["workflow"]
+        config = {"configurable": {"thread_id": thread_id}}
+        
+        # Récupérer le feedback depuis le body de la requête
+        recommendations_feedback = context_data.get("recommendations_feedback", "")
+        
+        print(f"📝 [API] Feedback reçu: {recommendations_feedback[:100]}...")
+        
+        # Mettre à jour l'état avec le feedback
+        get_state_start = time.time()
+        snapshot = workflow.graph.get_state(config)
+        get_state_duration = time.time() - get_state_start
+        print(f"⏱️ [TIMING] get_state: {get_state_duration:.3f}s")
+        
+        if snapshot and snapshot.values:
+            state = snapshot.values
+            # Accumuler le feedback (ne pas écraser si déjà présent)
+            existing_feedback = state.get("recommendations_feedback", "")
+            if recommendations_feedback:
+                if existing_feedback:
+                    state["recommendations_feedback"] = f"{existing_feedback}\n\n{recommendations_feedback}"
+                else:
+                    state["recommendations_feedback"] = recommendations_feedback
+            state["workflow_paused"] = False
+            state["validation_type"] = ""
+            
+            update_state_start = time.time()
+            workflow.graph.update_state(config, state)
+            update_state_duration = time.time() - update_state_start
+            print(f"⏱️ [TIMING] update_state: {update_state_duration:.3f}s")
+        
+        # Reprendre le workflow
+        stream_start = time.time()
+        final_state = None
+        for chunk in workflow.graph.stream(None, config):
+            print(f"📊 [EXECUTIVE] Chunk reçu après continue: {list(chunk.keys())}")
+            for node_name, node_state in chunk.items():
+                print(f"  • Nœud '{node_name}' exécuté")
+                final_state = node_state
+        
+        stream_duration = time.time() - stream_start
+        print(f"⏱️ [TIMING] workflow.graph.stream: {stream_duration:.3f}s")
+        
+        # Récupérer l'état final
+        get_state_after_start = time.time()
+        snapshot = workflow.graph.get_state(config)
+        get_state_after_duration = time.time() - get_state_after_start
+        print(f"⏱️ [TIMING] get_state (après stream): {get_state_after_duration:.3f}s")
+        
+        if snapshot and snapshot.values:
+            state = snapshot.values
+            workflow_data["state"] = state
+            
+            # Vérifier si on est à un interrupt
+            is_at_interrupt = False
+            if snapshot.next:
+                next_nodes = list(snapshot.next) if hasattr(snapshot.next, '__iter__') else [snapshot.next]
+                if "human_validation_recommendations" in next_nodes:
+                    is_at_interrupt = True
+                    state["workflow_paused"] = True
+                    state["validation_type"] = "recommendations"
+                    workflow.graph.update_state(config, state)
+                    print(f"🛑 [API] Workflow arrêté à l'interrupt: {next_nodes}")
+            
+            # Mettre à jour le statut
+            if state.get("workflow_paused") or is_at_interrupt:
+                validation_type = state.get("validation_type", "")
+                if validation_type == "recommendations":
+                    workflow_data["status"] = "waiting_validation_recommendations"
+                else:
+                    workflow_data["status"] = "paused"
+            elif not snapshot.next:
+                workflow_data["status"] = "completed"
+            else:
+                workflow_data["status"] = "running"
+        elif final_state:
+            workflow_data["state"] = final_state
+            workflow_data["status"] = "running"
+        
+        total_duration = time.time() - api_start_time
+        print(f"⏱️ [TIMING] continue_executive (total): {total_duration:.3f}s")
+        
+        return {
+            "status": "success",
+            "workflow_status": workflow_data["status"],
+            "message": "Workflow repris avec succès"
+        }
+        
+    except Exception as e:
+        print(f"❌ [API] Erreur lors de la reprise: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Erreur lors de la reprise: {str(e)}")
 
 @app.post("/executive-summary/threads/{thread_id}/validate")
 async def validate_executive(thread_id: str, feedback: ExecutiveValidationFeedback):
@@ -794,11 +989,13 @@ async def validate_executive(thread_id: str, feedback: ExecutiveValidationFeedba
         is_at_interrupt = False
         if snapshot.next:
             next_nodes = list(snapshot.next) if hasattr(snapshot.next, '__iter__') else [snapshot.next]
-            if "human_validation_enjeux" in next_nodes or "human_validation_recommendations" in next_nodes:
+            if "human_validation_enjeux" in next_nodes or "pre_recommendations_interrupt" in next_nodes or "human_validation_recommendations" in next_nodes:
                 is_at_interrupt = True
                 state["workflow_paused"] = True
                 if "human_validation_enjeux" in next_nodes:
                     state["validation_type"] = "challenges"
+                elif "pre_recommendations_interrupt" in next_nodes:
+                    state["validation_type"] = "pre_recommendations"
                 elif "human_validation_recommendations" in next_nodes:
                     state["validation_type"] = "recommendations"
                 # Mettre à jour l'état dans le checkpointer
@@ -806,7 +1003,14 @@ async def validate_executive(thread_id: str, feedback: ExecutiveValidationFeedba
                 print(f"🛑 [API] Workflow arrêté à l'interrupt: {next_nodes}")
         
         # Mettre à jour le statut
-        if state.get("workflow_paused") or is_at_interrupt:
+        # PRIORITÉ 1: Si pas de nœuds suivants (snapshot.next est vide), le workflow est terminé
+        if not snapshot.next or (hasattr(snapshot.next, '__len__') and len(snapshot.next) == 0):
+            workflow_data["status"] = "completed"
+            state["workflow_paused"] = False
+            state["validation_type"] = ""
+            workflow.graph.update_state(config, state)
+        # PRIORITÉ 2: Vérifier si on est à l'interrupt ou en pause
+        elif state.get("workflow_paused") or is_at_interrupt:
             validation_type = state.get("validation_type", "")
             if validation_type == "challenges":
                 workflow_data["status"] = "waiting_validation_challenges"
@@ -814,8 +1018,6 @@ async def validate_executive(thread_id: str, feedback: ExecutiveValidationFeedba
                 workflow_data["status"] = "waiting_validation_recommendations"
             else:
                 workflow_data["status"] = "paused"
-        elif state.get("challenges_success") and state.get("recommendations_success"):
-            workflow_data["status"] = "completed"
         else:
             workflow_data["status"] = "running"
     elif final_state:

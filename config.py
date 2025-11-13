@@ -68,3 +68,54 @@ def get_logo_path() -> Path:
     """
     return ASSETS_DIR / "aiko_logo.png"
 
+def get_white_logo_path() -> Path:
+    """
+    Retourne le chemin vers le logo blanc Aiko.
+    
+    Returns:
+        Path: Chemin vers assets/aiko_logo_white.png
+    """
+    return ASSETS_DIR / "aiko_logo_white.png"
+
+
+def is_agent_dev_mode(agent_name: str) -> bool:
+    """
+    Vérifie si un agent spécifique est en mode dev.
+    
+    Args:
+        agent_name: Nom de l'agent (workshop, transcript, web_search, need_analysis, use_case_analysis)
+    
+    Returns:
+        bool: True si l'agent est en mode dev, False sinon
+    """
+    env_var_name = f"{agent_name.upper()}_DEV_MODE"
+    value = os.getenv(env_var_name, "0").lower()
+    return value in ("1", "true", "yes")
+
+
+def get_mock_data_path() -> Path:
+    """
+    Retourne le chemin vers le fichier de données mockées.
+    
+    Returns:
+        Path: Chemin vers config/mock_data.json
+    """
+    return CONFIG_DIR / "mock_data.json"
+
+
+def load_mock_data() -> dict:
+    """
+    Charge les données mockées depuis le fichier JSON.
+    
+    Returns:
+        dict: Dictionnaire contenant les données mockées pour tous les agents
+    """
+    import json
+    mock_data_path = get_mock_data_path()
+    
+    if not mock_data_path.exists():
+        raise FileNotFoundError(f"Fichier de données mockées non trouvé: {mock_data_path}")
+    
+    with open(mock_data_path, 'r', encoding='utf-8') as f:
+        return json.load(f)
+

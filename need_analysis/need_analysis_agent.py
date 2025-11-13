@@ -103,7 +103,6 @@ class NeedAnalysisAgent:
                 # Itération suivante - régénération avec feedback
                 previous_needs_str = json.dumps(safe_serialize(previous_needs), ensure_ascii=False, indent=2)
                 rejected_needs_str = json.dumps(safe_serialize(rejected_needs or []), ensure_ascii=False, indent=2)
-                remaining_needs_count = max(0, 10 - validated_needs_count)
                 rejected_needs_count = len(rejected_needs or [])
                 
                 user_prompt = NEED_REGENERATION_PROMPT.format(
@@ -115,7 +114,6 @@ class NeedAnalysisAgent:
                     workshop_data=workshop_str,
                     transcript_data=transcript_str,
                     web_search_data=web_search_str,
-                    remaining_needs_count=remaining_needs_count,
                     current_iteration=iteration,
                     max_iterations=3,
                     additional_context=additional_context if additional_context else "Aucune information supplémentaire fournie."
