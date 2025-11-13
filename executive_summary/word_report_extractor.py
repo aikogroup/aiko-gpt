@@ -70,7 +70,7 @@ class WordReportExtractor:
         basés sur la structure du document :
         - Besoins : lignes commençant par 🔹, avec citations entre « et »
         - Cas d'usage : section "LES CAS D'USAGES IA PRIORITAIRES"
-          La famille (si présente) est extraite du préfixe [Famille] dans la description
+          La famille (si présente) est extraite des titres de famille (style FamilyHeading)
         
         Si l'extraction échoue ou ne trouve rien, on utilise l'extraction LLM.
         
@@ -90,6 +90,7 @@ class WordReportExtractor:
             current_need = None
             current_section = "needs"  # "needs" ou "use_cases"
             current_use_case = None
+            current_family = None  # Famille courante pour les use cases
             
             for para in doc.paragraphs:
                 text = para.text.strip()
@@ -100,6 +101,7 @@ class WordReportExtractor:
                 # --- Détection de section ---
                 if "LES CAS D'USAGES IA PRIORITAIRES" in text.upper() or "CAS D'USAGES" in text.upper():
                     current_section = "use_cases"
+                    current_family = None  # Réinitialiser la famille au début de la section
                     logger.debug("Section 'Cas d'usage' détectée")
                     continue
                 
@@ -122,6 +124,28 @@ class WordReportExtractor:
                     print(f"current_need dans _try_extract_json : {current_need}")
                 # --- Extraction des cas d'usage ---
                 elif current_section == "use_cases":
+                    # Détection d'un titre de famille
+                    # Vérifier si c'est un titre de famille (style FamilyHeading ou format spécifique)
+                    is_family_heading = False
+                    try:
+                        # Vérifier le style du paragraphe
+                        style_name = para.style.name if para.style else None
+                        if style_name == "FamilyHeading":
+                            is_family_heading = True
+                    except:
+                        pass
+                    
+                    # Vérifier aussi si c'est "Autres cas d'usage" (titre de section sans famille)
+                    if text == "Autres cas d'usage":
+                        current_family = None
+                        continue
+                    
+                    # Si c'est un titre de famille, mettre à jour current_family
+                    if is_family_heading:
+                        current_family = text.strip()
+                        logger.debug(f"Titre de famille détecté: {current_family}")
+                        continue
+                    
                     # Nouveau cas d'usage (numéro suivi de titre)
                     if re.match(r"^\d+[\.\)]\s*", text):
                         # Sauvegarder le cas d'usage précédent
@@ -133,7 +157,7 @@ class WordReportExtractor:
                         current_use_case = {
                             "titre": title,
                             "description": "",
-                            "famille": None
+                            "famille": current_family  # Associer la famille courante
                         }
                     # Description du cas d'usage
                     elif (text.startswith("Description :") or text.startswith("Description:")) and current_use_case:
@@ -168,18 +192,12 @@ class WordReportExtractor:
                 })
             print(f"Final needs de l'extractor : {final_needs}")
             
-            # Convertir les cas d'usage et extraire la famille depuis le préfixe [Famille]
+            # Convertir les cas d'usage (la famille est déjà extraite depuis les titres)
             final_use_cases = []
             for uc in use_cases:
                 titre = uc.get("titre", "")
                 description = uc.get("description", "")
-                
-                # Extraire la famille depuis le préfixe [Famille] dans la description
-                famille = None
-                match = re.match(r"^\[([^\]]+)\]\s*(.*)", description)
-                if match:
-                    famille = match.group(1).strip()
-                    description = match.group(2).strip()
+                famille = uc.get("famille")  # La famille a déjà été extraite depuis le titre
                 
                 final_use_cases.append({
                     "titre": titre,

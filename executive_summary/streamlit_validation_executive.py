@@ -297,8 +297,8 @@ class StreamlitExecutiveValidation:
     
     def display_recommendations_for_validation(
         self,
-        recommendations: List[str],
-        validated_recommendations: List[str] = None,
+        recommendations: List[Dict[str, Any]],
+        validated_recommendations: List[Dict[str, Any]] = None,
         key_suffix: str = None
     ) -> Optional[Dict[str, Any]]:
         """
@@ -306,8 +306,8 @@ class StreamlitExecutiveValidation:
         VERSION REFACTORISÉE: Suit le même pattern que display_challenges_for_validation avec checkboxes.
         
         Args:
-            recommendations: Liste des 4 recommandations générées
-            validated_recommendations: Liste des recommandations déjà validées (optionnel)
+            recommendations: Liste des recommandations générées (format dict avec id, titre, description)
+            validated_recommendations: Liste des recommandations déjà validées (optionnel, format dict)
             key_suffix: Suffixe personnalisé pour les clés (ex: iteration_count)
             
         Returns:
@@ -339,17 +339,37 @@ class StreamlitExecutiveValidation:
             with col1:
                 recommendation = recommendations[i]
                 
-                # Initialiser la valeur dans session_state si nécessaire
-                rec_key = f"recommendation_text_{i}_{key_suffix}"
-                if rec_key not in st.session_state:
-                    st.session_state[rec_key] = recommendation
+                # Gérer les deux formats : dict (nouveau) ou string (ancien)
+                if isinstance(recommendation, dict):
+                    original_titre = recommendation.get("titre", "")
+                    original_description = recommendation.get("description", "")
+                else:
+                    # Ancien format string - convertir
+                    original_titre = str(recommendation)
+                    original_description = ""
                 
-                # Champ éditable pour la recommandation
-                modified_recommendation = st.text_area(
-                    f"**Recommandation {i+1}**",
-                    key=rec_key,
+                # Initialiser les valeurs dans session_state si nécessaire
+                titre_key = f"recommendation_titre_{i}_{key_suffix}"
+                desc_key = f"recommendation_desc_{i}_{key_suffix}"
+                
+                if titre_key not in st.session_state:
+                    st.session_state[titre_key] = original_titre
+                if desc_key not in st.session_state:
+                    st.session_state[desc_key] = original_description
+                
+                # Champ éditable pour le titre
+                modified_titre = st.text_input(
+                    f"**Recommandation {i+1} - Titre**",
+                    key=titre_key,
+                    label_visibility="visible"
+                )
+                
+                # Champ éditable pour la description
+                modified_description = st.text_area(
+                    "**Description**",
+                    key=desc_key,
                     label_visibility="visible",
-                    height=100
+                    height=80
                 )
                 
                 # Checkbox pour sélectionner cette recommandation
@@ -364,17 +384,37 @@ class StreamlitExecutiveValidation:
                 with col2:
                     recommendation = recommendations[i + 1]
                     
-                    # Initialiser la valeur dans session_state si nécessaire
-                    rec_key = f"recommendation_text_{i+1}_{key_suffix}"
-                    if rec_key not in st.session_state:
-                        st.session_state[rec_key] = recommendation
+                    # Gérer les deux formats : dict (nouveau) ou string (ancien)
+                    if isinstance(recommendation, dict):
+                        original_titre = recommendation.get("titre", "")
+                        original_description = recommendation.get("description", "")
+                    else:
+                        # Ancien format string - convertir
+                        original_titre = str(recommendation)
+                        original_description = ""
                     
-                    # Champ éditable pour la recommandation
-                    modified_recommendation = st.text_area(
-                        f"**Recommandation {i+2}**",
-                        key=rec_key,
+                    # Initialiser les valeurs dans session_state si nécessaire
+                    titre_key = f"recommendation_titre_{i+1}_{key_suffix}"
+                    desc_key = f"recommendation_desc_{i+1}_{key_suffix}"
+                    
+                    if titre_key not in st.session_state:
+                        st.session_state[titre_key] = original_titre
+                    if desc_key not in st.session_state:
+                        st.session_state[desc_key] = original_description
+                    
+                    # Champ éditable pour le titre
+                    modified_titre = st.text_input(
+                        f"**Recommandation {i+2} - Titre**",
+                        key=titre_key,
+                        label_visibility="visible"
+                    )
+                    
+                    # Champ éditable pour la description
+                    modified_description = st.text_area(
+                        "**Description**",
+                        key=desc_key,
                         label_visibility="visible",
-                        height=100
+                        height=80
                     )
                     
                     # Checkbox pour sélectionner cette recommandation
@@ -470,7 +510,7 @@ class StreamlitExecutiveValidation:
     
     def _process_recommendations_validation(
         self, 
-        recommendations: List[str], 
+        recommendations: List[Dict[str, Any]], 
         selected_numbers: List[int], 
         comments: str, 
         validated_count: int, 
@@ -480,7 +520,7 @@ class StreamlitExecutiveValidation:
         Traite la validation de l'utilisateur pour les recommandations.
         
         Args:
-            recommendations: Liste des recommandations identifiées
+            recommendations: Liste des recommandations identifiées (format dict avec id, titre, description)
             selected_numbers: Numéros des recommandations sélectionnées
             comments: Commentaires de l'utilisateur
             validated_count: Nombre de recommandations déjà validées
@@ -500,16 +540,46 @@ class StreamlitExecutiveValidation:
             idx = selected_num - 1  # Convertir en index 0-based
             original_recommendation = recommendations[idx]
             
-            # Lire la valeur modifiée depuis session_state
-            rec_key = f"recommendation_text_{idx}_{key_suffix}"
-            modified_recommendation = st.session_state.get(rec_key, original_recommendation)
+            # Lire les valeurs modifiées depuis session_state
+            titre_key = f"recommendation_titre_{idx}_{key_suffix}"
+            desc_key = f"recommendation_desc_{idx}_{key_suffix}"
+            
+            # Gérer les deux formats : dict (nouveau) ou string (ancien)
+            if isinstance(original_recommendation, dict):
+                original_id = original_recommendation.get("id", "")
+                original_titre = original_recommendation.get("titre", "")
+                original_description = original_recommendation.get("description", "")
+            else:
+                # Ancien format string - convertir
+                original_id = ""
+                original_titre = str(original_recommendation)
+                original_description = ""
+            
+            modified_titre = st.session_state.get(titre_key, original_titre)
+            modified_description = st.session_state.get(desc_key, original_description)
             
             # Créer la recommandation modifiée
-            validated_new.append(modified_recommendation.strip() if modified_recommendation.strip() else original_recommendation)
+            validated_new.append({
+                "id": original_id,
+                "titre": modified_titre.strip() if modified_titre.strip() else original_titre,
+                "description": modified_description.strip() if modified_description.strip() else original_description
+            })
         
-        # Pour les rejetées, on garde les originaux
+        # Pour les rejetées, on garde les originaux (convertir en dict si nécessaire)
         rejected_numbers = [i for i in range(1, len(recommendations) + 1) if i not in selected_numbers]
-        rejected_new = [recommendations[i-1] for i in rejected_numbers]
+        rejected_new = []
+        for i in rejected_numbers:
+            idx = i - 1
+            original_rec = recommendations[idx]
+            if isinstance(original_rec, dict):
+                rejected_new.append(original_rec)
+            else:
+                # Ancien format string - convertir en dict
+                rejected_new.append({
+                    "id": "",
+                    "titre": str(original_rec),
+                    "description": ""
+                })
         
         # Calculer le total
         total_validated = validated_count + len(validated_new)
@@ -525,9 +595,233 @@ class StreamlitExecutiveValidation:
         
         # Nettoyer l'état des sélections et les clés de validation + modification
         for key in list(st.session_state.keys()):
-            if key.startswith("validate_recommendation_") or key.startswith("recommendation_text_") or key.startswith("recommendations_comments_"):
+            if key.startswith("validate_recommendation_") or key.startswith("recommendation_titre_") or key.startswith("recommendation_desc_") or key.startswith("recommendations_comments_"):
                 if key_suffix in key:
                     del st.session_state[key]
         
         return result
+    
+    def display_word_extraction_for_validation(
+        self,
+        extracted_data: Dict[str, List[Dict[str, Any]]],
+        key_suffix: str = "word_extraction"
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Affiche l'interface de validation de l'extraction du Word.
+        
+        Args:
+            extracted_data: Dict avec 'final_needs' et 'final_use_cases'
+            key_suffix: Suffixe pour les clés Streamlit
+            
+        Returns:
+            Résultat de la validation ou None si en attente
+        """
+        final_needs = extracted_data.get("final_needs", [])
+        final_use_cases = extracted_data.get("final_use_cases", [])
+        
+        st.subheader("📋 Validation de l'Extraction du Rapport Word")
+        st.info("💡 Vérifiez et modifiez si nécessaire les besoins et cas d'usage extraits du rapport Word.")
+        
+        st.markdown("---")
+        
+        # ========== SECTION BESOINS ==========
+        st.markdown("### 🔹 Besoins Identifiés")
+        
+        if not final_needs:
+            st.warning("⚠️ Aucun besoin identifié dans le rapport Word.")
+        else:
+            # Afficher les besoins avec possibilité de modification
+            for i, need in enumerate(final_needs):
+                with st.expander(f"**Besoin {i+1}**", expanded=True):
+                    # Initialiser les valeurs dans session_state
+                    titre_key = f"need_titre_{i}_{key_suffix}"
+                    
+                    original_titre = need.get("titre", "")
+                    
+                    if titre_key not in st.session_state:
+                        st.session_state[titre_key] = original_titre
+                    
+                    # Champ éditable pour le titre uniquement
+                    modified_titre = st.text_input(
+                        "**Titre du besoin**",
+                        key=titre_key,
+                        label_visibility="visible"
+                    )
+                    
+        
+        st.markdown("---")
+        
+        # ========== SECTION CAS D'USAGE PAR FAMILLE ==========
+        st.markdown("### 🎯 Cas d'Usage par Famille")
+        
+        if not final_use_cases:
+            st.warning("⚠️ Aucun cas d'usage identifié dans le rapport Word.")
+        else:
+            # Grouper les use cases par famille
+            use_cases_by_family: Dict[str, List[Dict[str, Any]]] = {}
+            use_cases_without_family: List[Dict[str, Any]] = []
+            
+            for uc in final_use_cases:
+                famille = uc.get("famille")
+                if famille:
+                    if famille not in use_cases_by_family:
+                        use_cases_by_family[famille] = []
+                    use_cases_by_family[famille].append(uc)
+                else:
+                    use_cases_without_family.append(uc)
+            
+            # Afficher les familles avec leurs use cases
+            for famille_name, use_cases in use_cases_by_family.items():
+                with st.expander(f"**📁 Famille: {famille_name}** ({len(use_cases)} cas d'usage)", expanded=True):
+                    # Champ éditable pour le nom de la famille
+                    famille_key = f"famille_name_{famille_name}_{key_suffix}"
+                    if famille_key not in st.session_state:
+                        st.session_state[famille_key] = famille_name
+                    
+                    modified_famille_name = st.text_input(
+                        "**Nom de la famille**",
+                        key=famille_key,
+                        label_visibility="visible"
+                    )
+                    
+                    st.markdown("---")
+                    
+                    # Afficher les use cases de cette famille
+                    for j, uc in enumerate(use_cases):
+                        st.markdown(f"#### Cas d'usage {j+1}")
+                        
+                        # Initialiser les valeurs dans session_state
+                        uc_titre_key = f"uc_titre_{famille_name}_{j}_{key_suffix}"
+                        uc_desc_key = f"uc_desc_{famille_name}_{j}_{key_suffix}"
+                        
+                        original_uc_titre = uc.get("titre", "")
+                        original_uc_desc = uc.get("description", "")
+                        
+                        if uc_titre_key not in st.session_state:
+                            st.session_state[uc_titre_key] = original_uc_titre
+                        if uc_desc_key not in st.session_state:
+                            st.session_state[uc_desc_key] = original_uc_desc
+                        
+                        # Champ éditable pour le titre
+                        modified_uc_titre = st.text_input(
+                            "**Titre du cas d'usage**",
+                            key=uc_titre_key,
+                            label_visibility="visible"
+                        )
+                        
+                        # Champ éditable pour la description
+                        modified_uc_desc = st.text_area(
+                            "**Description**",
+                            key=uc_desc_key,
+                            label_visibility="visible",
+                            height=80
+                        )
+                        
+                        if j < len(use_cases) - 1:
+                            st.markdown("---")
+            
+            # Afficher les use cases sans famille
+            if use_cases_without_family:
+                with st.expander(f"**📁 Autres cas d'usage** (sans famille) ({len(use_cases_without_family)} cas d'usage)", expanded=True):
+                    for j, uc in enumerate(use_cases_without_family):
+                        st.markdown(f"#### Cas d'usage {j+1}")
+                        
+                        # Initialiser les valeurs dans session_state
+                        uc_titre_key = f"uc_titre_no_family_{j}_{key_suffix}"
+                        uc_desc_key = f"uc_desc_no_family_{j}_{key_suffix}"
+                        uc_famille_key = f"uc_famille_no_family_{j}_{key_suffix}"
+                        
+                        original_uc_titre = uc.get("titre", "")
+                        original_uc_desc = uc.get("description", "")
+                        
+                        if uc_titre_key not in st.session_state:
+                            st.session_state[uc_titre_key] = original_uc_titre
+                        if uc_desc_key not in st.session_state:
+                            st.session_state[uc_desc_key] = original_uc_desc
+                        if uc_famille_key not in st.session_state:
+                            st.session_state[uc_famille_key] = ""
+                        
+                        # Champ éditable pour le titre
+                        modified_uc_titre = st.text_input(
+                            "**Titre du cas d'usage**",
+                            key=uc_titre_key,
+                            label_visibility="visible"
+                        )
+                        
+                        # Champ éditable pour la description
+                        modified_uc_desc = st.text_area(
+                            "**Description**",
+                            key=uc_desc_key,
+                            label_visibility="visible",
+                            height=80
+                        )
+                        
+                        # Champ optionnel pour ajouter une famille
+                        modified_uc_famille = st.text_input(
+                            "**Famille** (optionnel)",
+                            key=uc_famille_key,
+                            label_visibility="visible",
+                            placeholder="Ex: Automatisation, Analyse de données..."
+                        )
+                        
+                        if j < len(use_cases_without_family) - 1:
+                            st.markdown("---")
+        
+        st.markdown("---")
+        
+        # Bouton de validation
+        if st.button("✅ Valider l'extraction et continuer", type="primary", use_container_width=True):
+            # Construire les données validées
+            validated_needs = []
+            for i in range(len(final_needs)):
+                titre_key = f"need_titre_{i}_{key_suffix}"
+                
+                validated_needs.append({
+                    "titre": st.session_state.get(titre_key, final_needs[i].get("titre", "")),
+                    "description": ""  # Les quotes ne sont plus affichées ni modifiables
+                })
+            
+            validated_use_cases = []
+            
+            # Traiter les use cases par famille
+            for famille_name, use_cases in use_cases_by_family.items():
+                famille_key = f"famille_name_{famille_name}_{key_suffix}"
+                modified_famille_name = st.session_state.get(famille_key, famille_name)
+                
+                for j, uc in enumerate(use_cases):
+                    uc_titre_key = f"uc_titre_{famille_name}_{j}_{key_suffix}"
+                    uc_desc_key = f"uc_desc_{famille_name}_{j}_{key_suffix}"
+                    
+                    validated_use_cases.append({
+                        "titre": st.session_state.get(uc_titre_key, uc.get("titre", "")),
+                        "description": st.session_state.get(uc_desc_key, uc.get("description", "")),
+                        "famille": modified_famille_name if modified_famille_name else None
+                    })
+            
+            # Traiter les use cases sans famille
+            for j, uc in enumerate(use_cases_without_family):
+                uc_titre_key = f"uc_titre_no_family_{j}_{key_suffix}"
+                uc_desc_key = f"uc_desc_no_family_{j}_{key_suffix}"
+                uc_famille_key = f"uc_famille_no_family_{j}_{key_suffix}"
+                
+                famille = st.session_state.get(uc_famille_key, "").strip()
+                validated_use_cases.append({
+                    "titre": st.session_state.get(uc_titre_key, uc.get("titre", "")),
+                    "description": st.session_state.get(uc_desc_key, uc.get("description", "")),
+                    "famille": famille if famille else None
+                })
+            
+            # Nettoyer les clés de session_state
+            for key in list(st.session_state.keys()):
+                if key_suffix in key and (key.startswith("need_") or key.startswith("uc_") or key.startswith("famille_name_")):
+                    del st.session_state[key]
+            
+            return {
+                "validated_needs": validated_needs,
+                "validated_use_cases": validated_use_cases,
+                "extraction_validated": True
+            }
+        
+        # Retour par défaut (en attente de validation)
+        return None
 

@@ -59,7 +59,7 @@ class StreamlitUseCaseValidation:
             # Cela garantit que les checkboxes sont toujours réinitialisées quand de nouveaux use cases sont affichés
             for key in list(st.session_state.keys()):
                 if (key.startswith("validate_uc_") or 
-                    key.startswith("uc_titre_") or key.startswith("uc_desc_")):
+                    key.startswith("uc_titre_") or key.startswith("uc_desc_") or key.startswith("uc_famille_")):
                     del st.session_state[key]
             # Marquer comme initialisé
             st.session_state[initialization_flag] = True
@@ -75,7 +75,7 @@ class StreamlitUseCaseValidation:
         st.markdown("---")
         
         # Section Cas d'usage
-        st.header("📋 Cas d'Usage")
+        st.header("Cas d'Usage")
         
         # Afficher les cas d'usage avec champs éditables - 2 par ligne
         for i in range(0, len(use_cases), 2):
@@ -86,13 +86,26 @@ class StreamlitUseCaseValidation:
                 use_case = use_cases[i]
                 original_titre = use_case.get('titre', 'Titre non défini')
                 original_description = use_case.get('description', 'Description non disponible')
+                original_famille = use_case.get('famille')
                 
                 # Initialiser les valeurs dans session_state APRÈS le nettoyage
                 # Réinitialiser toujours avec la valeur originale pour forcer la mise à jour
                 titre_key = f"uc_titre_{i}_{key_suffix}"
                 desc_key = f"uc_desc_{i}_{key_suffix}"
+                famille_key = f"uc_famille_{i}_{key_suffix}"
                 st.session_state[titre_key] = original_titre
                 st.session_state[desc_key] = original_description
+                if original_famille is not None:
+                    st.session_state[famille_key] = original_famille
+                
+                # Affichage conditionnel de la famille (au-dessus du titre)
+                if original_famille is not None:
+                    st.markdown("**Famille :**")
+                    modified_famille = st.text_input(
+                        "Famille",
+                        key=famille_key,
+                        label_visibility="hidden"
+                    )
                 
                 # Champ éditable pour le titre (ne pas passer value pour éviter le warning)
                 modified_titre = st.text_input(
@@ -124,13 +137,26 @@ class StreamlitUseCaseValidation:
                     use_case = use_cases[i + 1]
                     original_titre = use_case.get('titre', 'Titre non défini')
                     original_description = use_case.get('description', 'Description non disponible')
+                    original_famille = use_case.get('famille')
                     
                     # Initialiser les valeurs dans session_state APRÈS le nettoyage
                     # Réinitialiser toujours avec la valeur originale pour forcer la mise à jour
                     titre_key = f"uc_titre_{i+1}_{key_suffix}"
                     desc_key = f"uc_desc_{i+1}_{key_suffix}"
+                    famille_key = f"uc_famille_{i+1}_{key_suffix}"
                     st.session_state[titre_key] = original_titre
                     st.session_state[desc_key] = original_description
+                    if original_famille is not None:
+                        st.session_state[famille_key] = original_famille
+                    
+                    # Affichage conditionnel de la famille (au-dessus du titre)
+                    if original_famille is not None:
+                        st.markdown("**Famille :**")
+                        modified_famille = st.text_input(
+                            "Famille",
+                            key=famille_key,
+                            label_visibility="hidden"
+                        )
                     
                     # Champ éditable pour le titre (ne pas passer value pour éviter le warning)
                     modified_titre = st.text_input(
@@ -275,16 +301,18 @@ class StreamlitUseCaseValidation:
             # Lire les valeurs modifiées depuis session_state
             titre_key = f"uc_titre_{idx}_{key_suffix}"
             desc_key = f"uc_desc_{idx}_{key_suffix}"
+            famille_key = f"uc_famille_{idx}_{key_suffix}"
             modified_titre = st.session_state.get(titre_key, original_uc.get('titre', ''))
             modified_description = st.session_state.get(desc_key, original_uc.get('description', ''))
+            modified_famille = st.session_state.get(famille_key, original_uc.get('famille'))
             
-            # Créer le use case modifié (conserver l'id, ia_utilisee et famille originaux)
+            # Créer le use case modifié (conserver l'id, ia_utilisee et famille modifiée)
             modified_uc = {
                 'id': original_uc.get('id', ''),
                 'titre': modified_titre.strip() if modified_titre.strip() else original_uc.get('titre', ''),
                 'description': modified_description.strip() if modified_description.strip() else original_uc.get('description', ''),
                 'ia_utilisee': original_uc.get('ia_utilisee', ''),  # Conserver l'original
-                'famille': original_uc.get('famille')  # Conserver la famille si elle existe
+                'famille': modified_famille.strip() if modified_famille and modified_famille.strip() else original_uc.get('famille')  # Utiliser la famille modifiée si elle existe
             }
             validated_uc.append(modified_uc)
         
@@ -316,6 +344,7 @@ class StreamlitUseCaseValidation:
             if (key.startswith("validate_uc_") or 
                 key.startswith("uc_titre_") or 
                 key.startswith("uc_desc_") or 
+                key.startswith("uc_famille_") or 
                 key.startswith("use_cases_initialized_")):
                 del st.session_state[key]
         print(f"✅ [DEBUG UC] Nettoyage terminé")

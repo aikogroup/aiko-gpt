@@ -28,7 +28,8 @@ class MaturityResponse(BaseModel):
 class Recommendation(BaseModel):
     """Modèle pour une recommandation"""
     id: str = Field(description="ID unique de la recommandation (R1, R2, R3, ...)")
-    text: str = Field(description="Texte de la recommandation personnalisée")
+    titre: str = Field(description="Titre court et percutant de la recommandation (max 10 mots, style actionnable)")
+    description: str = Field(description="Description courte de la recommandation (1-2 lignes maximum)")
 
 
 class RecommendationsResponse(BaseModel):

@@ -4,7 +4,7 @@ Workflow LangGraph pour l'Executive Summary
 
 import os
 import json
-from typing import Dict, List, Any, TypedDict, Annotated
+from typing import Dict, List, Any, TypedDict, Annotated, Optional
 from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
@@ -51,9 +51,9 @@ class ExecutiveSummaryState(TypedDict):
     maturity_score: int
     maturity_summary: str
     # Résultats Recommandations
-    recommendations: List[str]
-    validated_recommendations: List[str]
-    rejected_recommendations: List[str]
+    recommendations: List[Dict]
+    validated_recommendations: List[Dict]
+    rejected_recommendations: List[Dict]
     recommendations_feedback: str
     # Action demandée par l'utilisateur (pour les boutons)
     recommendations_user_action: str  # "continue_recommendations" ou "continue_to_finalize"
@@ -182,7 +182,9 @@ class ExecutiveSummaryWorkflow:
         workshop_files: List[str],
         company_name: str,
         interviewer_note: str = "",
-        thread_id: str = None
+        thread_id: str = None,
+        validated_needs: Optional[List[Dict[str, Any]]] = None,
+        validated_use_cases: Optional[List[Dict[str, Any]]] = None
     ) -> Dict[str, Any]:
         """
         Exécute le workflow.
@@ -194,6 +196,8 @@ class ExecutiveSummaryWorkflow:
             company_name: Nom de l'entreprise
             interviewer_note: Note de l'intervieweur
             thread_id: ID du thread pour la persistance
+            validated_needs: Besoins validés par l'utilisateur (optionnel)
+            validated_use_cases: Cas d'usage validés par l'utilisateur (optionnel)
             
         Returns:
             État final du workflow
@@ -205,8 +209,8 @@ class ExecutiveSummaryWorkflow:
             "workshop_files": workshop_files or [],
             "company_name": company_name,
             "interviewer_note": interviewer_note,
-            "extracted_needs": [],
-            "extracted_use_cases": [],
+            "extracted_needs": validated_needs or [],
+            "extracted_use_cases": validated_use_cases or [],
             "transcript_enjeux_citations": [],
             "workshop_enjeux_citations": [],
             "transcript_maturite_citations": [],
@@ -286,9 +290,23 @@ class ExecutiveSummaryWorkflow:
         return state
     
     def _extract_word_node(self, state: ExecutiveSummaryState) -> Dict[str, Any]:
-        """Extrait les données depuis le fichier Word"""
+        """Extrait les données depuis le fichier Word ou utilise les données validées"""
         print(f"\n📄 [EXECUTIVE] extract_word_node - DÉBUT")
         try:
+            # Vérifier si des données validées sont déjà présentes
+            extracted_needs = state.get("extracted_needs", [])
+            extracted_use_cases = state.get("extracted_use_cases", [])
+            
+            # Si les données sont déjà présentes (validées par l'utilisateur), les utiliser
+            if extracted_needs or extracted_use_cases:
+                print(f"✅ Utilisation des données validées: {len(extracted_needs)} besoins, "
+                      f"{len(extracted_use_cases)} cas d'usage")
+                return {
+                    "extracted_needs": extracted_needs,
+                    "extracted_use_cases": extracted_use_cases
+                }
+            
+            # Sinon, faire l'extraction depuis le fichier Word
             word_path = state.get("word_report_path", "")
             if not word_path:
                 print("⚠️ Aucun fichier Word fourni")
@@ -611,12 +629,22 @@ class ExecutiveSummaryWorkflow:
             if validated:
                 print(f"📊 [REGENERATION] Recommandations validées ({len(validated)}):")
                 for i, rec in enumerate(validated, 1):
-                    print(f"   {i}. {rec[:100]}..." if len(rec) > 100 else f"   {i}. {rec}")
+                    if isinstance(rec, dict):
+                        titre = rec.get("titre", "")
+                        print(f"   {i}. {titre}")
+                    else:
+                        rec_str = str(rec)
+                        print(f"   {i}. {rec_str[:100]}..." if len(rec_str) > 100 else f"   {i}. {rec_str}")
             
             if rejected:
                 print(f"📊 [REGENERATION] Recommandations rejetées ({len(rejected)}):")
                 for i, rec in enumerate(rejected, 1):
-                    print(f"   {i}. {rec[:100]}..." if len(rec) > 100 else f"   {i}. {rec}")
+                    if isinstance(rec, dict):
+                        titre = rec.get("titre", "")
+                        print(f"   {i}. {titre}")
+                    else:
+                        rec_str = str(rec)
+                        print(f"   {i}. {rec_str[:100]}..." if len(rec_str) > 100 else f"   {i}. {rec_str}")
             
             result = self.executive_agent.generate_recommendations(
                 maturite_ia=maturite_ia,
@@ -633,7 +661,15 @@ class ExecutiveSummaryWorkflow:
             # Logs après la génération
             print(f"📊 [REGENERATION] Nouvelles recommandations générées ({len(state['recommendations'])}):")
             for i, rec in enumerate(state["recommendations"], 1):
-                print(f"   {i}. {rec[:100]}..." if len(rec) > 100 else f"   {i}. {rec}")
+                if isinstance(rec, dict):
+                    titre = rec.get("titre", "")
+                    description = rec.get("description", "")
+                    print(f"   {i}. {titre}")
+                    if description:
+                        print(f"      {description[:80]}..." if len(description) > 80 else f"      {description}")
+                else:
+                    rec_str = str(rec)
+                    print(f"   {i}. {rec_str[:100]}..." if len(rec_str) > 100 else f"   {i}. {rec_str}")
             
             return state
             

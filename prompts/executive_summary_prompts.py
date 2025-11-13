@@ -3,7 +3,7 @@ Prompts pour l'agent Executive Summary
 """
 
 EXECUTIVE_SUMMARY_SYSTEM_PROMPT = """
-Tu es un expert en conseil IA aux entreprises, spécialisé dans l'analyse stratégique pour des missions de transformation IA.
+Tu es un expert en conseil Data et IA aux entreprises, spécialisé dans l'analyse stratégique pour des missions de transformation IA.
 
 Ton rôle est d'identifier et d'analyser :
 - Les enjeux stratégiques de l'entreprise
@@ -200,7 +200,23 @@ INSTRUCTIONS :
 3. Base-toi sur les besoins et cas d'usage identifiés
 4. Prends en compte les instructions et commentaires de l'utilisateur ci-dessus pour orienter la génération des recommandations
 5. Sois concret et actionnable
-6. Chaque recommandation doit avoir un ID unique (R1, R2, R3, ...) et un texte clair et actionnable
+6. Chaque recommandation doit avoir :
+   - Un ID unique (R1, R2, R3, ...)
+   - Un TITRE court et percutant (max 10 mots, style actionnable, verbe à l'infinitif ou impératif)
+   - Une DESCRIPTION courte (1-2 lignes maximum) expliquant la recommandation
+
+EXEMPLES DE RECOMMANDATIONS (format à suivre) :
+- TITRE: Fiabiliser et centraliser les données dans un format exploitable
+  DESCRIPTION: Mettre en place une infrastructure de données unifiée pour garantir la qualité et l'accessibilité des informations.
+
+- TITRE: Acculturer les équipes aux IA simples
+  DESCRIPTION: Former les collaborateurs aux outils d'IA accessibles pour développer une culture numérique progressive.
+
+- TITRE: Encadrer chaque automatisation IA avec des règles métier claires
+  DESCRIPTION: Définir des processus et règles de gouvernance pour chaque solution IA déployée.
+
+- TITRE: Exécuter plusieurs "quick wins" IA
+  DESCRIPTION: Identifier et déployer rapidement des solutions IA à impact immédiat pour démontrer la valeur.
 
 Les recommandations seront automatiquement structurées selon le format attendu.
 """
@@ -261,10 +277,26 @@ OBLIGATIONS :
 
 RÈGLES DE FORMAT :
 9. VÉRIFIE L'UNICITÉ DES THÈMES : Assure-toi qu'aucun thème n'est utilisé deux fois dans ta proposition ET qu'aucun thème ne ressemble aux recommandations déjà proposées
-10. Chaque recommandation doit avoir un ID unique (R1, R2, R3, ...) et un texte clair et actionnable
+10. Chaque recommandation doit avoir :
+    - Un ID unique (R1, R2, R3, ...)
+    - Un TITRE court et percutant (max 10 mots, style actionnable, verbe à l'infinitif ou impératif)
+    - Une DESCRIPTION courte (1-2 lignes maximum) expliquant la recommandation
 11. Sois concret et actionnable
 12. Adapte les recommandations au niveau de maturité IA évalué
 13. Les recommandations seront automatiquement structurées selon le format attendu
+
+EXEMPLES DE RECOMMANDATIONS (format à suivre) :
+- TITRE: Fiabiliser et centraliser les données dans un format exploitable
+  DESCRIPTION: Mettre en place une infrastructure de données unifiée pour garantir la qualité et l'accessibilité des informations.
+
+- TITRE: Acculturer les équipes aux IA simples
+  DESCRIPTION: Former les collaborateurs aux outils d'IA accessibles pour développer une culture numérique progressive.
+
+- TITRE: Encadrer chaque automatisation IA avec des règles métier claires
+  DESCRIPTION: Définir des processus et règles de gouvernance pour chaque solution IA déployée.
+
+- TITRE: Exécuter plusieurs "quick wins" IA
+  DESCRIPTION: Identifier et déployer rapidement des solutions IA à impact immédiat pour démontrer la valeur.
 
 STRATÉGIE DE DIVERSIFICATION :
 - Analyse les recommandations déjà proposées pour identifier les domaines/processus déjà couverts
@@ -359,7 +391,10 @@ INSTRUCTIONS :
 2. Identifie la section "LES CAS D'USAGES IA PRIORITAIRES" et extrais tous les cas d'usage
 3. Pour chaque besoin, conserve : titre (theme), description
 4. Pour chaque cas d'usage, conserve : titre, description, et famille optionnelle
-5. La famille peut être présente comme préfixe dans la description sous la forme [Famille], extrais-la si présente
+5. IMPORTANT : Les familles sont maintenant affichées comme des titres intermédiaires (titres de section) dans le document, pas comme préfixe dans la description. 
+   - Les titres de famille apparaissent avant les cas d'usage qui leur appartiennent
+   - La section "Autres cas d'usage" contient les cas d'usage sans famille
+   - Associe chaque cas d'usage à la famille du titre précédent (ou None si dans "Autres cas d'usage")
 6. Si le document a été modifié manuellement, adapte-toi à la structure actuelle
 
 Extrais les données au format structuré.

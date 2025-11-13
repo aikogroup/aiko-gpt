@@ -231,8 +231,8 @@ class ExecutiveSummaryAgent:
         maturite_ia: Dict[str, Any],
         final_needs: List[Dict[str, Any]],
         final_use_cases: List[Dict[str, Any]],
-        rejected_recommendations: Optional[List[str]] = None,
-        validated_recommendations: Optional[List[str]] = None,
+        rejected_recommendations: Optional[List[Dict[str, Any]]] = None,
+        validated_recommendations: Optional[List[Dict[str, Any]]] = None,
         recommendations_feedback: str = ""
     ) -> Dict[str, Any]:
         """
@@ -242,12 +242,12 @@ class ExecutiveSummaryAgent:
             maturite_ia: Dict avec 'echelle' et 'phrase_resumant'
             final_needs: Besoins identifiés
             final_use_cases: Cas d'usage proposés
-            rejected_recommendations: Recommandations précédemment rejetées (pour régénération)
-            validated_recommendations: Recommandations validées à conserver (pour régénération)
+            rejected_recommendations: Recommandations précédemment rejetées (pour régénération) - format dict avec titre/description
+            validated_recommendations: Recommandations validées à conserver (pour régénération) - format dict avec titre/description
             recommendations_feedback: Feedback utilisateur (pour première génération et régénération)
             
         Returns:
-            Dict avec 'recommendations' (liste de recommandations)
+            Dict avec 'recommendations' (liste de dict avec id, titre, description)
         """
         try:
             # Formater les données pour le prompt
@@ -265,9 +265,9 @@ class ExecutiveSummaryAgent:
                 if rejected_recommendations:
                     all_previous.extend(rejected_recommendations)
                 
-                previous_str = "\n".join([f"- {r}" for r in all_previous]) if all_previous else "Aucune"
-                rejected_str = "\n".join([f"- {r}" for r in rejected_recommendations]) if rejected_recommendations else "Aucune"
-                validated_str = "\n".join([f"- {r}" for r in validated_recommendations]) if validated_recommendations else "Aucune"
+                previous_str = self._format_recommendations(all_previous) if all_previous else "Aucune"
+                rejected_str = self._format_recommendations(rejected_recommendations) if rejected_recommendations else "Aucune"
+                validated_str = self._format_recommendations(validated_recommendations) if validated_recommendations else "Aucune"
                 
                 # Calculer les valeurs pour le prompt
                 validated_count = len(validated_recommendations) if validated_recommendations else 0
@@ -312,17 +312,39 @@ class ExecutiveSummaryAgent:
             parsed_response = response.output_parsed.model_dump()
             recommendations_objects = parsed_response.get("recommendations", [])
             
-            # Convertir les objets Recommendation en liste de strings (extraire le text)
+            # Convertir les objets Recommendation en liste de dicts avec id, titre, description
             recommendations = []
-            for rec_obj in recommendations_objects:
+            used_ids = set()  # Pour éviter les IDs dupliqués
+            
+            for idx, rec_obj in enumerate(recommendations_objects, 1):
                 if isinstance(rec_obj, dict):
-                    text = rec_obj.get("text", "").strip()
+                    rec_id = rec_obj.get("id", "")
+                    titre = rec_obj.get("titre", "").strip()
+                    description = rec_obj.get("description", "").strip()
                 else:
                     # Si c'est déjà un objet Recommendation
-                    text = rec_obj.text.strip() if hasattr(rec_obj, 'text') else str(rec_obj).strip()
+                    rec_id = rec_obj.id if hasattr(rec_obj, 'id') else ""
+                    titre = rec_obj.titre.strip() if hasattr(rec_obj, 'titre') else ""
+                    description = rec_obj.description.strip() if hasattr(rec_obj, 'description') else ""
                 
-                if text:
-                    recommendations.append(text)
+                # Vérifier et corriger les IDs dupliqués
+                if rec_id in used_ids or not rec_id:
+                    # Générer un nouvel ID unique
+                    rec_id = f"R{idx}"
+                    # Si R{idx} existe déjà, chercher le prochain disponible
+                    counter = idx
+                    while rec_id in used_ids:
+                        counter += 1
+                        rec_id = f"R{counter}"
+                
+                used_ids.add(rec_id)
+                
+                if titre and description:
+                    recommendations.append({
+                        "id": rec_id,
+                        "titre": titre,
+                        "description": description
+                    })
             
             logger.info(f"✅ {len(recommendations)} recommandations générées")
             return {"recommendations": recommendations}
@@ -368,6 +390,32 @@ class ExecutiveSummaryAgent:
             titre = challenge.get("titre", "")
             description = challenge.get("description", "")
             formatted.append(f"- {id_challenge}: {titre}\n  {description}")
+        
+        return "\n".join(formatted)
+    
+    def _format_recommendations(self, recommendations: List[Dict[str, Any]]) -> str:
+        """Formate les recommandations pour le prompt"""
+        if not recommendations:
+            return "Aucune recommandation"
+        
+        formatted = []
+        for rec in recommendations:
+            # Gérer les deux formats possibles : dict avec titre/description ou string (ancien format)
+            if isinstance(rec, dict):
+                rec_id = rec.get("id", "")
+                titre = rec.get("titre", "")
+                description = rec.get("description", "")
+                if titre and description:
+                    formatted.append(f"- {rec_id}: {titre}\n  {description}")
+                elif titre:
+                    formatted.append(f"- {rec_id}: {titre}")
+                else:
+                    # Ancien format avec "text"
+                    text = rec.get("text", str(rec))
+                    formatted.append(f"- {text}")
+            else:
+                # Ancien format string
+                formatted.append(f"- {str(rec)}")
         
         return "\n".join(formatted)
 

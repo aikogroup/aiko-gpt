@@ -101,8 +101,88 @@ class UseCaseAnalysisAgent:
             transcript_str = json.dumps(transcript_data_safe, ensure_ascii=False, indent=2)
             web_search_str = json.dumps(web_search_data_safe, ensure_ascii=False, indent=2)
             
-            # LOG DÉTAILLÉ : Afficher le JSON envoyé au LLM (premiers 1000 caractères)
-            print(f"\n📤 [DEBUG USE CASE] Données envoyées au LLM:")
+            # LOG DÉTAILLÉ : Afficher un résumé complet de toutes les données reçues
+            print(f"\n📤 [DEBUG USE CASE] RÉSUMÉ COMPLET DES DONNÉES REÇUES PAR L'AGENT:")
+            print(f"  📊 Validated needs: {len(validated_needs)} besoins")
+            if validated_needs:
+                themes = [need.get('theme', 'N/A') if isinstance(need, dict) else getattr(need, 'theme', 'N/A') for need in validated_needs[:5]]
+                print(f"    - Thèmes principaux: {', '.join(themes)}" + (f" ... (+{len(validated_needs)-5} autres)" if len(validated_needs) > 5 else ""))
+            
+            print(f"  🏭 Workshop data (données des ateliers):")
+            if workshop_data:
+                workshops_list = workshop_data.get('workshops', [])
+                print(f"    - Nombre de workshops: {len(workshops_list)}")
+                if workshops_list:
+                    # Afficher la structure du premier workshop
+                    first_workshop = workshops_list[0]
+                    if isinstance(first_workshop, dict):
+                        print(f"    - Structure d'un workshop: {list(first_workshop.keys())}")
+                        # Vérifier s'il y a des use_cases avec iteration_count
+                        if 'use_cases' in first_workshop:
+                            use_cases = first_workshop.get('use_cases', [])
+                            print(f"    - Use cases dans le premier workshop: {len(use_cases)}")
+                            if use_cases:
+                                iteration_counts = [uc.get('iteration_count', 0) for uc in use_cases if isinstance(uc, dict)]
+                                if iteration_counts:
+                                    print(f"    - Iteration counts présents: min={min(iteration_counts)}, max={max(iteration_counts)}, moy={sum(iteration_counts)/len(iteration_counts):.1f}")
+            else:
+                print(f"    - Aucune donnée workshop fournie")
+            
+            print(f"  🎤 Transcript data (données des entretiens):")
+            if transcript_data:
+                print(f"    - Nombre de transcripts: {len(transcript_data)}")
+                if transcript_data:
+                    # Afficher la structure du premier transcript
+                    first_transcript = transcript_data[0]
+                    if isinstance(first_transcript, dict):
+                        print(f"    - Structure d'un transcript: {list(first_transcript.keys())}")
+                        # Vérifier s'il y a des citations avec speaker_level
+                        if 'citations' in first_transcript:
+                            citations = first_transcript.get('citations', [])
+                            print(f"    - Citations dans le premier transcript: {len(citations)}")
+                            speaker_levels = [c.get('speaker_level', 'N/A') for c in citations if isinstance(c, dict) and 'speaker_level' in c]
+                            if speaker_levels:
+                                from collections import Counter
+                                levels_count = Counter(speaker_levels)
+                                print(f"    - Niveaux de speakers: {dict(levels_count)}")
+            else:
+                print(f"    - Aucune donnée transcript fournie")
+            
+            print(f"  🌐 Web search data (données de recherche web):")
+            if web_search_data:
+                print(f"    - Structure: {list(web_search_data.keys())}")
+                if 'results' in web_search_data:
+                    results = web_search_data.get('results', [])
+                    print(f"    - Nombre de résultats: {len(results)}")
+            else:
+                print(f"    - Aucune donnée web search fournie")
+            
+            print(f"  💬 Additional context (contexte additionnel):")
+            if additional_context:
+                print(f"    - Contenu: {additional_context[:200]}..." if len(additional_context) > 200 else f"    - Contenu: {additional_context}")
+            else:
+                print(f"    - Aucun contexte additionnel fourni")
+            
+            print(f"  🔄 Previous use cases (cas d'usage précédents):")
+            if previous_use_cases:
+                print(f"    - Nombre: {len(previous_use_cases)}")
+            else:
+                print(f"    - Aucun cas d'usage précédent")
+            
+            print(f"  🚫 Rejected use cases (cas d'usage rejetés):")
+            if rejected_use_cases:
+                print(f"    - Nombre: {len(rejected_use_cases)}")
+            else:
+                print(f"    - Aucun cas d'usage rejeté")
+            
+            print(f"  💬 User feedback (commentaires utilisateur):")
+            if user_feedback:
+                print(f"    - Contenu: {user_feedback[:200]}..." if len(user_feedback) > 200 else f"    - Contenu: {user_feedback}")
+            else:
+                print(f"    - Aucun commentaire utilisateur")
+            
+            # LOG DÉTAILLÉ : Afficher la taille du JSON envoyé au LLM
+            print(f"\n📏 [DEBUG USE CASE] Taille des données sérialisées envoyées au LLM:")
             print(f"  📊 Validated needs: {len(validated_needs_str)} caractères")
             print(f"  🏭 Workshop data: {len(workshop_str)} caractères")
             print(f"  🎤 Transcript data: {len(transcript_str)} caractères")

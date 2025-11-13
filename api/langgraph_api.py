@@ -84,6 +84,8 @@ class ExecutiveSummaryInput(BaseModel):
     workshop_files: List[str] = []
     company_name: str
     interviewer_note: str = ""
+    validated_needs: Optional[List[Dict[str, Any]]] = None
+    validated_use_cases: Optional[List[Dict[str, Any]]] = None
 
 
 class RappelMissionInput(BaseModel):
@@ -688,7 +690,9 @@ async def create_executive_run(thread_id: str, workflow_input: ExecutiveSummaryI
             workshop_files=workflow_input.workshop_files,
             company_name=workflow_input.company_name,
             interviewer_note=workflow_input.interviewer_note,
-            thread_id=thread_id
+            thread_id=thread_id,
+            validated_needs=workflow_input.validated_needs,
+            validated_use_cases=workflow_input.validated_use_cases
         )
         
         # Mettre à jour l'état

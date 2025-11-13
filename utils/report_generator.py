@@ -148,6 +148,39 @@ class ReportGenerator:
             h4_font.size = Pt(12)
             h4_font.bold = True
             h4_font.color.rgb = RGBColor(31, 73, 125)
+        
+        # Créer un style personnalisé pour les titres de famille
+        self._create_family_heading_style(doc)
+    
+    def _create_family_heading_style(self, doc: Document):
+        """
+        Crée un style personnalisé pour les titres de famille des use cases.
+        
+        Args:
+            doc: Document docx
+        """
+        styles = doc.styles
+        
+        # Créer un style personnalisé si il n'existe pas
+        style_name = "FamilyHeading"
+        if style_name not in styles:
+            # Créer un nouveau style basé sur Normal
+            family_style = styles.add_style(style_name, 1)  # 1 = paragraph style
+        else:
+            family_style = styles[style_name]
+        
+        # Configurer la police
+        font = family_style.font
+        font.name = "DM Sans"
+        font.size = Pt(14)
+        font.bold = True
+        font.color.rgb = RGBColor(31, 73, 125)  # Même couleur que "LES BESOINS IDENTIFIÉS"
+        
+        # Configurer le paragraphe (sans puce, espacement)
+        paragraph_format = family_style.paragraph_format
+        paragraph_format.space_before = Pt(12)
+        paragraph_format.space_after = Pt(6)
+        paragraph_format.left_indent = Inches(0)
     
     def _add_logo(self, doc: Document):
         """
@@ -243,33 +276,90 @@ class ReportGenerator:
         )
         doc.add_paragraph(intro_text)
         
-        # Lister tous les cas d'usage
+        # Grouper les use cases par famille
         if use_cases:
-            for i, uc in enumerate(use_cases, start=1):
-                title = uc.get('titre', 'N/A')
-                description = uc.get('description', 'N/A')
+            use_cases_by_family = {}
+            use_cases_without_family = []
+            
+            for uc in use_cases:
                 famille = uc.get('famille', '').strip() if uc.get('famille') else None
-                
-                # Ajouter la famille comme préfixe si elle existe
                 if famille:
-                    description = f"[{famille}] {description}"
+                    if famille not in use_cases_by_family:
+                        use_cases_by_family[famille] = []
+                    use_cases_by_family[famille].append(uc)
+                else:
+                    use_cases_without_family.append(uc)
+            
+            # Compteur global pour la numérotation continue
+            global_counter = 1
+            
+            # Afficher les use cases groupés par famille
+            for famille, famille_use_cases in use_cases_by_family.items():
+                # Titre de famille avec style personnalisé
+                family_para = doc.add_paragraph(style='FamilyHeading')
+                family_run = family_para.add_run(famille)
+                family_run.bold = True
+                family_run.font.name = "DM Sans"
+                family_run.font.size = Pt(14)
+                family_run.font.color.rgb = RGBColor(31, 73, 125)
+                
+                # Afficher les use cases de cette famille
+                for uc in famille_use_cases:
+                    title = uc.get('titre', 'N/A')
+                    description = uc.get('description', 'N/A')
+                    
+                    # Titre : on force style Normal pour éviter héritage
+                    title_para = doc.add_paragraph(style='Normal')
+                    run_title = title_para.add_run(f"{global_counter}. {title}")
+                    run_title.bold = True
 
-                # Titre : on force style Normal pour éviter héritage
-                title_para = doc.add_paragraph(style='Normal')
-                run_title = title_para.add_run(f"{i}. {title}")
-                run_title.bold = True
+                    # Retirer toute numérotation automatique cachée
+                    self._remove_numbering_from_paragraph(title_para)
 
-                # Retirer toute numérotation automatique cachée
-                self._remove_numbering_from_paragraph(title_para)
+                    # Description : run 1 en gras pour "Description : ", run 2 pour le texte
+                    desc_para = doc.add_paragraph(style='Normal')
+                    desc_para.paragraph_format.left_indent = Inches(0.4)
+                    desc_para.paragraph_format.space_after = Pt(12)
 
-                # Description : run 1 en gras pour "Description : ", run 2 pour le texte
-                desc_para = doc.add_paragraph(style='Normal')
-                desc_para.paragraph_format.left_indent = Inches(0.4)
-                desc_para.paragraph_format.space_after = Pt(12)
+                    run_desc_label = desc_para.add_run("Description : ")
+                    run_desc_label.bold = True
+                    run_desc = desc_para.add_run(description)
+                    
+                    global_counter += 1
+            
+            # Afficher les use cases sans famille dans une section "Autres cas d'usage"
+            if use_cases_without_family:
+                # Titre de section "Autres cas d'usage"
+                others_para = doc.add_paragraph(style='FamilyHeading')
+                others_run = others_para.add_run("Autres cas d'usage")
+                others_run.bold = True
+                others_run.font.name = "DM Sans"
+                others_run.font.size = Pt(14)
+                others_run.font.color.rgb = RGBColor(31, 73, 125)
+                
+                # Afficher les use cases sans famille
+                for uc in use_cases_without_family:
+                    title = uc.get('titre', 'N/A')
+                    description = uc.get('description', 'N/A')
+                    
+                    # Titre : on force style Normal pour éviter héritage
+                    title_para = doc.add_paragraph(style='Normal')
+                    run_title = title_para.add_run(f"{global_counter}. {title}")
+                    run_title.bold = True
 
-                run_desc_label = desc_para.add_run("Description : ")
-                run_desc_label.bold = True
-                run_desc = desc_para.add_run(description)
+                    # Retirer toute numérotation automatique cachée
+                    self._remove_numbering_from_paragraph(title_para)
+
+                    # Description : run 1 en gras pour "Description : ", run 2 pour le texte
+                    desc_para = doc.add_paragraph(style='Normal')
+                    desc_para.paragraph_format.left_indent = Inches(0.4)
+                    desc_para.paragraph_format.space_after = Pt(12)
+
+                    run_desc_label = desc_para.add_run("Description : ")
+                    run_desc_label.bold = True
+                    run_desc = desc_para.add_run(description)
+                    
+                    global_counter += 1
     
     def generate_report_from_json_files(
         self,

@@ -53,6 +53,7 @@ from utils.report_generator import ReportGenerator
 from human_in_the_loop.streamlit_validation_interface import StreamlitValidationInterface
 from use_case_analysis.streamlit_use_case_validation import StreamlitUseCaseValidation
 from web_search.web_search_agent import WebSearchAgent
+from executive_summary.streamlit_validation_executive import StreamlitExecutiveValidation
 
 # Configuration de l'API
 # Utiliser la variable d'environnement API_URL si disponible, sinon utiliser localhost pour le développement
@@ -703,7 +704,7 @@ def display_interviewers_config_page():
 
 def display_work_in_progress():
     """Affiche un message WORK IN PROGRESS pour la section de génération des recommandations"""
-    st.header("🎯 Génération des Enjeux et Recommandations")
+    st.header("Génération des Enjeux et Recommandations")
     
     # Message WORK IN PROGRESS bien visible
     st.markdown("---")
@@ -715,15 +716,6 @@ def display_work_in_progress():
     </div>
     """, unsafe_allow_html=True)
     st.markdown("---")
-
-def display_recommendations_section():
-    """Affiche la section de génération des recommandations (placeholder)"""
-    st.header("📋 Génération des Enjeux et Recommandations")
-    st.info("💡 Cette section sera disponible prochainement.")
-    st.markdown("""
-    Cette fonctionnalité permettra de générer des enjeux et recommandations personnalisées
-    basées sur les analyses précédentes.
-    """)
 
 def main():
     init_session_state()
@@ -906,38 +898,17 @@ def display_diagnostic_section():
     if not st.session_state.company_name and company_name:
         st.session_state.company_name = company_name
     
-    # Afficher les fichiers sélectionnés
-    st.subheader("📋 Fichiers sélectionnés")
-    col1, col2 = st.columns(2)
-    with col1:
-        st.metric("Transcriptions", len(st.session_state.uploaded_transcripts))
-        if st.session_state.uploaded_transcripts:
-            with st.expander("Voir les fichiers"):
-                for transcript in st.session_state.uploaded_transcripts:
-                    if isinstance(transcript, dict):
-                        file_path = transcript.get("file_path", "")
-                        filename = os.path.basename(file_path) if file_path else "Fichier inconnu"
-                        st.text(f"• {filename}")
-                    else:
-                        # Ancienne structure (string)
-                        st.text(f"• {os.path.basename(transcript)}")
-    with col2:
-        st.metric("Ateliers", len(st.session_state.uploaded_workshops))
-        if st.session_state.uploaded_workshops:
-            with st.expander("Voir les fichiers"):
-                for path in st.session_state.uploaded_workshops:
-                    st.text(f"• {os.path.basename(path)}")
-    
     st.metric("Entreprise", company_name)
     
     # Zone : Informations supplémentaires
-    st.subheader("💡 Informations Supplémentaires")
+    st.subheader("Informations Supplémentaires")
     st.info("💡 Vous pouvez ajouter ici des informations complémentaires qui ne sont pas présentes dans les transcriptions ou les ateliers.")
     additional_context = st.text_area(
         "Informations supplémentaires",
         placeholder="Ex: L'entreprise souhaite prioriser les solutions IA pour la R&D. Il y a également un projet de fusion prévu pour 2025 qui impacte la stratégie.",
         height=150,
-        key="additional_context_input"
+        key="additional_context_input",
+        label_visibility="hidden"
     )
     
     # Bouton de démarrage
@@ -1360,14 +1331,15 @@ def display_pre_use_case_interrupt_interface():
         st.markdown("---")
     
     # Champ pour le contexte additionnel
-    st.markdown("#### 💡 Instructions pour la Génération des Cas d'Usage")
+    st.markdown("#### Instructions pour la Génération des Cas d'Usage")
     st.markdown("Ajoutez des commentaires ou instructions pour guider la génération des cas d'usage :")
     
     additional_context = st.text_area(
         "Commentaires et instructions (optionnel) :",
         placeholder="Ex: Génère 15 cas d'usage en priorisant l'automatisation des processus métier. Classifie par famille : automatisation, prédiction, optimisation...",
         height=150,
-        key="use_case_additional_context_input"
+        key="use_case_additional_context_input",
+        label_visibility="hidden"
     )
     
     st.markdown("---")
@@ -1929,7 +1901,7 @@ def display_upload_documents_section():
 
 def display_company_context_section():
     """Section pour configurer le contexte de l'entreprise avec recherche web"""
-    st.header("🏢 Contexte de l'entreprise")
+    st.header("Contexte de l'entreprise")
     st.info("💡 Configurez les informations sur l'entreprise et lancez une recherche web pour obtenir des informations détaillées.")
     
     # En mode DEV, auto-valider les informations de l'entreprise si pas déjà fait
@@ -2036,7 +2008,7 @@ def display_company_context_section():
     # Afficher le formulaire éditable avec les résultats
     if st.session_state.get("web_search_results") or st.session_state.get("validated_company_info"):
         st.markdown("---")
-        st.subheader("📊 Informations de l'entreprise")
+        st.subheader("Informations de l'entreprise")
         
         # Utiliser les résultats validés s'ils existent, sinon les résultats de recherche
         # Les résultats validés ont la priorité, mais si une nouvelle recherche a été effectuée,
@@ -2120,7 +2092,7 @@ def display_company_context_section():
 
 def display_recommendations_section():
     """Section pour générer l'Executive Summary (enjeux et recommandations)"""
-    st.header("🎯 Génération des Enjeux et Recommandations")
+    st.header("Génération des Enjeux et Recommandations")
     st.info("💡 Cette section génère un Executive Summary avec les enjeux stratégiques, l'évaluation de maturité IA et les recommandations.")
     
     # Si le workflow est en cours, afficher la progression
@@ -2149,6 +2121,84 @@ def display_recommendations_section():
         st.warning("⚠️ Veuillez uploader le fichier Word du rapport généré précédemment.")
         return
     
+    # Vérifier si le fichier a changé
+    current_file_name = word_file.name if word_file else None
+    previous_file_name = st.session_state.get("word_file_name")
+    
+    if current_file_name != previous_file_name:
+        # Le fichier a changé, réinitialiser l'extraction
+        st.session_state.word_extraction_validated = False
+        st.session_state.word_extraction_data = None
+        st.session_state.word_path = None
+        st.session_state.word_file_name = current_file_name
+    
+    # Vérifier si l'extraction a déjà été faite et validée
+    if st.session_state.get("word_extraction_validated") and st.session_state.get("word_extraction_data"):
+        st.success("✅ Extraction validée")
+        if st.button("🔄 Ré-extraire le fichier Word", type="secondary"):
+            st.session_state.word_extraction_validated = False
+            st.session_state.word_extraction_data = None
+            st.session_state.word_path = None
+            st.rerun()
+    else:
+        # Upload et extraction du fichier Word
+        if st.session_state.get("word_path") is None:
+            with st.spinner("📤 Upload du fichier Word..."):
+                try:
+                    word_paths = upload_files_to_api([word_file])
+                    # Le fichier Word sera dans file_paths (tous les fichiers uploadés)
+                    all_paths = word_paths.get("file_paths", [])
+                    if all_paths:
+                        word_path = all_paths[0]  # Prendre le premier fichier uploadé
+                    else:
+                        # Fallback: chercher dans workshop (car l'API met les .docx dans workshop)
+                        workshop_paths = word_paths.get("workshop", [])
+                        if workshop_paths:
+                            word_path = workshop_paths[0]
+                        else:
+                            word_path = None
+                    
+                    if not word_path:
+                        st.error("❌ Erreur lors de l'upload du fichier Word")
+                        return
+                    
+                    st.session_state.word_path = word_path
+                    st.session_state.word_file_name = current_file_name
+                except Exception as e:
+                    st.error(f"❌ Erreur lors de l'upload du fichier Word: {str(e)}")
+                    return
+        else:
+            word_path = st.session_state.word_path
+        
+        # Extraction des données du Word
+        if st.session_state.get("word_extraction_data") is None:
+            with st.spinner("🔍 Extraction des données du rapport Word..."):
+                try:
+                    from executive_summary.word_report_extractor import WordReportExtractor
+                    extractor = WordReportExtractor()
+                    extracted_data = extractor.extract_from_word(word_path)
+                    st.session_state.word_extraction_data = extracted_data
+                except Exception as e:
+                    st.error(f"❌ Erreur lors de l'extraction: {str(e)}")
+                    return
+        
+        # Afficher l'interface de validation
+        executive_validation = StreamlitExecutiveValidation()
+        
+        validation_result = executive_validation.display_word_extraction_for_validation(
+            st.session_state.word_extraction_data,
+            key_suffix="word_extraction"
+        )
+        
+        if validation_result:
+            # Stocker les données validées
+            st.session_state.word_extraction_validated = True
+            st.session_state.validated_word_extraction = validation_result
+            st.rerun()
+        
+        # Ne pas afficher le reste tant que l'extraction n'est pas validée
+        return
+    
     # Note de l'intervieweur
     st.subheader("📝 Note de l'Intervieweur")
     interviewer_note = st.text_area(
@@ -2158,41 +2208,19 @@ def display_recommendations_section():
         key="interviewer_note"
     )
     
-    # Résumé des fichiers sélectionnés
-    st.subheader("📋 Résumé")
-    col1, col2 = st.columns(2)
-    with col1:
-        st.metric("Transcriptions", len(st.session_state.uploaded_transcripts))
-        st.metric("Ateliers", len(st.session_state.uploaded_workshops))
-    with col2:
-        st.metric("Entreprise", st.session_state.company_name)
-        st.metric("Fichier Word", "✅ Uploadé" if word_file else "❌ Manquant")
-    
+
     # Bouton de démarrage
     st.markdown("---")
     if st.button("🚀 Démarrer la Génération Executive Summary", type="primary", width="stretch"):
-        # Upload le fichier Word
-        with st.spinner("📤 Upload du fichier Word..."):
-            try:
-                word_paths = upload_files_to_api([word_file])
-                # Le fichier Word sera dans file_paths (tous les fichiers uploadés)
-                all_paths = word_paths.get("file_paths", [])
-                if all_paths:
-                    word_path = all_paths[0]  # Prendre le premier fichier uploadé
-                else:
-                    # Fallback: chercher dans workshop (car l'API met les .docx dans workshop)
-                    workshop_paths = word_paths.get("workshop", [])
-                    if workshop_paths:
-                        word_path = workshop_paths[0]
-                    else:
-                        word_path = None
-            except Exception as e:
-                st.error(f"❌ Erreur lors de l'upload du fichier Word: {str(e)}")
-                return
-        
+        word_path = st.session_state.get("word_path")
         if not word_path:
-            st.error("❌ Erreur lors de l'upload du fichier Word")
+            st.error("❌ Erreur : chemin du fichier Word non trouvé")
             return
+        
+        # Récupérer les données validées
+        validated_data = st.session_state.get("validated_word_extraction", {})
+        validated_needs = validated_data.get("validated_needs", [])
+        validated_use_cases = validated_data.get("validated_use_cases", [])
         
         # Démarrer le workflow Executive Summary
         with st.spinner("🚀 Démarrage du workflow Executive Summary..."):
@@ -2201,7 +2229,7 @@ def display_recommendations_section():
                 thread_id = str(uuid.uuid4())
                 st.session_state.executive_thread_id = thread_id
                 
-                # Appel API pour démarrer le workflow
+                # Appel API pour démarrer le workflow avec les données validées
                 response = requests.post(
                     f"{API_URL}/executive-summary/threads/{thread_id}/runs",
                     json={
@@ -2209,7 +2237,9 @@ def display_recommendations_section():
                         "transcript_files": get_transcript_file_paths(st.session_state.uploaded_transcripts),
                         "workshop_files": st.session_state.uploaded_workshops,
                         "company_name": st.session_state.company_name,
-                        "interviewer_note": interviewer_note or ""
+                        "interviewer_note": interviewer_note or "",
+                        "validated_needs": validated_needs,
+                        "validated_use_cases": validated_use_cases
                     }
                 )
                 
@@ -2319,7 +2349,7 @@ def display_executive_final_summary():
     st.markdown("---")
     
     # Titre principal
-    st.title("📊 Résumé Executive Summary")
+    st.title("Résumé Executive Summary")
     st.markdown("")
     
     # Récupérer les résultats depuis session_state (déjà chargés)
@@ -2332,27 +2362,134 @@ def display_executive_final_summary():
     validated_challenges = final_results.get("validated_challenges", [])
     validated_recommendations = final_results.get("validated_recommendations", [])
     
-    # Section Enjeux validés
-    st.header("🎯 Enjeux Validés")
+    # Section Enjeux - Titres uniquement
+    st.header("Enjeux")
     if validated_challenges:
         for i, challenge in enumerate(validated_challenges, 1):
-            titre = challenge.get("titre", f"Enjeu {i}")
-            st.markdown(f"**{i}. {titre}**")
+            # Gérer le cas où challenge est une chaîne JSON
+            if isinstance(challenge, str):
+                try:
+                    challenge = json.loads(challenge)
+                except (json.JSONDecodeError, TypeError):
+                    st.markdown(f"**{i}. {challenge}**")
+                    continue
+            
+            # Vérifier que challenge est un dict
+            if isinstance(challenge, dict):
+                titre = challenge.get("titre", f"Enjeu {i}")
+                st.markdown(f"**{i}. {titre}**")
+            else:
+                st.markdown(f"**{i}. {str(challenge)}**")
         st.markdown("")
     else:
         st.info("Aucun enjeu validé")
     
     st.markdown("---")
     
-    # Section Recommandations validées
-    st.header("💡 Recommandations Validées")
+    # Section Recommandations - Titres uniquement
+    st.header("Recommandations")
     if validated_recommendations:
-        for i, recommendation in enumerate(validated_recommendations, 1):
-            # Les recommandations sont des strings simples
-            st.markdown(f"**{i}. {recommendation}**")
+        # Normaliser les IDs des recommandations pour éviter les doublons
+        normalized_recommendations = []
+        used_ids = set()
+        
+        for rec in validated_recommendations:
+            # Gérer le cas où rec est une chaîne JSON
+            if isinstance(rec, str):
+                try:
+                    rec = json.loads(rec)
+                except (json.JSONDecodeError, TypeError):
+                    # Si ce n'est pas du JSON, traiter comme une chaîne simple
+                    normalized_recommendations.append({
+                        "id": f"R{len(normalized_recommendations) + 1}",
+                        "titre": rec,
+                        "description": ""
+                    })
+                    continue
+            
+            # Vérifier que rec est un dict
+            if isinstance(rec, dict):
+                rec_id = rec.get("id", "")
+                rec_titre = rec.get("titre", "")
+                
+                # Si l'ID est déjà utilisé ou vide, générer un nouvel ID unique
+                if rec_id in used_ids or not rec_id:
+                    counter = len(normalized_recommendations) + 1
+                    rec_id = f"R{counter}"
+                    while rec_id in used_ids:
+                        counter += 1
+                        rec_id = f"R{counter}"
+                
+                used_ids.add(rec_id)
+                
+                # Extraire le titre (ou utiliser la chaîne complète si pas de titre)
+                if rec_titre:
+                    normalized_recommendations.append({
+                        "id": rec_id,
+                        "titre": rec_titre,
+                        "description": rec.get("description", "")
+                    })
+                else:
+                    # Ancien format string - utiliser la valeur complète comme titre
+                    normalized_recommendations.append({
+                        "id": rec_id,
+                        "titre": str(rec),
+                        "description": ""
+                    })
+            else:
+                # Format inconnu - traiter comme string
+                normalized_recommendations.append({
+                    "id": f"R{len(normalized_recommendations) + 1}",
+                    "titre": str(rec),
+                    "description": ""
+                })
+        
+        # Afficher uniquement les titres
+        for i, rec in enumerate(normalized_recommendations, 1):
+            titre = rec.get("titre", f"Recommandation {i}")
+            st.markdown(f"**{i}. {titre}**")
         st.markdown("")
     else:
         st.info("Aucune recommandation validée")
+    
+    st.markdown("---")
+    
+    # Section Enjeux de l'IA pour {company_name} - Titres + Descriptions
+    company_name = st.session_state.get("company_name", "l'entreprise")
+    st.markdown(f"## Enjeux de l'IA pour {company_name}")
+    st.markdown("")
+    
+    if validated_challenges:
+        for i, challenge in enumerate(validated_challenges, 1):
+            # Gérer le cas où challenge est une chaîne JSON
+            if isinstance(challenge, str):
+                try:
+                    challenge = json.loads(challenge)
+                except (json.JSONDecodeError, TypeError):
+                    st.markdown(f"**{i}. {challenge}**")
+                    if i < len(validated_challenges):
+                        st.markdown("")
+                    continue
+            
+            # Vérifier que challenge est un dict
+            if isinstance(challenge, dict):
+                challenge_titre = challenge.get("titre", f"Enjeu {i}")
+                challenge_desc = challenge.get("description", "")
+                
+                if challenge_titre:
+                    st.markdown(f"**{challenge_titre}**")
+                else:
+                    st.markdown(f"**Enjeu {i}**")
+                
+                if challenge_desc:
+                    st.markdown(challenge_desc)
+            else:
+                st.markdown(f"**{i}. {str(challenge)}**")
+            
+            if i < len(validated_challenges):
+                st.markdown("")
+    else:
+        st.warning("⚠️ Aucun enjeu validé")
     
     st.markdown("---")
     
@@ -2748,20 +2885,38 @@ def display_executive_results():
     st.markdown("")
     
     # Section Enjeux identifiés
-    st.header("🎯 Enjeux identifiés")
+    company_name = st.session_state.get("company_name", "l'entreprise")
+    st.markdown(f"## Enjeux de l'IA pour {company_name}")
+    st.markdown("")
+    
     if validated_challenges:
         for i, ch in enumerate(validated_challenges, 1):
-            # Afficher l'ID et le titre si disponibles, sinon juste le numéro
-            challenge_id = ch.get('id', '')
+            # Gérer le cas où ch est une chaîne JSON
+            if isinstance(ch, str):
+                try:
+                    import json
+                    ch = json.loads(ch)
+                except (json.JSONDecodeError, TypeError):
+                    # Si ce n'est pas du JSON, traiter comme une chaîne simple
+                    st.markdown(f"**{i}. {ch}**")
+                    if i < len(validated_challenges):
+                        st.markdown("")
+                    continue
+            
+            # Vérifier que ch est un dict
+            if not isinstance(ch, dict):
+                st.markdown(f"**{i}. {str(ch)}**")
+                if i < len(validated_challenges):
+                    st.markdown("")
+                continue
+            
             challenge_titre = ch.get('titre', '')
             challenge_desc = ch.get('description', '')
             
-            if challenge_id and challenge_titre:
-                st.markdown(f"**{i}. {challenge_id} - {challenge_titre}**")
-            elif challenge_titre:
-                st.markdown(f"**{i}. {challenge_titre}**")
+            if challenge_titre:
+                st.markdown(f"**{challenge_titre}**")
             else:
-                st.markdown(f"**{i}. Enjeu {i}**")
+                st.markdown(f"**Enjeu {i}**")
             
             if challenge_desc:
                 st.markdown(challenge_desc)
@@ -2776,15 +2931,38 @@ def display_executive_results():
     # Section Recommandations clés
     st.header("💡 Recommandations clés")
     if validated_recommendations:
-        # S'assurer que les recommandations sont bien des chaînes de caractères
         for i, rec in enumerate(validated_recommendations, 1):
-            # Si c'est un dictionnaire, extraire le texte
-            if isinstance(rec, dict):
-                rec_text = rec.get("text", rec.get("recommendation", str(rec)))
-            else:
-                rec_text = str(rec)
+            # Gérer les deux formats : dict (nouveau) ou string (ancien)
+            # Si c'est une chaîne JSON, la parser
+            if isinstance(rec, str):
+                try:
+                    import json
+                    rec = json.loads(rec)
+                except (json.JSONDecodeError, TypeError):
+                    # Si ce n'est pas du JSON, traiter comme une chaîne simple
+                    st.markdown(f"**{i}. {rec}**")
+                    if i < len(validated_recommendations):
+                        st.markdown("")
+                    continue
             
-            st.markdown(f"**{i}. {rec_text}**")
+            if isinstance(rec, dict):
+                rec_titre = rec.get("titre", "")
+                rec_description = rec.get("description", "")
+                
+                # Afficher uniquement le titre, pas le dict complet
+                if rec_titre:
+                    st.markdown(f"**{i}. {rec_titre}**")
+                else:
+                    st.markdown(f"**{i}. Recommandation {i}**")
+                
+                # Optionnel : afficher la description si elle existe
+                if rec_description:
+                    st.markdown(rec_description)
+            else:
+                # Ancien format string
+                rec_text = str(rec)
+                st.markdown(f"**{i}. {rec_text}**")
+            
             if i < len(validated_recommendations):
                 st.markdown("")
     else:
