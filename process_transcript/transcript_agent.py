@@ -29,12 +29,14 @@ class TranscriptAgent:
             format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
         )
     
-    def process_single_file(self, file_path: str) -> Dict[str, Any]:
+    def process_single_file(self, file_path: str, validated_speakers: Optional[List[Dict[str, str]]] = None) -> Dict[str, Any]:
         """
         Traite un seul fichier de transcription (PDF ou JSON) de manière optimisée
         
         Args:
             file_path: Chemin vers le fichier (PDF ou JSON)
+            validated_speakers: Liste optionnelle des speakers validés par l'utilisateur
+                              Format: [{"name": "...", "role": "..."}, ...]
             
         Returns:
             Dictionnaire contenant les résultats de l'analyse
@@ -58,6 +60,18 @@ class TranscriptAgent:
                 raise ValueError(f"Format de fichier non supporté: {file_extension}. Utilisez .pdf ou .json")
             
             logger.info(f"✓ {len(interventions)} interventions extraites")
+            
+            # Filtrer UNIQUEMENT les speakers validés par l'utilisateur
+            if validated_speakers:
+                validated_names = {s["name"] for s in validated_speakers}
+                logger.info(f"🔍 Filtrage sur {len(validated_names)} speakers validés")
+                
+                interventions = [
+                    interv for interv in interventions
+                    if interv.get("speaker") in validated_names
+                ]
+                
+                logger.info(f"✓ {len(interventions)} interventions après filtrage des speakers validés")
             
             # Étape 1.5: Classification des speakers (interviewer/interviewé, direction/métier)
             logger.info("Étape 1.5: Classification des speakers")
@@ -105,7 +119,7 @@ class TranscriptAgent:
                 "error": str(e)
             }
     
-    def get_interesting_parts_only(self, file_path: str) -> Dict[str, Any]:
+    def get_interesting_parts_only(self, file_path: str, validated_speakers: Optional[List[Dict[str, str]]] = None) -> Dict[str, Any]:
         """
         Traite un fichier de transcription et retourne uniquement les parties intéressantes
         SANS effectuer l'analyse sémantique (plus rapide et moins coûteux).
@@ -115,6 +129,8 @@ class TranscriptAgent:
         
         Args:
             file_path: Chemin vers le fichier (PDF ou JSON)
+            validated_speakers: Liste optionnelle des speakers validés par l'utilisateur
+                              Format: [{"name": "...", "role": "..."}, ...]
             
         Returns:
             Dictionnaire contenant uniquement les parties intéressantes avec métadonnées
@@ -138,6 +154,18 @@ class TranscriptAgent:
                 raise ValueError(f"Format de fichier non supporté: {file_extension}. Utilisez .pdf ou .json")
             
             logger.info(f"✓ {len(interventions)} interventions extraites")
+            
+            # Filtrer UNIQUEMENT les speakers validés par l'utilisateur
+            if validated_speakers:
+                validated_names = {s["name"] for s in validated_speakers}
+                logger.info(f"🔍 Filtrage sur {len(validated_names)} speakers validés")
+                
+                interventions = [
+                    interv for interv in interventions
+                    if interv.get("speaker") in validated_names
+                ]
+                
+                logger.info(f"✓ {len(interventions)} interventions après filtrage des speakers validés")
             
             # Étape 1.5: Classification des speakers (interviewer/interviewé, direction/métier)
             logger.info("Étape 1.5: Classification des speakers")

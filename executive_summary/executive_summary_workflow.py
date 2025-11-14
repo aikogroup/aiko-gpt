@@ -32,6 +32,7 @@ class ExecutiveSummaryState(TypedDict):
     workshop_files: List[str]
     company_name: str
     interviewer_note: str
+    validated_speakers: List[Dict]  # NOUVEAU: Speakers validés par l'utilisateur
     # Extraction Word
     extracted_needs: List[Dict]
     extracted_use_cases: List[Dict]
@@ -184,7 +185,8 @@ class ExecutiveSummaryWorkflow:
         interviewer_note: str = "",
         thread_id: str = None,
         validated_needs: Optional[List[Dict[str, Any]]] = None,
-        validated_use_cases: Optional[List[Dict[str, Any]]] = None
+        validated_use_cases: Optional[List[Dict[str, Any]]] = None,
+        validated_speakers: Optional[List[Dict[str, str]]] = None  # NOUVEAU
     ) -> Dict[str, Any]:
         """
         Exécute le workflow.
@@ -198,6 +200,7 @@ class ExecutiveSummaryWorkflow:
             thread_id: ID du thread pour la persistance
             validated_needs: Besoins validés par l'utilisateur (optionnel)
             validated_use_cases: Cas d'usage validés par l'utilisateur (optionnel)
+            validated_speakers: Speakers validés par l'utilisateur (optionnel, NOUVEAU)
             
         Returns:
             État final du workflow
@@ -209,6 +212,7 @@ class ExecutiveSummaryWorkflow:
             "workshop_files": workshop_files or [],
             "company_name": company_name,
             "interviewer_note": interviewer_note,
+            "validated_speakers": validated_speakers or [],  # NOUVEAU
             "extracted_needs": validated_needs or [],
             "extracted_use_cases": validated_use_cases or [],
             "transcript_enjeux_citations": [],
@@ -351,11 +355,12 @@ class ExecutiveSummaryWorkflow:
         print(f"\n📝 [EXECUTIVE] transcript_enjeux_node - DÉBUT")
         try:
             transcript_files = state.get("transcript_files", [])
+            validated_speakers = state.get("validated_speakers", [])  # NOUVEAU
             if not transcript_files:
                 print("⚠️ Aucun fichier transcript")
                 return {"transcript_enjeux_citations": []}
             
-            citations = self.transcript_enjeux_agent.extract_citations(transcript_files)
+            citations = self.transcript_enjeux_agent.extract_citations(transcript_files, validated_speakers=validated_speakers)
             print(f"✅ {len(citations)} citations d'enjeux extraites")
             
             return {"transcript_enjeux_citations": citations}
@@ -387,11 +392,12 @@ class ExecutiveSummaryWorkflow:
         print(f"\n📝 [EXECUTIVE] transcript_maturite_node - DÉBUT")
         try:
             transcript_files = state.get("transcript_files", [])
+            validated_speakers = state.get("validated_speakers", [])  # NOUVEAU
             if not transcript_files:
                 print("⚠️ Aucun fichier transcript")
                 return {"transcript_maturite_citations": []}
             
-            citations = self.transcript_maturite_agent.extract_citations(transcript_files)
+            citations = self.transcript_maturite_agent.extract_citations(transcript_files, validated_speakers=validated_speakers)
             print(f"✅ {len(citations)} citations de maturité extraites")
             
             return {"transcript_maturite_citations": citations}

@@ -12,7 +12,8 @@ from prompts.atouts_agent_prompts import (
     ATOUTS_CITATIONS_SYSTEM_PROMPT,
     ATOUTS_CITATIONS_PROMPT,
     ATOUTS_SYNTHESIS_SYSTEM_PROMPT,
-    ATOUTS_SYNTHESIS_PROMPT
+    ATOUTS_SYNTHESIS_PROMPT,
+    ATOUTS_REGENERATION_PROMPT
 )
 
 # Charger les variables d'environnement
@@ -82,7 +83,8 @@ class AtoutsAgent:
     def synthesize_atouts(
         self,
         citations: CitationsAtoutsResponse,
-        company_info: Dict[str, Any]
+        company_info: Dict[str, Any],
+        additional_context: str = ""
     ) -> AtoutsResponse:
         """
         Synthétise les atouts de l'entreprise à partir des citations et des infos web
@@ -90,6 +92,7 @@ class AtoutsAgent:
         Args:
             citations: Citations extraites des transcriptions
             company_info: Informations sur l'entreprise depuis web search
+            additional_context: Contexte additionnel fourni par l'utilisateur
             
         Returns:
             AtoutsResponse avec les atouts synthétisés
@@ -105,6 +108,10 @@ class AtoutsAgent:
             citations=citations_text,
             company_info=company_info_text
         )
+        
+        # Ajouter le contexte additionnel si fourni
+        if additional_context:
+            prompt += f"\n\nContexte additionnel fourni par l'utilisateur :\n{additional_context}"
         
         try:
             response = openai.responses.parse(
@@ -130,6 +137,80 @@ class AtoutsAgent:
             
         except Exception as e:
             logger.error(f"Erreur lors de la synthèse des atouts: {e}")
+            return AtoutsResponse(atouts=[])
+    
+    def regenerate_atouts(
+        self,
+        citations: CitationsAtoutsResponse,
+        company_info: Dict[str, Any],
+        validated_atouts: List[Dict[str, Any]],
+        rejected_atouts: List[Dict[str, Any]],
+        user_feedback: str,
+        additional_context: str = ""
+    ) -> AtoutsResponse:
+        """
+        Régénère de nouveaux atouts en évitant les doublons avec ceux déjà validés/rejetés
+        
+        Args:
+            citations: Citations extraites des transcriptions
+            company_info: Informations sur l'entreprise
+            validated_atouts: Atouts déjà validés par l'utilisateur
+            rejected_atouts: Atouts déjà rejetés par l'utilisateur
+            user_feedback: Feedback de l'utilisateur
+            additional_context: Contexte additionnel
+            
+        Returns:
+            AtoutsResponse avec de nouveaux atouts différents
+        """
+        # Formater les citations
+        citations_text = self._format_citations(citations)
+        
+        # Formater les informations de l'entreprise
+        company_info_text = self._format_company_info(company_info)
+        
+        # Formater les atouts validés
+        validated_text = self._format_atouts_list(validated_atouts) if validated_atouts else "Aucun"
+        
+        # Formater les atouts rejetés
+        rejected_text = self._format_atouts_list(rejected_atouts) if rejected_atouts else "Aucun"
+        
+        # Appeler le LLM avec le prompt de régénération
+        prompt = ATOUTS_REGENERATION_PROMPT.format(
+            validated_atouts=validated_text,
+            rejected_atouts=rejected_text,
+            user_feedback=user_feedback if user_feedback else "Aucun feedback spécifique",
+            citations=citations_text,
+            company_info=company_info_text
+        )
+        
+        # Ajouter le contexte additionnel si fourni
+        if additional_context:
+            prompt += f"\n\nContexte additionnel :\n{additional_context}"
+        
+        try:
+            response = openai.responses.parse(
+                model=self.model,
+                instructions=ATOUTS_SYNTHESIS_SYSTEM_PROMPT,
+                input=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "input_text",
+                                "text": prompt
+                            }
+                        ]
+                    }
+                ],
+                text_format=AtoutsResponse
+            )
+            
+            atouts_response = response.output_parsed
+            logger.info(f"Régénéré {len(atouts_response.atouts)} nouveaux atouts")
+            return atouts_response
+            
+        except Exception as e:
+            logger.error(f"Erreur lors de la régénération des atouts: {e}")
             return AtoutsResponse(atouts=[])
     
     def _format_interventions(self, interventions: List[Dict[str, Any]]) -> str:
@@ -198,6 +279,19 @@ class AtoutsAgent:
         # Informations supplémentaires
         if "informations_supplementaires" in company_info:
             formatted.append(f"**Informations supplémentaires**: {company_info['informations_supplementaires']}")
+        
+        return "\n".join(formatted)
+    
+    def _format_atouts_list(self, atouts: List[Dict[str, Any]]) -> str:
+        """Formate une liste d'atouts pour affichage"""
+        if not atouts:
+            return "Aucun"
+        
+        formatted = []
+        for atout in atouts:
+            titre = atout.get('titre', 'Titre non défini')
+            description = atout.get('description', 'Description non définie')
+            formatted.append(f"- **{titre}**: {description}")
         
         return "\n".join(formatted)
 

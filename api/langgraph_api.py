@@ -88,6 +88,7 @@ class ExecutiveSummaryInput(BaseModel):
     interviewer_note: str = ""
     validated_needs: Optional[List[Dict[str, Any]]] = None
     validated_use_cases: Optional[List[Dict[str, Any]]] = None
+    validated_speakers: Optional[List[Dict[str, str]]] = None  # NOUVEAU
 
 
 class RappelMissionInput(BaseModel):
@@ -102,6 +103,22 @@ class AtoutsEntrepriseInput(BaseModel):
     pdf_paths: List[str]
     company_info: Dict[str, Any]
     interviewer_names: Optional[List[str]] = None
+    atouts_additional_context: Optional[str] = ""
+    validated_speakers: Optional[List[Dict[str, str]]] = None  # NOUVEAU
+
+
+class PreAtoutContextInput(BaseModel):
+    """Input pour le contexte additionnel avant génération des atouts"""
+    atouts_additional_context: str = ""
+
+
+class AtoutsValidationFeedback(BaseModel):
+    """Feedback de validation des atouts"""
+    validated_atouts: List[Dict[str, Any]]
+    rejected_atouts: List[Dict[str, Any]]
+    user_feedback: str = ""
+    atouts_user_action: str = "finalize_atouts"  # "continue_atouts" ou "finalize_atouts"
+
 
 class ExecutiveValidationFeedback(BaseModel):
     """Feedback de validation Executive Summary"""
@@ -637,7 +654,10 @@ async def create_atouts_run(thread_id: str, atouts_input: AtoutsEntrepriseInput)
     """Démarre un workflow d'extraction des atouts de l'entreprise"""
     try:
         if thread_id not in atouts_workflows:
-            workflow = AtoutsWorkflow(interviewer_names=atouts_input.interviewer_names)
+            workflow = AtoutsWorkflow(
+                interviewer_names=atouts_input.interviewer_names,
+                checkpointer=checkpointer
+            )
             atouts_workflows[thread_id] = {
                 "workflow": workflow,
                 "state": None,
@@ -650,16 +670,19 @@ async def create_atouts_run(thread_id: str, atouts_input: AtoutsEntrepriseInput)
         print(f"\n🚀 [API] Démarrage workflow Atouts pour thread {thread_id}")
         print(f"📁 PDFs: {len(atouts_input.pdf_paths)}")
         print(f"🏢 Entreprise: {atouts_input.company_info.get('nom', 'N/A')}")
+        print(f"📝 Contexte additionnel: {len(atouts_input.atouts_additional_context)} caractères")
         
-        # Exécuter le workflow
+        # Exécuter le workflow avec le contexte additionnel
         result = workflow.run(
             pdf_paths=atouts_input.pdf_paths,
             company_info=atouts_input.company_info,
-            thread_id=thread_id
+            thread_id=thread_id,
+            atouts_additional_context=atouts_input.atouts_additional_context,
+            validated_speakers=atouts_input.validated_speakers  # NOUVEAU
         )
         
         workflow_data["state"] = result
-        workflow_data["status"] = "completed" if result.get("success") else "error"
+        workflow_data["status"] = "paused" if result.get("atouts_workflow_paused") else ("completed" if result.get("success") else "error")
         
         return {
             "thread_id": thread_id,
@@ -674,15 +697,116 @@ async def create_atouts_run(thread_id: str, atouts_input: AtoutsEntrepriseInput)
 
 @app.get("/atouts-entreprise/threads/{thread_id}/state")
 async def get_atouts_state(thread_id: str):
-    """Récupère l'état du workflow Atouts"""
+    """
+    Récupère l'état actuel du workflow Atouts.
+    Utilise le snapshot LangGraph pour déterminer le vrai prochain nœud.
+    """
     if thread_id not in atouts_workflows:
         raise HTTPException(status_code=404, detail="Thread non trouvé")
     
-    return {
-        "thread_id": thread_id,
-        "status": atouts_workflows[thread_id]["status"],
-        "state": atouts_workflows[thread_id]["state"]
-    }
+    workflow_data = atouts_workflows[thread_id]
+    workflow = workflow_data["workflow"]
+    
+    # Récupérer l'état actuel depuis le checkpointer LangGraph
+    config = {"configurable": {"thread_id": thread_id}}
+    snapshot = workflow.graph.get_state(config)
+    
+    if snapshot and snapshot.values:
+        state = snapshot.values
+        workflow_data["state"] = state
+        
+        # Déterminer le prochain nœud depuis le snapshot LangGraph
+        next_nodes = []
+        if snapshot.next:
+            if isinstance(snapshot.next, (list, tuple)):
+                next_nodes = list(snapshot.next)
+            else:
+                next_nodes = [snapshot.next]
+        
+        # Mettre à jour le statut en fonction du prochain nœud
+        if "pre_atout_interrupt" in next_nodes:
+            workflow_data["status"] = "paused"
+        elif "validate_atouts" in next_nodes:
+            workflow_data["status"] = "paused"
+        elif len(next_nodes) == 0:
+            workflow_data["status"] = "completed"
+        else:
+            workflow_data["status"] = "running"
+        
+        return {
+            "thread_id": thread_id,
+            "status": workflow_data["status"],
+            "values": state,
+            "next": tuple(next_nodes) if next_nodes else []
+        }
+    else:
+        # Fallback si pas de snapshot
+        state = workflow_data.get("state", {})
+        return {
+            "thread_id": thread_id,
+            "status": workflow_data.get("status", "paused"),
+            "values": state,
+            "next": []
+        }
+
+
+@app.post("/atouts-entreprise/threads/{thread_id}/validate")
+async def send_atouts_validation(thread_id: str, feedback: AtoutsValidationFeedback):
+    """
+    Envoie le feedback de validation des atouts et reprend le workflow.
+    """
+    if thread_id not in atouts_workflows:
+        raise HTTPException(status_code=404, detail="Thread non trouvé")
+    
+    try:
+        workflow_data = atouts_workflows[thread_id]
+        workflow = workflow_data["workflow"]
+        
+        print(f"\n📝 [API] Réception du feedback de validation atouts pour thread {thread_id}")
+        print(f"✅ Validés: {len(feedback.validated_atouts)}")
+        print(f"❌ Rejetés: {len(feedback.rejected_atouts)}")
+        print(f"🎯 Action utilisateur: {feedback.atouts_user_action}")
+        
+        # Reprendre le workflow avec le feedback
+        result = workflow.resume_workflow_with_validation(
+            validated_atouts=feedback.validated_atouts,
+            rejected_atouts=feedback.rejected_atouts,
+            user_feedback=feedback.user_feedback,
+            atouts_user_action=feedback.atouts_user_action,
+            thread_id=thread_id
+        )
+        
+        # Mettre à jour l'état
+        workflow_data["state"] = result
+        
+        # Récupérer le snapshot LangGraph pour déterminer le vrai statut
+        config = {"configurable": {"thread_id": thread_id}}
+        snapshot = workflow.graph.get_state(config)
+        
+        if snapshot and snapshot.next:
+            next_nodes = list(snapshot.next) if isinstance(snapshot.next, (list, tuple)) else [snapshot.next]
+            
+            if "validate_atouts" in next_nodes:
+                workflow_data["status"] = "paused"
+            elif len(next_nodes) == 0:
+                workflow_data["status"] = "completed"
+            else:
+                workflow_data["status"] = "running"
+        else:
+            if result.get("success"):
+                workflow_data["status"] = "completed"
+            else:
+                workflow_data["status"] = "paused"
+        
+        return {
+            "status": "resumed",
+            "thread_id": thread_id,
+            "workflow_status": workflow_data["status"]
+        }
+    
+    except Exception as e:
+        print(f"❌ [API] Erreur: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Erreur reprise workflow: {str(e)}")
 
 
 @app.delete("/threads/{thread_id}")
@@ -758,7 +882,8 @@ async def create_executive_run(thread_id: str, workflow_input: ExecutiveSummaryI
             interviewer_note=workflow_input.interviewer_note,
             thread_id=thread_id,
             validated_needs=workflow_input.validated_needs,
-            validated_use_cases=workflow_input.validated_use_cases
+            validated_use_cases=workflow_input.validated_use_cases,
+            validated_speakers=workflow_input.validated_speakers  # NOUVEAU
         )
         
         # Mettre à jour l'état

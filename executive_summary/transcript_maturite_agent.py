@@ -3,7 +3,7 @@ Agent spécialisé pour extraire les citations liées à la maturité IA depuis 
 """
 
 import logging
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from pathlib import Path
 from openai import OpenAI
 import os
@@ -38,12 +38,13 @@ class TranscriptMaturiteAgent:
         # Réutiliser TranscriptAgent pour le parsing de base
         self.transcript_agent = TranscriptAgent(openai_api_key=api_key, interviewer_names=interviewer_names)
     
-    def extract_citations(self, transcript_files: List[str]) -> List[Dict[str, Any]]:
+    def extract_citations(self, transcript_files: List[str], validated_speakers: Optional[List[Dict[str, str]]] = None) -> List[Dict[str, Any]]:
         """
         Extrait les citations liées à la maturité IA depuis plusieurs fichiers de transcript.
         
         Args:
             transcript_files: Liste des chemins vers les fichiers de transcript (PDF ou JSON)
+            validated_speakers: Liste optionnelle des speakers validés par l'utilisateur (NOUVEAU)
             
         Returns:
             Liste des citations extraites avec métadonnées
@@ -55,7 +56,7 @@ class TranscriptMaturiteAgent:
                 logger.info(f"Traitement transcript pour maturité: {file_path}")
                 
                 # Utiliser TranscriptAgent pour parser et filtrer (SANS analyse sémantique)
-                result = self.transcript_agent.get_interesting_parts_only(file_path)
+                result = self.transcript_agent.get_interesting_parts_only(file_path, validated_speakers=validated_speakers)
                 
                 # Extraire les interventions intéressantes
                 interesting_parts = result.get("interesting_parts", {})

@@ -116,6 +116,55 @@ Assure-toi que chaque atout :
 - Est rédigé comme une synthèse stratégique
 """
 
+# Prompt pour la régénération des atouts (évite les doublons)
+ATOUTS_REGENERATION_PROMPT = """
+À partir des citations extraites et des informations sur l'entreprise, synthétise de NOUVEAUX atouts de l'entreprise pour l'intégration de l'IA.
+
+IMPORTANT : Tu dois proposer des atouts DIFFÉRENTS de ceux déjà validés ou rejetés par l'utilisateur.
+
+Atouts déjà validés par l'utilisateur (NE PAS REPROPOSER) :
+{validated_atouts}
+
+Atouts déjà rejetés par l'utilisateur (NE PAS REPROPOSER) :
+{rejected_atouts}
+
+Feedback de l'utilisateur :
+{user_feedback}
+
+Citations extraites :
+{citations}
+
+Informations sur l'entreprise :
+{company_info}
+
+Génère entre 3 et 6 NOUVEAUX atouts majeurs qui :
+1. Sont DIFFÉRENTS des atouts déjà validés ou rejetés (évite les thématiques similaires)
+2. Explorent d'autres aspects des citations ou d'autres angles stratégiques
+3. Prennent en compte le feedback de l'utilisateur
+4. Montrent clairement comment chaque atout facilite l'adoption de l'IA
+5. Sont formulés de manière stratégique et professionnelle
+
+Stratégies pour éviter les doublons :
+- Si un atout sur l'expertise métier a déjà été validé/rejeté, explore plutôt l'infrastructure technique
+- Si un atout sur le capital humain existe déjà, explore la culture d'innovation ou l'agilité organisationnelle
+- Cherche des angles complémentaires dans les citations non encore exploitées
+- Combine plusieurs citations de manière différente pour créer de nouveaux atouts
+
+Style et ton attendus :
+- Utiliser le conditionnel pour projeter les bénéfices (permettrait, pourrait, constituerait, représenterait)
+- Adopter un vocabulaire stratégique et consultatif
+- Présenter les atouts comme des leviers de transformation
+- Montrer le potentiel d'amplification par l'IA
+- 3-5 lignes par description
+
+Assure-toi que chaque atout :
+- A un ID unique (1, 2, 3, ...)
+- A un titre percutant et concis (max 15 mots)
+- A une description de 3-5 lignes
+- Est rédigé comme une synthèse stratégique
+- Est VRAIMENT DIFFÉRENT des atouts déjà proposés
+"""
+
 # Note : ATOUTS_WEB_INFO_PROMPT supprimé car non utilisé
 # Les atouts sont extraits uniquement depuis les transcriptions d'interviews,
 # pas depuis des informations web génériques

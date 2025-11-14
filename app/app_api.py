@@ -2231,6 +2231,11 @@ def display_recommendations_section():
                 thread_id = str(uuid.uuid4())
                 st.session_state.executive_thread_id = thread_id
                 
+                # NOUVEAU: Préparer les speakers validés depuis uploaded_transcripts
+                validated_speakers = []
+                for transcript in st.session_state.uploaded_transcripts:
+                    validated_speakers.extend(transcript.get("speakers", []))
+                
                 # Appel API pour démarrer le workflow avec les données validées
                 response = requests.post(
                     f"{API_URL}/executive-summary/threads/{thread_id}/runs",
@@ -2241,7 +2246,8 @@ def display_recommendations_section():
                         "company_name": st.session_state.company_name,
                         "interviewer_note": interviewer_note or "",
                         "validated_needs": validated_needs,
-                        "validated_use_cases": validated_use_cases
+                        "validated_use_cases": validated_use_cases,
+                        "validated_speakers": validated_speakers  # NOUVEAU
                     }
                 )
                 
@@ -2887,8 +2893,242 @@ def display_rappel_mission():
         st.info("💡 Cliquez sur 'Générer le rappel de la mission' pour afficher les informations de l'entreprise.")
 
 
+def poll_atouts_workflow_status():
+    """
+    Poll le statut du workflow atouts.
+    
+    Returns:
+        "running", "waiting_atouts_validation", "completed", "error"
+    """
+    if not st.session_state.get("atouts_thread_id"):
+        return "no_thread"
+    
+    try:
+        response = requests.get(
+            f"{API_URL}/atouts-entreprise/threads/{st.session_state.atouts_thread_id}/state",
+            timeout=60
+        )
+        response.raise_for_status()
+        
+        state = response.json()
+        st.session_state.atouts_workflow_state = state["values"]
+        
+        # Déterminer le statut
+        next_nodes = list(state["next"]) if state["next"] else []
+        
+        print(f"🔍 [DEBUG] poll_atouts_workflow_status - next_nodes: {next_nodes}")
+        
+        if "validate_atouts" in next_nodes:
+            return "waiting_atouts_validation"
+        elif len(next_nodes) == 0:
+            return "completed"
+        else:
+            return "running"
+    
+    except Exception as e:
+        st.error(f"❌ Erreur lors du polling: {str(e)}")
+        return "error"
+
+
+def send_atouts_validation_api_call(thread_id: str, validation_result: Dict[str, Any], result_queue: queue.Queue):
+    """
+    Envoie le résultat de validation à l'API dans un thread séparé.
+    """
+    try:
+        response = requests.post(
+            f"{API_URL}/atouts-entreprise/threads/{thread_id}/validate",
+            json=validation_result,
+            timeout=600
+        )
+        response.raise_for_status()
+        result = response.json()
+        workflow_status = result.get("workflow_status", "running")
+        st.session_state.atouts_workflow_status = workflow_status
+        result_queue.put((True, None))
+    except Exception as e:
+        result_queue.put((False, str(e)))
+
+
+def display_atouts_validation_interface():
+    """Affiche l'interface de validation des atouts"""
+    from human_in_the_loop.streamlit_atouts_validation import StreamlitAtoutsValidation
+    
+    workflow_state = st.session_state.get("atouts_workflow_state", {})
+    proposed_atouts = workflow_state.get("proposed_atouts", [])
+    validated_count = len(workflow_state.get("validated_atouts", []))
+    iteration_count = workflow_state.get("iteration_count", 0)
+    
+    if not proposed_atouts:
+        st.warning("⚠️ Aucun atout proposé. Veuillez relancer le workflow.")
+        return
+    
+    # Utiliser l'interface de validation
+    validation_interface = StreamlitAtoutsValidation()
+    
+    # Afficher l'interface avec le key_suffix basé sur iteration_count
+    validation_result = validation_interface.display_atouts_for_validation(
+        proposed_atouts=proposed_atouts,
+        validated_count=validated_count,
+        key_suffix=str(iteration_count)
+    )
+    
+    # Si l'utilisateur a validé
+    if validation_result:
+        print(f"📝 [DEBUG] Validation result reçu: {validation_result.keys()}")
+        
+        # Préparer les données pour l'API
+        api_payload = {
+            "validated_atouts": validation_result["validated_atouts"],
+            "rejected_atouts": validation_result["rejected_atouts"],
+            "user_feedback": validation_result["user_feedback"],
+            "atouts_user_action": validation_result["atouts_user_action"]
+        }
+        
+        # Créer une queue pour la communication entre threads
+        result_queue = queue.Queue()
+        
+        # Lancer l'appel API dans un thread séparé
+        api_thread = threading.Thread(
+            target=send_atouts_validation_api_call,
+            args=(st.session_state.atouts_thread_id, api_payload, result_queue)
+        )
+        api_thread.start()
+        
+        # Afficher un spinner pendant l'appel API
+        status_placeholder = st.empty()
+        
+        messages = [
+            "⚙️ Envoi de la validation...",
+            "🔄 Traitement en cours...",
+            "✨ Génération en cours..." if validation_result["atouts_user_action"] == "continue_atouts" else "✅ Finalisation..."
+        ]
+        
+        message_index = 0
+        while api_thread.is_alive():
+            status_placeholder.info(messages[message_index % len(messages)])
+            time.sleep(2)
+            message_index += 1
+        
+        # Récupérer le résultat
+        try:
+            success, error_msg = result_queue.get(timeout=1)
+            
+            if success:
+                status_placeholder.success("✅ Validation envoyée ! Le workflow reprend...")
+                
+                # Attendre un peu pour que le workflow se mette à jour
+                time.sleep(2)
+                st.rerun()
+            else:
+                status_placeholder.error(f"❌ Erreur: {error_msg}")
+        
+        except queue.Empty:
+            status_placeholder.error("❌ Timeout lors de la validation")
+
+
+def display_atouts_workflow_progress():
+    """Affiche la progression du workflow Atouts et gère les validations"""
+    
+    st.markdown("---")
+    st.header("🔄 Progression du Workflow Atouts")
+    
+    # Si le workflow est déjà terminé dans session_state, afficher les résultats
+    if st.session_state.get("atouts_workflow_completed"):
+        display_atouts_final_results()
+        return
+    
+    # Poll le statut
+    status = poll_atouts_workflow_status()
+    
+    if status == "running":
+        st.info("⚙️ Le workflow est en cours d'exécution...")
+        st.markdown("#### Étapes en cours :")
+        st.markdown("""
+        - 📝 Extraction des parties intéressantes
+        - 📄 Extraction des citations d'atouts
+        - ✨ Génération des atouts
+        """)
+        
+        # Auto-refresh toutes les 3 secondes
+        time.sleep(3)
+        st.rerun()
+    
+    elif status == "waiting_atouts_validation":
+        st.warning("⏸️ **Validation des atouts requise !**")
+        display_atouts_validation_interface()
+    
+    elif status == "completed":
+        # Récupérer l'état final
+        workflow_state = st.session_state.get("atouts_workflow_state", {})
+        final_atouts = workflow_state.get("final_atouts", [])
+        atouts_markdown = workflow_state.get("atouts_markdown", "")
+        
+        if final_atouts:
+            st.session_state.atouts_data = {"atouts": final_atouts}
+            st.session_state.atouts_markdown = atouts_markdown
+            st.session_state.atouts_workflow_completed = True
+            st.success("✅ Workflow terminé avec succès !")
+            time.sleep(1)
+            st.rerun()
+        else:
+            st.warning("⚠️ Workflow terminé mais aucun atout validé.")
+    
+    elif status == "error":
+        st.error("❌ Une erreur s'est produite dans le workflow.")
+    
+    elif status == "no_thread":
+        st.info("💡 Cliquez sur 'Lancer l'analyse des atouts' pour démarrer.")
+
+
+def display_atouts_final_results():
+    """Affiche les résultats finaux des atouts"""
+    atouts_markdown = st.session_state.get("atouts_markdown", "")
+    atouts_data = st.session_state.get("atouts_data", {})
+    validated_company_info = st.session_state.get("validated_company_info", {})
+    company_name = validated_company_info.get("nom", "l'entreprise")
+    
+    if atouts_markdown:
+        st.markdown("---")
+        st.markdown(atouts_markdown)
+        
+        # Bouton de téléchargement
+        if atouts_data:
+            st.markdown("---")
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                # Télécharger en JSON
+                atouts_json = json.dumps(atouts_data, ensure_ascii=False, indent=2)
+                st.download_button(
+                    label="📥 Télécharger (JSON)",
+                    data=atouts_json,
+                    file_name=f"atouts_{company_name.replace(' ', '_')}_{date.today().strftime('%Y%m%d')}.json",
+                    mime="application/json"
+                )
+            
+            with col2:
+                # Télécharger en Markdown
+                st.download_button(
+                    label="📥 Télécharger (Markdown)",
+                    data=atouts_markdown,
+                    file_name=f"atouts_{company_name.replace(' ', '_')}_{date.today().strftime('%Y%m%d')}.md",
+                    mime="text/markdown"
+                )
+            
+            with col3:
+                # Bouton pour recommencer
+                if st.button("🔄 Nouvelle analyse", type="secondary"):
+                    # Nettoyer les états
+                    st.session_state.atouts_workflow_completed = False
+                    st.session_state.atouts_thread_id = None
+                    st.session_state.atouts_workflow_state = {}
+                    st.session_state.atouts_markdown = ""
+                    st.session_state.atouts_data = {}
+                    st.rerun()
+
+
 def display_atouts_entreprise():
-    """Affiche la page d'extraction des atouts de l'entreprise"""
+    """Affiche la page d'extraction des atouts de l'entreprise avec HITL"""
     st.header("Atouts de l'entreprise")
     
     st.markdown("""
@@ -2897,6 +3137,8 @@ def display_atouts_entreprise():
     L'analyse se base sur :
     - Les transcriptions des entretiens
     - Les informations de l'entreprise validées
+    
+    **Nouveau** : Vous pourrez valider et modifier les atouts proposés avant finalisation.
     """)
     
     # Vérifier les prérequis
@@ -2919,86 +3161,70 @@ def display_atouts_entreprise():
     # Afficher le nombre de transcriptions
     st.info(f"📄 {len(uploaded_transcripts)} transcription(s) disponible(s)")
     
-    # Bouton de génération
-    if st.button("Extraire les atouts de l'entreprise", type="primary"):
+    # Si un workflow est en cours, afficher la progression
+    if st.session_state.get("atouts_thread_id"):
+        display_atouts_workflow_progress()
+        return
+    
+    # Afficher les résultats finaux s'ils existent
+    if st.session_state.get("atouts_workflow_completed"):
+        display_atouts_final_results()
+        return
+    
+    # Sinon, afficher le formulaire de démarrage avec contexte additionnel
+    st.markdown("---")
+    st.markdown("### Contexte additionnel (optionnel)")
+    st.markdown("Ajoutez des informations pour guider la génération des atouts :")
+    
+    additional_context = st.text_area(
+        "Contexte",
+        placeholder="Ex: Mettre l'accent sur les aspects techniques, la culture d'innovation est importante, etc.",
+        height=150,
+        key="atouts_initial_context_input"
+    )
+    
+    if st.button("Lancer l'analyse des atouts", type="primary"):
         thread_id = str(uuid.uuid4())
+        st.session_state.atouts_thread_id = thread_id
+        st.session_state.atouts_workflow_completed = False
+        
         try:
-            with st.spinner("Extraction des atouts en cours... Cela peut prendre quelques minutes."):
+            with st.spinner("Démarrage du workflow... Extraction et analyse en cours..."):
                 # Préparer les chemins des PDFs
                 pdf_paths = get_transcript_file_paths(uploaded_transcripts)
                 
                 # Récupérer les noms des interviewers
                 interviewer_names = load_interviewers()
                 
-                # Appeler l'API
+                # NOUVEAU: Préparer les speakers validés depuis uploaded_transcripts
+                validated_speakers = []
+                for transcript in uploaded_transcripts:
+                    validated_speakers.extend(transcript.get("speakers", []))
+                
+                # Appeler l'API pour démarrer le workflow avec le contexte
                 response = requests.post(
                     f"{API_URL}/atouts-entreprise/threads/{thread_id}/runs",
                     json={
                         "pdf_paths": pdf_paths,
                         "company_info": validated_company_info,
-                        "interviewer_names": interviewer_names
+                        "interviewer_names": interviewer_names,
+                        "atouts_additional_context": additional_context,
+                        "validated_speakers": validated_speakers  # NOUVEAU
                     },
-                    timeout=300  # 5 minutes timeout
+                    timeout=600
                 )
                 response.raise_for_status()
-                data = response.json()
-                result = data.get("result", {})
                 
-                # Récupérer les résultats
-                atouts_markdown = result.get("atouts_markdown", "")
-                atouts_data = result.get("atouts", {})
-                success = result.get("success", False)
-                error = result.get("error", "")
-                
-                if success and atouts_markdown:
-                    # Sauvegarder dans la session
-                    st.session_state.atouts_markdown = atouts_markdown
-                    st.session_state.atouts_data = atouts_data
-                    st.session_state.atouts_company = company_name
-                    st.success("✅ Atouts extraits avec succès !")
-                    st.rerun()
-                else:
-                    error_message = error or "Aucun atout identifié."
-                    st.error(f"❌ Erreur : {error_message}")
+                st.success("✅ Workflow démarré ! Analyse en cours...")
+                time.sleep(1)
+                st.rerun()
                     
         except requests.exceptions.Timeout:
             st.error("❌ La requête a expiré. Le traitement prend trop de temps. Veuillez réessayer.")
+            st.session_state.atouts_thread_id = None
         except Exception as e:
-            st.error(f"❌ Erreur lors de l'extraction des atouts : {str(e)}")
-    
-    # Afficher les résultats s'ils existent
-    atouts_markdown = st.session_state.get("atouts_markdown", "")
-    atouts_data = st.session_state.get("atouts_data", {})
-    
-    if atouts_markdown:
-        st.markdown("---")
-        st.markdown(atouts_markdown)
-        
-        # Bouton de téléchargement
-        if atouts_data:
-            st.markdown("---")
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                # Télécharger en JSON
-                atouts_json = json.dumps(atouts_data, ensure_ascii=False, indent=2)
-                st.download_button(
-                    label="📥 Télécharger (JSON)",
-                    data=atouts_json,
-                    file_name=f"atouts_{company_name.replace(' ', '_')}_{date.today().strftime('%Y%m%d')}.json",
-                    mime="application/json"
-                )
-            
-            with col2:
-                # Télécharger en Markdown
-                st.download_button(
-                    label="📥 Télécharger (Markdown)",
-                    data=atouts_markdown,
-                    file_name=f"atouts_{company_name.replace(' ', '_')}_{date.today().strftime('%Y%m%d')}.md",
-                    mime="text/markdown"
-                )
-    else:
-        st.info("💡 Cliquez sur 'Extraire les atouts de l'entreprise' pour lancer l'analyse.")
+            st.error(f"❌ Erreur lors du démarrage du workflow : {str(e)}")
+            st.session_state.atouts_thread_id = None
 
 
 if __name__ == "__main__":
