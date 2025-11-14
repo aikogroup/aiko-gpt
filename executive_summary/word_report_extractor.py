@@ -36,31 +36,55 @@ class WordReportExtractor:
         self.client = OpenAI(api_key=api_key)
         self.model = os.getenv('OPENAI_MODEL', 'gpt-5-nano')
     
-    def extract_from_word(self, word_path: str) -> Dict[str, List[Dict[str, Any]]]:
+    def extract_from_word(self, word_path: str, force_llm: bool = False) -> Dict[str, List[Dict[str, Any]]]:
         """
         Extrait les données depuis un fichier Word.
         
         Stratégie :
-        1. Tentative d'extraction JSON directe (métadonnées ou structure cachée)
-        2. Si échec : extraction via LLM avec structured output
+        1. Si force_llm=True : extraction LLM directe
+        2. Sinon : Tentative d'extraction structurée (parsing du document)
+        3. Si échec ou résultats incomplets : extraction via LLM avec structured output
         
         Args:
             word_path: Chemin vers le fichier Word (.docx)
+            force_llm: Si True, force l'utilisation du LLM (ignore le parsing structuré)
             
         Returns:
-            Dict avec keys: 'final_needs', 'final_use_cases'
+            Dict avec keys: 'final_needs', 'final_use_cases', 'extraction_method'
         """
-        logger.info(f"Extraction depuis Word: {word_path}")
+        logger.info(f"Extraction depuis Word: {word_path} (force_llm={force_llm})")
+        
+        # Si force_llm, passer directement au LLM
+        if force_llm:
+            logger.info("🤖 Extraction LLM forcée par l'utilisateur")
+            result = self._extract_with_llm(word_path)
+            result["extraction_method"] = "llm_forced"
+            return result
         
         # Étape 1 : Tentative d'extraction structurée (parsing du document)
         extracted_data = self._try_extract_json(word_path)
         if extracted_data:
-            logger.info("✅ Extraction structurée réussie (parsing direct)")
+            needs_count = len(extracted_data.get("final_needs", []))
+            use_cases_count = len(extracted_data.get("final_use_cases", []))
+            
+            # Vérifier si l'extraction est complète
+            # Si on a des besoins mais pas de cas d'usage, c'est suspect
+            if needs_count > 0 and use_cases_count == 0:
+                logger.warning(f"⚠️ Extraction structurée incomplète: {needs_count} besoins mais 0 cas d'usage")
+                logger.info("🤖 Tentative d'extraction LLM pour récupérer les cas d'usage manquants")
+                result = self._extract_with_llm(word_path)
+                result["extraction_method"] = "llm_fallback"
+                return result
+            
+            logger.info(f"✅ Extraction structurée réussie: {needs_count} besoins, {use_cases_count} cas d'usage")
+            extracted_data["extraction_method"] = "structured"
             return extracted_data
         
-        # Étape 2 : Extraction via LLM (si le parsing échoue)
+        # Étape 2 : Extraction via LLM (si le parsing échoue complètement)
         logger.info("⚠️ Extraction structurée échouée, utilisation LLM")
-        return self._extract_with_llm(word_path)
+        result = self._extract_with_llm(word_path)
+        result["extraction_method"] = "llm_fallback"
+        return result
     
     def _try_extract_json(self, word_path: str) -> Optional[Dict[str, List[Dict[str, Any]]]]:
         """

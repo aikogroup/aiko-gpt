@@ -387,16 +387,29 @@ RAPPORT WORD (texte extrait) :
 {word_text}
 
 INSTRUCTIONS :
-1. Identifie la section "LES BESOINS IDENTIFIÉS" et extrait tous les besoins avec leurs citations
-2. Identifie la section "LES CAS D'USAGES IA PRIORITAIRES" et extrais tous les cas d'usage
-3. Pour chaque besoin, conserve : titre (theme), description
-4. Pour chaque cas d'usage, conserve : titre, description, et famille optionnelle
-5. IMPORTANT : Les familles sont maintenant affichées comme des titres intermédiaires (titres de section) dans le document, pas comme préfixe dans la description. 
-   - Les titres de famille apparaissent avant les cas d'usage qui leur appartiennent
-   - La section "Autres cas d'usage" contient les cas d'usage sans famille
-   - Associe chaque cas d'usage à la famille du titre précédent (ou None si dans "Autres cas d'usage")
-6. Si le document a été modifié manuellement, adapte-toi à la structure actuelle
+1. Identifie la section "LES BESOINS IDENTIFIÉS" ou toute section similaire contenant les besoins métier
+   - Extrait TOUS les besoins mentionnés
+   - Pour chaque besoin : titre (thème principal) et description (détails, citations, contexte)
+   - Si des citations sont présentes (entre guillemets « » ou " "), inclus-les dans la description
 
-Extrais les données au format structuré.
+2. Identifie la section "LES CAS D'USAGES IA PRIORITAIRES" ou toute section similaire contenant les cas d'usage
+   - Extrait TOUS les cas d'usage mentionnés
+   - Pour chaque cas d'usage : titre, description détaillée, et famille (si mentionnée)
+   
+3. IMPORTANT sur les familles de cas d'usage :
+   - Les familles peuvent être affichées comme des titres de section avant les cas d'usage
+   - Exemples de familles : "Quick Wins", "Structuration IA", "Automatisation", "Analyse de données", etc.
+   - Si un cas d'usage est sous un titre de famille, associe-le à cette famille
+   - Si un cas d'usage est dans "Autres cas d'usage" ou sans famille claire, laisse famille=None
+
+4. Adapte-toi à la structure du document :
+   - Le document peut avoir été modifié manuellement
+   - Les sections peuvent avoir des noms légèrement différents
+   - Les numérotations peuvent varier (1., 1), a., etc.)
+   - Cherche le sens plutôt que la forme exacte
+
+5. Sois exhaustif : extrais TOUS les besoins et cas d'usage présents, même s'ils sont mal formatés
+
+Retourne les données au format structuré demandé.
 """
 

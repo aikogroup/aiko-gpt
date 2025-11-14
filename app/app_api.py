@@ -2172,14 +2172,35 @@ def display_recommendations_section():
         else:
             word_path = st.session_state.word_path
         
-        # Extraction des données du Word
+        # Extraction des données du Word via l'API
         if st.session_state.get("word_extraction_data") is None:
+            # Option pour forcer l'extraction LLM
+            force_llm = st.session_state.get("force_llm_extraction", False)
+            
             with st.spinner("🔍 Extraction des données du rapport Word..."):
                 try:
-                    from executive_summary.word_report_extractor import WordReportExtractor
-                    extractor = WordReportExtractor()
-                    extracted_data = extractor.extract_from_word(word_path)
+                    # Appeler l'API pour extraire les données (le fichier est sur le serveur API)
+                    response = requests.post(
+                        f"{API_URL}/word/extract",
+                        json={
+                            "word_path": word_path,
+                            "force_llm": force_llm
+                        },
+                        timeout=300  # 5 minutes max pour l'extraction
+                    )
+                    response.raise_for_status()
+                    extracted_data = response.json()
                     st.session_state.word_extraction_data = extracted_data
+                    
+                    # Afficher la méthode d'extraction utilisée
+                    extraction_method = extracted_data.get("extraction_method", "unknown")
+                    if extraction_method == "structured":
+                        st.success("✅ Extraction réussie via parsing structuré")
+                    elif extraction_method == "llm_fallback":
+                        st.info("ℹ️ Extraction réussie via LLM (fallback automatique)")
+                    elif extraction_method == "llm_forced":
+                        st.info("🤖 Extraction réussie via LLM (forcé par l'utilisateur)")
+                    
                 except Exception as e:
                     st.error(f"❌ Erreur lors de l'extraction: {str(e)}")
                     return
@@ -2191,6 +2212,17 @@ def display_recommendations_section():
             st.session_state.word_extraction_data,
             key_suffix="word_extraction"
         )
+        
+        # Bouton pour ré-extraire avec LLM si l'extraction structurée n'a pas donné de bons résultats
+        extraction_method = st.session_state.word_extraction_data.get("extraction_method", "unknown")
+        if extraction_method == "structured":
+            st.markdown("---")
+            col1, col2 = st.columns([3, 1])
+            with col2:
+                if st.button("🤖 Ré-extraire avec LLM", help="Force l'extraction via LLM si les résultats ne sont pas satisfaisants"):
+                    st.session_state.force_llm_extraction = True
+                    st.session_state.word_extraction_data = None
+                    st.rerun()
         
         if validation_result:
             # Stocker les données validées

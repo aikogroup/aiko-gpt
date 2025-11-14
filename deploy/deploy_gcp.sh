@@ -8,7 +8,8 @@ PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 if [ -f "${SCRIPT_DIR}/.env" ]; then
   echo "📋 Chargement des variables depuis deploy/.env"
-  export $(cat "${SCRIPT_DIR}/.env" | grep -v '^#' | xargs)
+  # Charger les variables en supprimant les commentaires (lignes commençant par # ET commentaires en ligne)
+  export $(cat "${SCRIPT_DIR}/.env" | grep -v '^#' | sed 's/#.*$//' | grep -v '^[[:space:]]*$' | xargs)
 else
   echo "⚠️  Fichier deploy/.env non trouvé. Utilisation des valeurs par défaut ou variables d'environnement système."
 fi
@@ -149,9 +150,14 @@ STREAMLIT_DEPLOY_OPTS=(
   --timeout 300
 )
 
+# Ajouter les secrets pour Streamlit (nécessaires pour WebSearchAgent)
+STREAMLIT_SECRETS="OPENAI_API_KEY=API_KEY_OPENAI:latest,PERPLEXITY_API_KEY=API_KEY_PERPLEXITY:latest"
+STREAMLIT_DEPLOY_OPTS+=(--set-secrets "${STREAMLIT_SECRETS}")
+
 # Ajouter les variables d'environnement pour Streamlit
 STREAMLIT_ENV_VARS="API_URL=${API_URL}"
 [ -n "${DEV_MODE:-}" ] && STREAMLIT_ENV_VARS="${STREAMLIT_ENV_VARS},DEV_MODE=${DEV_MODE}"
+[ -n "${OPENAI_MODEL:-}" ] && STREAMLIT_ENV_VARS="${STREAMLIT_ENV_VARS},OPENAI_MODEL=${OPENAI_MODEL}"
 [ -n "${AUTH_USERNAME:-}" ] && STREAMLIT_ENV_VARS="${STREAMLIT_ENV_VARS},AUTH_USERNAME=${AUTH_USERNAME}"
 [ -n "${AUTH_PASSWORD:-}" ] && STREAMLIT_ENV_VARS="${STREAMLIT_ENV_VARS},AUTH_PASSWORD=${AUTH_PASSWORD}"
 STREAMLIT_DEPLOY_OPTS+=(--set-env-vars "${STREAMLIT_ENV_VARS}")

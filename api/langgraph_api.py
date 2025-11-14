@@ -132,6 +132,12 @@ class ClassifySpeakersInput(BaseModel):
     known_speakers: Optional[Dict[str, str]] = None  # speaker_name -> role pour réutilisation
 
 
+class WordExtractInput(BaseModel):
+    """Input pour extraire les données d'un fichier Word"""
+    word_path: str
+    force_llm: bool = False  # Si True, force l'extraction via LLM
+
+
 # ==================== ENDPOINTS ====================
 
 @app.get("/")
@@ -268,6 +274,50 @@ async def classify_speakers(input_data: ClassifySpeakersInput):
     except Exception as e:
         print(f"❌ [API] Erreur lors de la classification des speakers: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Erreur classification: {str(e)}")
+
+
+@app.post("/word/extract")
+async def extract_word_data(input_data: WordExtractInput):
+    """
+    Extrait les besoins et cas d'usage depuis un fichier Word.
+    
+    Args:
+        input_data: Contient word_path (chemin vers le fichier .docx) et force_llm (optionnel)
+    
+    Returns:
+        {
+            "final_needs": [
+                {"titre": "...", "description": "..."},
+                ...
+            ],
+            "final_use_cases": [
+                {"titre": "...", "description": "...", "famille": "..."},
+                ...
+            ],
+            "extraction_method": "structured" | "llm_fallback" | "llm_forced"
+        }
+    """
+    try:
+        word_path = input_data.word_path
+        force_llm = input_data.force_llm
+        
+        # Vérifier que le fichier existe
+        if not Path(word_path).exists():
+            raise HTTPException(status_code=404, detail=f"Fichier non trouvé: {word_path}")
+        
+        # Importer et utiliser WordReportExtractor
+        from executive_summary.word_report_extractor import WordReportExtractor
+        
+        extractor = WordReportExtractor()
+        extracted_data = extractor.extract_from_word(word_path, force_llm=force_llm)
+        
+        return extracted_data
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ [API] Erreur lors de l'extraction Word: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Erreur extraction Word: {str(e)}")
 
 
 @app.post("/threads/{thread_id}/runs")
