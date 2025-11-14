@@ -22,6 +22,7 @@ import sys
 sys.path.append(str(Path(__file__).parent.parent))
 from workflow.need_analysis_workflow import NeedAnalysisWorkflow
 from workflow.rappel_mission_workflow import RappelMissionWorkflow
+from workflow.atouts_workflow import AtoutsWorkflow
 from executive_summary.executive_summary_workflow import ExecutiveSummaryWorkflow
 from langgraph.checkpoint.memory import MemorySaver
 from process_transcript.pdf_parser import PDFParser
@@ -39,6 +40,7 @@ app = FastAPI(
 workflows: Dict[str, Any] = {}
 executive_workflows: Dict[str, Any] = {}  # Workflows Executive Summary
 rappel_workflows: Dict[str, Any] = {}  # Workflows Rappel de la mission
+atouts_workflows: Dict[str, Any] = {}  # Workflows Atouts de l'entreprise
 checkpointer = MemorySaver()
 
 # Dossier temporaire pour les fichiers uploadés
@@ -93,6 +95,13 @@ class RappelMissionInput(BaseModel):
 
     company_name: str
     validated_company_info: Optional[Dict[str, Any]] = None
+
+
+class AtoutsEntrepriseInput(BaseModel):
+    """Input pour démarrer un workflow d'extraction des atouts"""
+    pdf_paths: List[str]
+    company_info: Dict[str, Any]
+    interviewer_names: Optional[List[str]] = None
 
 class ExecutiveValidationFeedback(BaseModel):
     """Feedback de validation Executive Summary"""
@@ -623,6 +632,59 @@ async def get_rappel_mission_state(thread_id: str):
     }
 
 
+@app.post("/atouts-entreprise/threads/{thread_id}/runs")
+async def create_atouts_run(thread_id: str, atouts_input: AtoutsEntrepriseInput):
+    """Démarre un workflow d'extraction des atouts de l'entreprise"""
+    try:
+        if thread_id not in atouts_workflows:
+            workflow = AtoutsWorkflow(interviewer_names=atouts_input.interviewer_names)
+            atouts_workflows[thread_id] = {
+                "workflow": workflow,
+                "state": None,
+                "status": "created"
+            }
+        
+        workflow_data = atouts_workflows[thread_id]
+        workflow = workflow_data["workflow"]
+        
+        print(f"\n🚀 [API] Démarrage workflow Atouts pour thread {thread_id}")
+        print(f"📁 PDFs: {len(atouts_input.pdf_paths)}")
+        print(f"🏢 Entreprise: {atouts_input.company_info.get('nom', 'N/A')}")
+        
+        # Exécuter le workflow
+        result = workflow.run(
+            pdf_paths=atouts_input.pdf_paths,
+            company_info=atouts_input.company_info,
+            thread_id=thread_id
+        )
+        
+        workflow_data["state"] = result
+        workflow_data["status"] = "completed" if result.get("success") else "error"
+        
+        return {
+            "thread_id": thread_id,
+            "status": workflow_data["status"],
+            "result": result
+        }
+    
+    except Exception as e:
+        print(f"❌ [API] Erreur Atouts: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Erreur workflow atouts: {str(e)}")
+
+
+@app.get("/atouts-entreprise/threads/{thread_id}/state")
+async def get_atouts_state(thread_id: str):
+    """Récupère l'état du workflow Atouts"""
+    if thread_id not in atouts_workflows:
+        raise HTTPException(status_code=404, detail="Thread non trouvé")
+    
+    return {
+        "thread_id": thread_id,
+        "status": atouts_workflows[thread_id]["status"],
+        "state": atouts_workflows[thread_id]["state"]
+    }
+
+
 @app.delete("/threads/{thread_id}")
 async def delete_thread(thread_id: str):
     """
@@ -643,6 +705,10 @@ async def delete_thread(thread_id: str):
 
     if thread_id in rappel_workflows:
         del rappel_workflows[thread_id]
+        deleted = True
+
+    if thread_id in atouts_workflows:
+        del atouts_workflows[thread_id]
         deleted = True
 
     if deleted:

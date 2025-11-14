@@ -11,7 +11,9 @@ l'initialisation mais non-critiques en production.
 import os
 from langchain_core.runnables import RunnableConfig
 from workflow.need_analysis_workflow import NeedAnalysisWorkflow
-from executive_summary.executive_summary_workflow import ExecutiveSummaryWorkflow 
+from executive_summary.executive_summary_workflow import ExecutiveSummaryWorkflow
+from workflow.rappel_mission_workflow import RappelMissionWorkflow
+from workflow.atouts_workflow import AtoutsWorkflow 
 
 def need_analysis(config: RunnableConfig):
     """
@@ -54,4 +56,32 @@ def executive_summary(config: RunnableConfig):
         dev_mode=False  # Mode production : vraies recherches
     )
     
+    return workflow.graph
+
+
+def rappel_mission(config: RunnableConfig):
+    """
+    Factory function pour créer le workflow de rappel de la mission.
+    
+    Args:
+        config: Configuration LangGraph
+        
+    Returns:
+        Workflow configuré
+    """
+    workflow = RappelMissionWorkflow()
+    return workflow.graph
+
+
+def atouts_entreprise(config: RunnableConfig):
+    """
+    Factory function pour créer le workflow d'extraction des atouts de l'entreprise.
+    
+    Args:
+        config: Configuration LangGraph
+        
+    Returns:
+        Workflow configuré
+    """
+    workflow = AtoutsWorkflow()
     return workflow.graph

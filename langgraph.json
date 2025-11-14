@@ -10,6 +10,14 @@
     "executive_summary": {
       "path": "graph_factory:executive_summary",
       "description": "Workflow d'Executive Summary avec debugging"
+    },
+    "rappel_mission": {
+      "path": "graph_factory:rappel_mission",
+      "description": "Workflow de rappel de la mission de l'entreprise"
+    },
+    "atouts_entreprise": {
+      "path": "graph_factory:atouts_entreprise",
+      "description": "Workflow d'extraction des atouts de l'entreprise pour l'IA"
     }
   },
   "env": ".env",

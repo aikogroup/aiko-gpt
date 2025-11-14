@@ -774,8 +774,8 @@ def main():
         st.markdown("**Génération du rapport**")
         page_diag = st.radio(
             "Navigation Génération du rapport",
-            ["Génération des Enjeux et Recommandations", "Rappel de la mission"],
-            index=0 if st.session_state.current_page == "Génération des Enjeux et Recommandations" else (1 if st.session_state.current_page == "Rappel de la mission" else None),
+            ["Génération des Enjeux et Recommandations", "Rappel de la mission", "Atouts de l'entreprise"],
+            index=0 if st.session_state.current_page == "Génération des Enjeux et Recommandations" else (1 if st.session_state.current_page == "Rappel de la mission" else (2 if st.session_state.current_page == "Atouts de l'entreprise" else None)),
             key="nav_diag",
             label_visibility="collapsed"
         )
@@ -862,6 +862,8 @@ def main():
         display_challenges_validation_page()
     elif page == "Rappel de la mission":
         display_rappel_mission()
+    elif page == "Atouts de l'entreprise":
+        display_atouts_entreprise()
 
 def display_diagnostic_section():
     """Affiche la section de génération du diagnostic (utilise fichiers depuis session_state)"""
@@ -2826,186 +2828,6 @@ def send_executive_validation(thread_id: str, validation_type: str, validation_r
     except Exception as e:
         st.error(f"❌ Erreur: {str(e)}")
 
-def display_executive_results():
-    """Affiche les résultats finaux de l'Executive Summary avec un résumé clair"""
-    # Forcer une dernière récupération de l'état depuis l'API pour être sûr d'avoir les dernières données
-    thread_id = st.session_state.get("executive_thread_id")
-    if thread_id:
-        try:
-            # Récupérer l'état complet depuis l'API
-            state_response = requests.get(
-                f"{API_URL}/executive-summary/threads/{thread_id}/state",
-                timeout=60
-            )
-            state_response.raise_for_status()
-            state_data = state_response.json()
-            
-            # Mettre à jour session_state avec l'état complet
-            st.session_state.executive_workflow_state = {
-                "identified_challenges": state_data.get("identified_challenges", []),
-                "validated_challenges": state_data.get("validated_challenges", []),
-                "rejected_challenges": [],
-                "extracted_needs": state_data.get("extracted_needs", []),
-                "maturity_score": state_data.get("maturity_score", 3),
-                "maturity_summary": state_data.get("maturity_summary", ""),
-                "recommendations": state_data.get("recommendations", []),
-                "validated_recommendations": state_data.get("validated_recommendations", []),
-                "challenges_iteration_count": state_data.get("challenges_iteration_count", 0),
-                "workflow_paused": state_data.get("workflow_paused", False),
-                "validation_type": state_data.get("validation_type", "")
-            }
-        except Exception as e:
-            st.warning(f"⚠️ Impossible de récupérer l'état final depuis l'API: {str(e)}")
-            # Continuer avec l'état en cache
-    
-    # Récupérer les données depuis session_state
-    workflow_state = st.session_state.executive_workflow_state
-    
-    validated_challenges = workflow_state.get("validated_challenges", [])
-    maturity_score = workflow_state.get("maturity_score", 3)
-    maturity_summary = workflow_state.get("maturity_summary", "")
-    validated_recommendations = workflow_state.get("validated_recommendations", [])
-    
-    # Debug: afficher ce qui a été récupéré
-    if is_dev_mode():
-        with st.expander("🔍 Debug - État récupéré", expanded=False):
-            st.json({
-                "validated_challenges_count": len(validated_challenges),
-                "validated_recommendations_count": len(validated_recommendations),
-                "validated_recommendations": validated_recommendations,
-                "maturity_score": maturity_score
-            })
-    
-    # Afficher un message de succès en haut
-    st.success("✅ **Workflow terminé avec succès !**")
-    st.markdown("---")
-    
-    # Titre principal
-    st.title("📊 Résumé Executive Summary")
-    st.markdown("")
-    
-    # Section Enjeux identifiés
-    company_name = st.session_state.get("company_name", "l'entreprise")
-    st.markdown(f"## Enjeux de l'IA pour {company_name}")
-    st.markdown("")
-    
-    if validated_challenges:
-        for i, ch in enumerate(validated_challenges, 1):
-            # Gérer le cas où ch est une chaîne JSON
-            if isinstance(ch, str):
-                try:
-                    import json
-                    ch = json.loads(ch)
-                except (json.JSONDecodeError, TypeError):
-                    # Si ce n'est pas du JSON, traiter comme une chaîne simple
-                    st.markdown(f"**{i}. {ch}**")
-                    if i < len(validated_challenges):
-                        st.markdown("")
-                    continue
-            
-            # Vérifier que ch est un dict
-            if not isinstance(ch, dict):
-                st.markdown(f"**{i}. {str(ch)}**")
-                if i < len(validated_challenges):
-                    st.markdown("")
-                continue
-            
-            challenge_titre = ch.get('titre', '')
-            challenge_desc = ch.get('description', '')
-            
-            if challenge_titre:
-                st.markdown(f"**{challenge_titre}**")
-            else:
-                st.markdown(f"**Enjeu {i}**")
-            
-            if challenge_desc:
-                st.markdown(challenge_desc)
-            
-            if i < len(validated_challenges):
-                st.markdown("")
-    else:
-        st.warning("⚠️ Aucun enjeu validé")
-    
-    st.markdown("---")
-    
-    # Section Recommandations clés
-    st.header("💡 Recommandations clés")
-    if validated_recommendations:
-        for i, rec in enumerate(validated_recommendations, 1):
-            # Gérer les deux formats : dict (nouveau) ou string (ancien)
-            # Si c'est une chaîne JSON, la parser
-            if isinstance(rec, str):
-                try:
-                    import json
-                    rec = json.loads(rec)
-                except (json.JSONDecodeError, TypeError):
-                    # Si ce n'est pas du JSON, traiter comme une chaîne simple
-                    st.markdown(f"**{i}. {rec}**")
-                    if i < len(validated_recommendations):
-                        st.markdown("")
-                    continue
-            
-            if isinstance(rec, dict):
-                rec_titre = rec.get("titre", "")
-                rec_description = rec.get("description", "")
-                
-                # Afficher uniquement le titre, pas le dict complet
-                if rec_titre:
-                    st.markdown(f"**{i}. {rec_titre}**")
-                else:
-                    st.markdown(f"**{i}. Recommandation {i}**")
-                
-                # Optionnel : afficher la description si elle existe
-                if rec_description:
-                    st.markdown(rec_description)
-            else:
-                # Ancien format string
-                rec_text = str(rec)
-                st.markdown(f"**{i}. {rec_text}**")
-            
-            if i < len(validated_recommendations):
-                st.markdown("")
-    else:
-        st.warning("⚠️ Aucune recommandation validée")
-        # Debug: afficher l'état complet pour comprendre le problème
-        with st.expander("🔍 Debug - Pourquoi aucune recommandation ?", expanded=False):
-            st.json({
-                "workflow_state_keys": list(workflow_state.keys()),
-                "validated_recommendations_type": type(validated_recommendations).__name__,
-                "validated_recommendations_value": validated_recommendations,
-                "recommendations_count": len(workflow_state.get("recommendations", [])),
-                "full_workflow_state": workflow_state
-            })
-    
-    st.markdown("---")
-    
-    # Section Maturité IA (optionnelle, en plus petit)
-    with st.expander("📊 Évaluation de la maturité IA", expanded=False):
-        if maturity_score is not None and maturity_summary:
-            st.metric("Score de maturité", f"{maturity_score}/5")
-            st.info("💡 " + maturity_summary)
-        elif maturity_score is not None:
-            st.metric("Score de maturité", f"{maturity_score}/5")
-            st.warning("⚠️ Phrase descriptive de maturité non disponible")
-        else:
-            st.warning("⚠️ Évaluation de maturité non disponible")
-    
-    st.markdown("---")
-    
-    # Bouton de téléchargement
-    results_json = {
-        "validated_challenges": validated_challenges,
-        "maturity_score": maturity_score,
-        "maturity_summary": maturity_summary,
-        "validated_recommendations": validated_recommendations
-    }
-    st.download_button(
-        label="📥 Télécharger les résultats (JSON)",
-        data=json.dumps(results_json, indent=2, ensure_ascii=False),
-        file_name="executive_summary_results.json",
-        mime="application/json",
-        width="stretch"
-    )
 
 def display_rappel_mission():
     """Affiche le rappel de la mission"""
@@ -3063,6 +2885,121 @@ def display_rappel_mission():
         st.markdown("Nous allons démarré la mission en " + date.today().strftime("%B %Y"))
     else:
         st.info("💡 Cliquez sur 'Générer le rappel de la mission' pour afficher les informations de l'entreprise.")
+
+
+def display_atouts_entreprise():
+    """Affiche la page d'extraction des atouts de l'entreprise"""
+    st.header("Atouts de l'entreprise")
+    
+    st.markdown("""
+    Cette section identifie les **atouts** de l'entreprise qui facilitent l'intégration de l'intelligence artificielle.
+    
+    L'analyse se base sur :
+    - Les transcriptions des entretiens
+    - Les informations de l'entreprise validées
+    """)
+    
+    # Vérifier les prérequis
+    validated_company_info = st.session_state.get("validated_company_info")
+    uploaded_transcripts = st.session_state.get("uploaded_transcripts", [])
+    
+    if not validated_company_info:
+        st.warning("⚠️ Veuillez d'abord valider les informations de l'entreprise dans 'Contexte de l'entreprise'.")
+        return
+    
+    if not uploaded_transcripts:
+        st.warning("⚠️ Veuillez d'abord uploader des transcriptions dans 'Upload de documents'.")
+        return
+    
+    # Afficher le nom de l'entreprise
+    company_name = validated_company_info.get("nom", "")
+    if company_name:
+        st.info(f"🏢 Entreprise : {company_name}")
+    
+    # Afficher le nombre de transcriptions
+    st.info(f"📄 {len(uploaded_transcripts)} transcription(s) disponible(s)")
+    
+    # Bouton de génération
+    if st.button("Extraire les atouts de l'entreprise", type="primary"):
+        thread_id = str(uuid.uuid4())
+        try:
+            with st.spinner("Extraction des atouts en cours... Cela peut prendre quelques minutes."):
+                # Préparer les chemins des PDFs
+                pdf_paths = get_transcript_file_paths(uploaded_transcripts)
+                
+                # Récupérer les noms des interviewers
+                interviewer_names = load_interviewers()
+                
+                # Appeler l'API
+                response = requests.post(
+                    f"{API_URL}/atouts-entreprise/threads/{thread_id}/runs",
+                    json={
+                        "pdf_paths": pdf_paths,
+                        "company_info": validated_company_info,
+                        "interviewer_names": interviewer_names
+                    },
+                    timeout=300  # 5 minutes timeout
+                )
+                response.raise_for_status()
+                data = response.json()
+                result = data.get("result", {})
+                
+                # Récupérer les résultats
+                atouts_markdown = result.get("atouts_markdown", "")
+                atouts_data = result.get("atouts", {})
+                success = result.get("success", False)
+                error = result.get("error", "")
+                
+                if success and atouts_markdown:
+                    # Sauvegarder dans la session
+                    st.session_state.atouts_markdown = atouts_markdown
+                    st.session_state.atouts_data = atouts_data
+                    st.session_state.atouts_company = company_name
+                    st.success("✅ Atouts extraits avec succès !")
+                    st.rerun()
+                else:
+                    error_message = error or "Aucun atout identifié."
+                    st.error(f"❌ Erreur : {error_message}")
+                    
+        except requests.exceptions.Timeout:
+            st.error("❌ La requête a expiré. Le traitement prend trop de temps. Veuillez réessayer.")
+        except Exception as e:
+            st.error(f"❌ Erreur lors de l'extraction des atouts : {str(e)}")
+    
+    # Afficher les résultats s'ils existent
+    atouts_markdown = st.session_state.get("atouts_markdown", "")
+    atouts_data = st.session_state.get("atouts_data", {})
+    
+    if atouts_markdown:
+        st.markdown("---")
+        st.markdown(atouts_markdown)
+        
+        # Bouton de téléchargement
+        if atouts_data:
+            st.markdown("---")
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                # Télécharger en JSON
+                atouts_json = json.dumps(atouts_data, ensure_ascii=False, indent=2)
+                st.download_button(
+                    label="📥 Télécharger (JSON)",
+                    data=atouts_json,
+                    file_name=f"atouts_{company_name.replace(' ', '_')}_{date.today().strftime('%Y%m%d')}.json",
+                    mime="application/json"
+                )
+            
+            with col2:
+                # Télécharger en Markdown
+                st.download_button(
+                    label="📥 Télécharger (Markdown)",
+                    data=atouts_markdown,
+                    file_name=f"atouts_{company_name.replace(' ', '_')}_{date.today().strftime('%Y%m%d')}.md",
+                    mime="text/markdown"
+                )
+    else:
+        st.info("💡 Cliquez sur 'Extraire les atouts de l'entreprise' pour lancer l'analyse.")
+
 
 if __name__ == "__main__":
     main()
