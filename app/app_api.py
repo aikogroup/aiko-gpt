@@ -54,6 +54,17 @@ from human_in_the_loop.streamlit_validation_interface import StreamlitValidation
 from use_case_analysis.streamlit_use_case_validation import StreamlitUseCaseValidation
 from web_search.web_search_agent import WebSearchAgent
 from executive_summary.streamlit_validation_executive import StreamlitExecutiveValidation
+from database.streamlit_db import (
+    load_project_list,
+    create_new_project,
+    load_project_data,
+    delete_document_by_id,
+    save_agent_result,
+    has_validated_results,
+    load_agent_results,
+    reject_agent_results,
+)
+from database.document_parser_service import DocumentParserService
 
 # Configuration de l'API
 # Utiliser la variable d'environnement API_URL si disponible, sinon utiliser localhost pour le développement
@@ -62,6 +73,9 @@ API_URL = os.getenv("API_URL", "http://localhost:2025")
 # Initialisation des interfaces de validation
 validation_interface = StreamlitValidationInterface()
 use_case_validation = StreamlitUseCaseValidation()
+
+# Initialisation du service de parsing
+document_parser_service = DocumentParserService()
 
 # Configuration de la page
 st.set_page_config(
@@ -299,6 +313,13 @@ def init_session_state():
         st.session_state.workflow_state = {}
     if 'current_page' not in st.session_state:
         st.session_state.current_page = "Accueil"
+    # Gestion de projet (base de données)
+    if 'current_project_id' not in st.session_state:
+        st.session_state.current_project_id = None
+    if 'current_project' not in st.session_state:
+        st.session_state.current_project = None
+    if 'project_loaded' not in st.session_state:
+        st.session_state.project_loaded = False
     # Uploads persistants (session)
     if 'uploaded_transcripts' not in st.session_state:
         st.session_state.uploaded_transcripts = []
@@ -397,21 +418,49 @@ def upload_files_to_api(files: List[Any]) -> Dict[str, Any]:
         st.error(f"❌ Erreur lors de l'upload: {str(e)}")
         return {"workshop": [], "transcript": [], "file_paths": []}
 
-def start_workflow_api_call(workshop_files: List[str], transcript_files: List[str], company_name: str, company_url: str, company_description: str, validated_company_info: Optional[Dict[str, Any]], interviewer_names: List[str], additional_context: str, result_queue: queue.Queue):
+def start_workflow_api_call(workshop_data: List[Any], transcript_data: List[Any], company_name: str, company_url: str, company_description: str, validated_company_info: Optional[Dict[str, Any]], interviewer_names: List[str], additional_context: str, result_queue: queue.Queue):
     """
     Fait l'appel API dans un thread séparé.
+    Extrait les document_ids depuis workshop_data et transcript_data et les passe à l'API.
     Met le résultat dans la queue : (success: bool, thread_id: str, error_msg: str)
     """
     try:
         # Générer un thread_id
         thread_id = str(uuid.uuid4())
         
-        # Lancer le workflow
+        # Extraire les document_ids depuis workshop_data
+        workshop_document_ids = []
+        if workshop_data:
+            for workshop in workshop_data:
+                if isinstance(workshop, dict):
+                    document_id = workshop.get("document_id")
+                    if document_id is not None:
+                        workshop_document_ids.append(document_id)
+                # Si c'est un string (ancienne structure), on ne peut pas récupérer le document_id
+                # Dans ce cas, on laisse vide et le workflow devra gérer différemment
+        
+        # Extraire les document_ids depuis transcript_data
+        transcript_document_ids = []
+        if transcript_data:
+            for transcript in transcript_data:
+                if isinstance(transcript, dict):
+                    document_id = transcript.get("document_id")
+                    if document_id is not None:
+                        transcript_document_ids.append(document_id)
+                # Si c'est un string (ancienne structure), on ne peut pas récupérer le document_id
+        
+        # Vérifier qu'on a au moins un document_id
+        if not workshop_document_ids and not transcript_document_ids:
+            error_msg = "Aucun document_id trouvé. Veuillez d'abord uploader et sauvegarder les documents dans la base de données."
+            result_queue.put((False, None, None, error_msg))
+            return
+        
+        # Lancer le workflow avec les document_ids
         response = requests.post(
             f"{API_URL}/threads/{thread_id}/runs",
             json={
-                "workshop_files": workshop_files,
-                "transcript_files": transcript_files,
+                "workshop_document_ids": workshop_document_ids,
+                "transcript_document_ids": transcript_document_ids,
                 "company_name": company_name if company_name else None,
                 "company_url": company_url if company_url else None,
                 "company_description": company_description if company_description else None,
@@ -592,6 +641,7 @@ def send_use_case_validation_feedback_api_call(validated_use_cases: List[Dict],
                                                 thread_id: str, result_queue: queue.Queue):
     """
     Envoie le feedback de validation des use cases à l'API dans un thread séparé.
+    Retourne la réponse complète avec les final_results.
     """
     try:
         response = requests.post(
@@ -605,7 +655,8 @@ def send_use_case_validation_feedback_api_call(validated_use_cases: List[Dict],
             timeout=600  # 10 minutes pour la validation finale
         )
         response.raise_for_status()
-        result_queue.put((True, None))
+        response_data = response.json()
+        result_queue.put((True, response_data))
     
     except Exception as e:
         result_queue.put((False, str(e)))
@@ -717,6 +768,255 @@ def display_work_in_progress():
     """, unsafe_allow_html=True)
     st.markdown("---")
 
+# ==================== GESTION DE PROJET (BASE DE DONNÉES) ====================
+
+def load_project_data_to_session(project_id: int):
+    """
+    Charge les données d'un projet dans st.session_state.
+    
+    Args:
+        project_id: ID du projet
+    """
+    try:
+        data = load_project_data(project_id)
+        if not data:
+            st.warning(f"⚠️ Aucune donnée trouvée pour le projet {project_id}")
+            return
+        
+        project = data.get("project", {})
+        documents = data.get("documents", [])
+        transcripts_data = data.get("transcripts", {})  # NOUVEAU: Charger les transcripts depuis la DB
+        workshops_data = data.get("workshops", {})  # NOUVEAU: Charger les workshops depuis la DB
+        word_extractions_data = data.get("word_extractions", {})  # NOUVEAU: Charger les word_extractions
+        agent_results = data.get("agent_results", {})
+        
+        # Charger les informations du projet
+        st.session_state.current_project = project
+        st.session_state.company_name = project.get("company_name", "")
+        company_info = project.get("company_info", {})
+        if company_info:
+            st.session_state.validated_company_info = company_info
+        
+        # Charger les transcripts depuis la base de données
+        # Les transcripts sont déjà chargés avec leurs speakers dans transcripts_data
+        st.session_state.uploaded_transcripts = []
+        for document_id, transcript_info in transcripts_data.items():
+            transcript_entry = {
+                "document_id": transcript_info.get("document_id"),
+                "file_name": transcript_info.get("file_name", ""),
+                "speakers": transcript_info.get("speakers", []),
+            }
+            st.session_state.uploaded_transcripts.append(transcript_entry)
+        
+        # Charger les workshops depuis la base de données
+        # Les workshops sont déjà chargés dans workshops_data
+        # Regrouper par document (un fichier peut contenir plusieurs ateliers)
+        st.session_state.uploaded_workshops = []
+        for document_id, workshops_list in workshops_data.items():
+            # Trouver le document correspondant pour récupérer file_name
+            document = next((d for d in documents if d.get("id") == document_id), None)
+            if document:
+                # Créer une seule entrée par document avec la liste des ateliers
+                workshop_entry = {
+                    "document_id": document_id,
+                    "file_name": document.get("file_name", ""),
+                    "ateliers": [w.get("atelier_name", "") for w in workshops_list],  # Liste des noms d'ateliers
+                }
+                st.session_state.uploaded_workshops.append(workshop_entry)
+        
+        # Charger le word_report si disponible
+        word_reports = [d for d in documents if d.get("file_type") == "word_report"]
+        if word_reports:
+            word_report = word_reports[0]  # Prendre le premier
+            st.session_state.word_path = None  # Plus besoin du chemin, tout est en DB
+            # Les word_extractions sont dans word_extractions_data si nécessaire
+        
+        # Charger les résultats validés
+        # Besoins et use cases
+        needs_result = agent_results.get("word_validation_needs") or agent_results.get("need_analysis_needs")
+        if needs_result:
+            st.session_state.validated_needs = needs_result.get("data", {}).get("needs", [])
+        
+        use_cases_result = agent_results.get("word_validation_use_cases") or agent_results.get("need_analysis_use_cases")
+        if use_cases_result:
+            st.session_state.validated_use_cases = use_cases_result.get("data", {}).get("use_cases", [])
+        
+        # Enjeux et recommandations
+        challenges_result = agent_results.get("executive_summary_challenges")
+        if challenges_result:
+            st.session_state.validated_challenges = challenges_result.get("data", {}).get("challenges", [])
+        
+        recommendations_result = agent_results.get("executive_summary_recommendations")
+        if recommendations_result:
+            st.session_state.validated_recommendations = recommendations_result.get("data", {}).get("recommendations", [])
+        
+        maturity_result = agent_results.get("executive_summary_maturity")
+        if maturity_result:
+            st.session_state.validated_maturity = maturity_result.get("data", {}).get("maturity", {})
+        
+        # Atouts
+        atouts_result = agent_results.get("atouts_atouts")
+        if atouts_result:
+            st.session_state.validated_atouts = atouts_result.get("data", {}).get("atouts", [])
+        
+        # Rappel de mission
+        rappel_result = agent_results.get("rappel_mission_rappel_mission")
+        if rappel_result:
+            st.session_state.rappel_mission = rappel_result.get("data", {}).get("rappel_mission", "")
+        
+        # Web search results
+        web_search_result = agent_results.get("rappel_mission_web_search_results") or agent_results.get("atouts_web_search_results")
+        if web_search_result:
+            st.session_state.web_search_results = web_search_result.get("data", {}).get("results", [])
+        
+        st.session_state.project_loaded = True
+        
+    except Exception as e:
+        st.error(f"❌ Erreur lors du chargement des données du projet: {str(e)}")
+        st.session_state.project_loaded = False
+
+
+def display_project_selection():
+    """
+    Affiche l'interface de sélection/création de projet (obligatoire).
+    Retourne True si un projet est sélectionné, False sinon.
+    """
+    st.title("📁 Sélection de projet")
+    st.info("💡 Vous devez sélectionner un projet existant ou en créer un nouveau pour continuer.")
+    
+    # Charger la liste des projets
+    projects = load_project_list()
+    
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        if projects:
+            project_options = ["-- Sélectionner un projet --"] + [
+                f"{p['company_name']} (ID: {p['id']})" for p in projects
+            ]
+            selected = st.selectbox(
+                "Projets existants",
+                project_options,
+                key="project_selectbox"
+            )
+            
+            if selected and selected != "-- Sélectionner un projet --":
+                # Extraire l'ID du projet
+                project_id = int(selected.split("ID: ")[1].split(")")[0])
+                st.session_state.current_project_id = project_id
+                load_project_data_to_session(project_id)
+                st.success(f"✅ Projet sélectionné: {projects[project_id - 1]['company_name']}")
+                st.rerun()
+        else:
+            st.info("ℹ️ Aucun projet existant. Créez-en un nouveau ci-dessous.")
+    
+    with col2:
+        st.markdown("### ➕ Nouveau projet")
+        with st.form("new_project_form"):
+            new_company_name = st.text_input("Nom de l'entreprise", key="new_company_name")
+            submit = st.form_submit_button("Créer", use_container_width=True)
+            
+            if submit:
+                if new_company_name.strip():
+                    project_id = create_new_project(new_company_name.strip())
+                    if project_id:
+                        st.session_state.current_project_id = project_id
+                        load_project_data_to_session(project_id)
+                        st.success(f"✅ Projet créé: {new_company_name}")
+                        st.rerun()
+                    else:
+                        st.error("❌ Erreur lors de la création du projet")
+                else:
+                    st.warning("⚠️ Veuillez saisir un nom d'entreprise")
+    
+    return st.session_state.current_project_id is not None
+
+
+def display_project_selector_in_sidebar():
+    """
+    Affiche le sélecteur de projet dans la sidebar.
+    Retourne True si un projet est sélectionné, False sinon.
+    """
+    st.markdown("### 📁 Projet")
+    
+    # Charger la liste des projets
+    projects = load_project_list()
+    
+    # Options pour le selectbox
+    if projects:
+        project_options = ["-- Sélectionner --"] + [
+            f"{p['company_name']}" for p in projects
+        ]
+        
+        # Trouver l'index du projet actuel
+        current_index = 0
+        if st.session_state.current_project_id:
+            for i, p in enumerate(projects):
+                if p['id'] == st.session_state.current_project_id:
+                    current_index = i + 1
+                    break
+        
+        selected = st.selectbox(
+            "Projet",
+            project_options,
+            index=current_index,
+            key="sidebar_project_select",
+            label_visibility="collapsed"
+        )
+        
+        # Si un projet est sélectionné
+        if selected and selected != "-- Sélectionner --":
+            # Trouver l'ID du projet sélectionné
+            for p in projects:
+                if p['company_name'] == selected:
+                    if st.session_state.current_project_id != p['id']:
+                        st.session_state.current_project_id = p['id']
+                        load_project_data_to_session(p['id'])
+                        st.rerun()
+                    break
+        
+        # Afficher le nom de l'entreprise si un projet est sélectionné
+        if st.session_state.current_project_id:
+            project_name = next(
+                (p['company_name'] for p in projects if p['id'] == st.session_state.current_project_id),
+                None
+            )
+            if project_name:
+                st.caption(f"🏢 {project_name}")
+    else:
+        st.info("ℹ️ Aucun projet")
+    
+    # Bouton pour créer un nouveau projet
+    if st.button("➕ Nouveau projet", use_container_width=True, key="sidebar_new_project"):
+        st.session_state.show_new_project_modal = True
+    
+    # Modal pour créer un nouveau projet
+    if st.session_state.get("show_new_project_modal", False):
+        with st.container():
+            st.markdown("### ➕ Créer un nouveau projet")
+            new_company_name = st.text_input("Nom de l'entreprise", key="modal_new_company_name")
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("Créer", use_container_width=True, key="modal_create"):
+                    if new_company_name.strip():
+                        project_id = create_new_project(new_company_name.strip())
+                        if project_id:
+                            st.session_state.current_project_id = project_id
+                            st.session_state.show_new_project_modal = False
+                            load_project_data_to_session(project_id)
+                            st.success(f"✅ Projet créé: {new_company_name}")
+                            st.rerun()
+                        else:
+                            st.error("❌ Erreur lors de la création du projet")
+                    else:
+                        st.warning("⚠️ Veuillez saisir un nom d'entreprise")
+            with col2:
+                if st.button("Annuler", use_container_width=True, key="modal_cancel"):
+                    st.session_state.show_new_project_modal = False
+                    st.rerun()
+    
+    return st.session_state.current_project_id is not None
+
 def main():
     init_session_state()
     
@@ -736,6 +1036,17 @@ def main():
     # Sidebar avec navigation
     with st.sidebar:
         st.title("🤖 aikoGPT")
+        st.markdown("---")
+        
+        # Sélection de projet (obligatoire)
+        project_selected = display_project_selector_in_sidebar()
+        
+        # Si aucun projet n'est sélectionné, afficher l'écran de sélection
+        if not project_selected:
+            st.markdown("---")
+            st.warning("⚠️ Veuillez sélectionner ou créer un projet pour continuer")
+            st.stop()
+        
         st.markdown("---")
         
         # Initialiser la page si nécessaire
@@ -770,6 +1081,16 @@ def main():
             label_visibility="collapsed"
         )
         
+        # NOUVELLE SECTION : Validation des besoins et use cases
+        st.markdown("**Validation des besoins et use cases**")
+        page_word_validation = st.radio(
+            "Navigation Validation des besoins et use cases",
+            ["Validation des besoins et use cases"],
+            index=0 if st.session_state.current_page == "Validation des besoins et use cases" else None,
+            key="nav_word_validation",
+            label_visibility="collapsed"
+        )
+        
         # Section Diag - Synthèse de mission
         st.markdown("**Génération du rapport**")
         page_diag = st.radio(
@@ -796,6 +1117,10 @@ def main():
         elif page_rapport and st.session_state.current_page != page_rapport:
             page = page_rapport
             st.session_state.current_page = page_rapport
+            page_changed = True
+        elif page_word_validation and st.session_state.current_page != page_word_validation:
+            page = page_word_validation
+            st.session_state.current_page = page_word_validation
             page_changed = True
         elif page_diag and st.session_state.current_page != page_diag:
             page = page_diag
@@ -854,6 +1179,8 @@ def main():
         display_interviewers_config_page()
     elif page == "Générer les Use Cases":
         display_diagnostic_section()
+    elif page == "Validation des besoins et use cases":
+        display_word_validation_section()
     elif page == "Génération des Enjeux et Recommandations":
         display_recommendations_section()
         # display_work_in_progress()
@@ -868,6 +1195,102 @@ def main():
 def display_diagnostic_section():
     """Affiche la section de génération du diagnostic (utilise fichiers depuis session_state)"""
     st.header("🔍 Générer les Use Cases")
+    
+    # Vérifier si des résultats validés existent déjà
+    if st.session_state.current_project_id:
+        has_needs = has_validated_results(
+            st.session_state.current_project_id,
+            "need_analysis",
+            "needs"
+        )
+        has_use_cases = has_validated_results(
+            st.session_state.current_project_id,
+            "need_analysis",
+            "use_cases"
+        )
+        
+        if has_needs or has_use_cases:
+            # Afficher directement les résultats finaux
+            st.success("✅ **Workflow terminé - Résultats disponibles**")
+            st.markdown("---")
+            
+            # Charger les résultats validés
+            validated_needs = load_agent_results(
+                st.session_state.current_project_id,
+                "need_analysis",
+                "needs",
+                "validated"
+            )
+            validated_use_cases = load_agent_results(
+                st.session_state.current_project_id,
+                "need_analysis",
+                "use_cases",
+                "validated"
+            )
+            
+            if validated_needs:
+                needs_list = validated_needs.get("needs", [])
+                st.subheader(f"📋 Besoins identifiés ({len(needs_list)})")
+                with st.expander("Voir les besoins", expanded=True):
+                    for i, need in enumerate(needs_list, 1):
+                        st.markdown(f"### {i}. {need.get('theme', 'N/A')}")
+                        quotes = need.get('quotes', [])
+                        if quotes:
+                            st.markdown("**Citations clés :**")
+                            for quote in quotes:
+                                st.markdown(f"• {quote}")
+                        st.markdown("---")
+            
+            if validated_use_cases:
+                use_cases_list = validated_use_cases.get("use_cases", [])
+                st.subheader(f"💼 Use Cases générés ({len(use_cases_list)})")
+                with st.expander("Voir les use cases", expanded=True):
+                    for i, uc in enumerate(use_cases_list, 1):
+                        st.markdown(f"### {i}. {uc.get('titre', 'N/A')}")
+                        st.markdown(f"**Description :** {uc.get('description', 'N/A')}")
+                        famille = uc.get('famille', '')
+                        if famille:
+                            st.markdown(f"**Famille :** {famille}")
+                        st.markdown("---")
+            
+            st.markdown("---")
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("✏️ Modifier", use_container_width=True):
+                    # Rejeter les résultats pour permettre la modification
+                    reject_agent_results(
+                        st.session_state.current_project_id,
+                        "need_analysis",
+                        "needs"
+                    )
+                    reject_agent_results(
+                        st.session_state.current_project_id,
+                        "need_analysis",
+                        "use_cases"
+                    )
+                    # Réinitialiser le workflow
+                    st.session_state.thread_id = None
+                    st.session_state.workflow_status = None
+                    st.rerun()
+            with col2:
+                if st.button("🔄 Régénérer", use_container_width=True):
+                    # Rejeter les résultats existants
+                    reject_agent_results(
+                        st.session_state.current_project_id,
+                        "need_analysis",
+                        "needs"
+                    )
+                    reject_agent_results(
+                        st.session_state.current_project_id,
+                        "need_analysis",
+                        "use_cases"
+                    )
+                    # Réinitialiser le workflow
+                    st.session_state.thread_id = None
+                    st.session_state.workflow_status = None
+                    st.rerun()
+            
+            return
     
     # Si le workflow est en cours, afficher la progression
     if st.session_state.thread_id and st.session_state.workflow_status is not None:
@@ -931,12 +1354,11 @@ def display_diagnostic_section():
             
             # Lancer l'appel API dans un thread
             with ThreadPoolExecutor(max_workers=1) as executor:
-                # Extraire les file_paths depuis la nouvelle structure
-                transcript_file_paths = get_transcript_file_paths(st.session_state.uploaded_transcripts)
+                # Passer directement les données complètes (avec document_ids)
                 future = executor.submit(
                     start_workflow_api_call,
                     st.session_state.uploaded_workshops,
-                    transcript_file_paths,
+                    st.session_state.uploaded_transcripts,
                     st.session_state.company_name,
                     st.session_state.get("company_url", ""),
                     st.session_state.get("company_description", ""),
@@ -1432,19 +1854,86 @@ def display_use_cases_validation_interface():
             
             # Récupérer le résultat
             try:
-                success, error_msg = result_queue.get(timeout=1)
+                result_data = result_queue.get(timeout=1)
                 
-                if success:
-                    # Déterminer le message selon l'action
-                    if use_case_user_action == "finalize_use_cases":
-                        st.session_state.workflow_status = "completed"
-                        status_placeholder.success("✅ Validation envoyée ! Le workflow est terminé !")
+                # Gérer les deux formats possibles : (success, data) ou (success, error_msg)
+                if isinstance(result_data, tuple) and len(result_data) == 2:
+                    success, data = result_data
+                    if success:
+                        # data contient maintenant la réponse complète de l'API
+                        if isinstance(data, dict):
+                            # Mettre à jour workflow_state avec les final_results de l'API
+                            final_results = data.get("final_results", {})
+                            if final_results:
+                                # Mettre à jour workflow_state avec les résultats finaux
+                                if "final_needs" in final_results:
+                                    st.session_state.workflow_state["final_needs"] = final_results.get("final_needs", [])
+                                if "final_use_cases" in final_results:
+                                    st.session_state.workflow_state["final_use_cases"] = final_results.get("final_use_cases", [])
+                                
+                                # Mettre à jour aussi les autres champs si présents
+                                for key in ["workshop_results", "transcript_results", "summary"]:
+                                    if key in final_results:
+                                        st.session_state.workflow_state[key] = final_results[key]
+                            
+                            # Déterminer le message selon l'action
+                            if use_case_user_action == "finalize_use_cases":
+                                st.session_state.workflow_status = "completed"
+                                
+                                # Sauvegarder les résultats finaux dans la base de données
+                                if st.session_state.current_project_id:
+                                    try:
+                                        # Utiliser les données de final_results si disponibles, sinon workflow_state
+                                        final_needs = final_results.get("final_needs") if final_results else st.session_state.workflow_state.get("final_needs", [])
+                                        if final_needs:
+                                            save_agent_result(
+                                                project_id=st.session_state.current_project_id,
+                                                workflow_type="need_analysis",
+                                                result_type="needs",
+                                                data={"needs": final_needs},
+                                                status="validated"
+                                            )
+                                        
+                                        # Utiliser les données de final_results si disponibles, sinon workflow_state
+                                        final_use_cases = final_results.get("final_use_cases") if final_results else st.session_state.workflow_state.get("final_use_cases", [])
+                                        if final_use_cases:
+                                            save_agent_result(
+                                                project_id=st.session_state.current_project_id,
+                                                workflow_type="need_analysis",
+                                                result_type="use_cases",
+                                                data={"use_cases": final_use_cases},
+                                                status="validated"
+                                            )
+                                    except Exception as e:
+                                        st.warning(f"⚠️ Erreur lors de la sauvegarde en base de données: {str(e)}")
+                                
+                                status_placeholder.success("✅ Validation envoyée ! Le workflow est terminé !")
+                            else:
+                                status_placeholder.success("✅ Validation envoyée ! Régénération des use cases en cours...")
+                        else:
+                            # Format ancien (True, None) - pas de données à mettre à jour
+                            if use_case_user_action == "finalize_use_cases":
+                                st.session_state.workflow_status = "completed"
+                                status_placeholder.success("✅ Validation envoyée ! Le workflow est terminé !")
+                            else:
+                                status_placeholder.success("✅ Validation envoyée ! Régénération des use cases en cours...")
+                        
+                        # Forcer une mise à jour de l'état depuis le checkpointer
+                        # pour s'assurer que tous les champs sont à jour
+                        try:
+                            poll_workflow_status()
+                        except Exception as e:
+                            print(f"⚠️ Erreur lors du polling après validation: {str(e)}")
+                        
+                        time.sleep(1)
+                        st.rerun()
                     else:
-                        status_placeholder.success("✅ Validation envoyée ! Régénération des use cases en cours...")
-                    time.sleep(1)
-                    st.rerun()
+                        # data contient le message d'erreur
+                        error_msg = data if isinstance(data, str) else "Erreur inconnue"
+                        status_placeholder.error(f"❌ Erreur : {error_msg}")
                 else:
-                    status_placeholder.error(f"❌ Erreur : {error_msg}")
+                    # Format inattendu
+                    status_placeholder.error(f"❌ Format de réponse inattendu")
             
             except queue.Empty:
                 status_placeholder.error("❌ Timeout lors de la validation")
@@ -1512,6 +2001,23 @@ def generate_word_report():
             
             st.success(f"✅ Rapport généré avec succès !")
             st.info(f"📁 Fichier sauvegardé : `{output_path}`")
+            
+            # Sauvegarder dans session_state
+            st.session_state.word_path = output_path
+            
+            # Sauvegarder dans la base de données si un projet est sélectionné
+            if st.session_state.current_project_id:
+                try:
+                    # Parser et sauvegarder directement avec DocumentParserService
+                    file_name = os.path.basename(output_path)
+                    document_parser_service.parse_and_save_word_report(
+                        file_path=output_path,
+                        project_id=st.session_state.current_project_id,
+                        file_name=file_name,
+                        metadata={}
+                    )
+                except Exception as e:
+                    st.warning(f"⚠️ Erreur lors de la sauvegarde en base de données: {str(e)}")
             
             # Proposer le téléchargement du fichier
             with open(output_path, 'rb') as f:
@@ -1658,8 +2164,14 @@ def display_upload_documents_section():
                 speaker['unique_id'] = str(uuid.uuid4())
             
             speaker_unique_id = speaker.get('unique_id')
+            is_interviewer = speaker.get("is_interviewer", False)
             
-            col1, col2, col3, col4 = st.columns([3, 3, 1, 1])
+            # Colonnes : Nom, Rôle, Level (si interviewé), Type, Supprimer
+            if is_interviewer:
+                col1, col2, col3, col4 = st.columns([3, 3, 1, 1])
+            else:
+                col1, col2, col3, col4, col5 = st.columns([2.5, 2.5, 2, 1, 1])
+            
             with col1:
                 speaker_name = st.text_input(
                     "Nom",
@@ -1672,34 +2184,65 @@ def display_upload_documents_section():
                     value=speaker.get("role", ""),
                     key=f"speaker_role_{speaker_unique_id}"
                 )
-            with col3:
-                is_interviewer = speaker.get("is_interviewer", False)
+            
+            # Afficher le level seulement pour les interviewés
+            if not is_interviewer:
+                with col3:
+                    current_level = speaker.get("level", "inconnu")
+                    # Si level est None, None ou vide, afficher "inconnu" comme valeur par défaut
+                    if not current_level or current_level == "None" or current_level == "":
+                        current_level = "inconnu"
+                    
+                    # Options pour la liste déroulante
+                    level_options = ["direction", "métier", "inconnu"]
+                    # Index par défaut
+                    default_index = level_options.index(current_level) if current_level in level_options else 2
+                    
+                    selected_level = st.selectbox(
+                        "Niveau",
+                        options=level_options,
+                        index=default_index,
+                        key=f"speaker_level_{speaker_unique_id}",
+                        help="Sélectionnez le niveau hiérarchique du speaker"
+                    )
+            
+            with col4:
                 if is_interviewer:
                     st.markdown("<br>", unsafe_allow_html=True)
                     st.caption("Interviewer")
                 else:
                     st.markdown("<br>", unsafe_allow_html=True)
                     st.caption("Participant")
-            with col4:
-                # Bouton supprimer (sauf pour les interviewers)
-                if not is_interviewer:
+            
+            if not is_interviewer:
+                with col5:
+                    # Bouton supprimer (sauf pour les interviewers)
                     if st.button("🗑️", key=f"delete_speaker_{speaker_unique_id}", help="Supprimer ce speaker"):
                         st.session_state.delete_speaker_id = speaker_unique_id
                         st.rerun()
             
-            updated_speakers.append({
+            # Construire le dictionnaire du speaker
+            speaker_dict = {
                 "name": speaker_name,
                 "role": speaker_role,
                 "is_interviewer": is_interviewer,
                 "unique_id": speaker_unique_id
-            })
+            }
+            
+            # Ajouter le level seulement pour les interviewés
+            if not is_interviewer:
+                speaker_dict["level"] = selected_level
+            else:
+                speaker_dict["level"] = None  # Interviewers n'ont pas de level
+            
+            updated_speakers.append(speaker_dict)
         
         st.session_state.current_transcript_speakers = updated_speakers
         
         # Bouton pour ajouter un nouveau speaker
         st.markdown("---")
         with st.expander("➕ Ajouter un speaker manuellement"):
-            col1, col2 = st.columns(2)
+            col1, col2, col3 = st.columns(3)
             with col1:
                 new_speaker_name = st.text_input(
                     "Nom du nouveau speaker",
@@ -1712,12 +2255,21 @@ def display_upload_documents_section():
                     key="new_speaker_role_input",
                     placeholder="Ex: Directeur Commercial"
                 )
+            with col3:
+                new_speaker_level = st.selectbox(
+                    "Niveau",
+                    options=["direction", "métier", "inconnu"],
+                    index=2,  # "inconnu" par défaut
+                    key="new_speaker_level_input",
+                    help="Sélectionnez le niveau hiérarchique du speaker"
+                )
             
             if st.button("➕ Ajouter ce speaker", key="add_new_speaker_btn"):
                 if new_speaker_name and new_speaker_name.strip():
                     new_speaker = {
                         "name": new_speaker_name.strip(),
                         "role": new_speaker_role.strip() if new_speaker_role else "",
+                        "level": new_speaker_level,  # Level sélectionné par l'utilisateur
                         "is_interviewer": False,
                         "unique_id": str(uuid.uuid4())
                     }
@@ -1730,9 +2282,51 @@ def display_upload_documents_section():
         col1, col2 = st.columns(2)
         with col1:
             if st.button("✅ Valider", type="primary", key="validate_transcript"):
-                # Sauvegarder le transcript dans la liste
+                # Vérifier qu'au moins un speaker non-interviewer est validé
+                non_interviewer_speakers = [s for s in updated_speakers if not s.get("is_interviewer", False)]
+                if not non_interviewer_speakers:
+                    st.error("❌ Vous devez valider au moins un speaker interviewé avant de sauvegarder.")
+                    st.stop()
+                
+                # Préparer les speakers avec level (sélectionné par l'utilisateur ou depuis l'API)
+                validated_speakers_list = []
+                for speaker in updated_speakers:
+                    # Pour les interviewers, level est None
+                    # Pour les interviewés, level est sélectionné via la liste déroulante
+                    level = speaker.get("level")
+                    if not level and not speaker.get("is_interviewer", False):
+                        # Si pas de level et que ce n'est pas un interviewer, mettre "inconnu" par défaut
+                        level = "inconnu"
+                    
+                    speaker_dict = {
+                        "name": speaker["name"],
+                        "role": speaker.get("role", ""),
+                        "level": level,
+                        "is_interviewer": speaker.get("is_interviewer", False)
+                    }
+                    validated_speakers_list.append(speaker_dict)
+                
+                # Sauvegarder dans la base de données si un projet est sélectionné
+                document_id = None
+                if st.session_state.current_project_id:
+                    try:
+                        # Parser et sauvegarder directement avec DocumentParserService
+                        file_name = os.path.basename(st.session_state.current_transcript_file_path)
+                        document_id = document_parser_service.parse_and_save_transcript(
+                            file_path=st.session_state.current_transcript_file_path,
+                            project_id=st.session_state.current_project_id,
+                            file_name=file_name,
+                            validated_speakers=validated_speakers_list  # Passer les speakers validés avec level
+                        )
+                    except ValueError as e:
+                        st.error(f"❌ {str(e)}")
+                    except Exception as e:
+                        st.warning(f"⚠️ Erreur lors de la sauvegarde en base de données: {str(e)}")
+                
+                # Sauvegarder le transcript dans la liste (pour compatibilité avec workflows)
                 transcript_data = {
                     "file_path": st.session_state.current_transcript_file_path,
+                    "document_id": document_id,  # NOUVEAU: Stocker document_id
                     "speakers": [
                         {"name": s["name"], "role": s["role"]}
                         for s in updated_speakers
@@ -1831,18 +2425,40 @@ def display_upload_documents_section():
         st.markdown("---")
         st.markdown("**Transcripts sauvegardés :**")
         for idx, transcript in enumerate(st.session_state.uploaded_transcripts):
+            # Utiliser document_id si disponible, sinon file_name
+            document_id = transcript.get("document_id")
+            file_name = transcript.get("file_name", "")
+            
+            # Si pas de file_name, utiliser document_id comme identifiant
+            if not file_name and document_id:
+                file_name = f"Transcript (ID: {document_id})"
+            elif not file_name:
+                file_name = "Transcript (nom inconnu)"
+            
             col1, col2 = st.columns([4, 1])
             with col1:
-                filename = os.path.basename(transcript.get("file_path", ""))
-                st.markdown(f"**{filename}**")
-                speakers_text = " | ".join([
-                    f"{s.get('name', '')} | {s.get('role', '')}"
-                    for s in transcript.get("speakers", [])
-                ])
-                if speakers_text:
-                    st.caption(f"Intervenants: {speakers_text}")
+                st.markdown(f"**{file_name}**")
+                speakers = transcript.get("speakers", [])
+                if speakers:
+                    speakers_text = " | ".join([
+                        f"{s.get('name', '')} ({s.get('role', 'N/A')})"
+                        for s in speakers
+                        if not s.get("is_interviewer", False)  # Exclure les interviewers
+                    ])
+                    if speakers_text:
+                        st.caption(f"Intervenants: {speakers_text}")
             with col2:
                 if st.button("🗑️", key=f"delete_transcript_{idx}", help="Supprimer"):
+                    # Supprimer de la base de données si un projet est sélectionné
+                    if st.session_state.current_project_id and document_id:
+                        try:
+                            from database.repository import DocumentRepository
+                            from database.db import get_db_context
+                            with get_db_context() as db:
+                                DocumentRepository.delete(db, document_id)
+                        except Exception as e:
+                            st.warning(f"⚠️ Erreur lors de la suppression: {str(e)}")
+                    # Supprimer de la session state
                     st.session_state.uploaded_transcripts.pop(idx)
                     st.rerun()
     
@@ -1869,9 +2485,49 @@ def display_upload_documents_section():
             workshop_paths = upload_files_to_api(new_workshops)
             new_paths = workshop_paths.get("workshop", [])
             
-            # Ajouter les nouveaux chemins aux workshops existants
+            # Convertir les nouveaux chemins en dictionnaires pour cohérence
+            new_workshop_dicts = [
+                {
+                    "file_path": path,
+                    "extracted_text": "",
+                    "file_name": os.path.basename(path),
+                }
+                for path in new_paths
+            ]
+            
+            # Sauvegarder dans la base de données si un projet est sélectionné
+            if st.session_state.current_project_id:
+                try:
+                    from database.repository import WorkshopRepository
+                    from database.db import get_db_context
+                    
+                    for i, file_path in enumerate(new_paths):
+                        # Parser et sauvegarder directement avec DocumentParserService
+                        file_name = os.path.basename(file_path)
+                        document_id = document_parser_service.parse_and_save_workshop(
+                            file_path=file_path,
+                            project_id=st.session_state.current_project_id,
+                            file_name=file_name,
+                            metadata={}
+                        )
+                        # Charger les ateliers depuis la base de données pour ce document
+                        with get_db_context() as db:
+                            workshops = WorkshopRepository.get_by_document(db, document_id)
+                            ateliers = [w.atelier_name for w in workshops]
+                        
+                        # Mettre à jour le workshop_dict avec document_id et ateliers
+                        if i < len(new_workshop_dicts):
+                            new_workshop_dicts[i]["document_id"] = document_id
+                            new_workshop_dicts[i]["ateliers"] = ateliers
+                            # Supprimer file_path et extracted_text qui ne sont plus nécessaires
+                            new_workshop_dicts[i].pop("file_path", None)
+                            new_workshop_dicts[i].pop("extracted_text", None)
+                except Exception as e:
+                    st.warning(f"⚠️ Erreur lors de la sauvegarde en base de données: {str(e)}")
+            
+            # Ajouter les nouveaux workshops aux workshops existants (après avoir récupéré les document_id)
             existing_workshops = st.session_state.get("uploaded_workshops", [])
-            st.session_state.uploaded_workshops = existing_workshops + new_paths
+            st.session_state.uploaded_workshops = existing_workshops + new_workshop_dicts
             
             # Marquer les fichiers comme uploadés
             for f in new_workshops:
@@ -1884,21 +2540,64 @@ def display_upload_documents_section():
     # Afficher les workshops déjà uploadés
     if st.session_state.uploaded_workshops:
         st.markdown("**Fichiers d'ateliers sauvegardés :**")
-        for path in st.session_state.uploaded_workshops:
-            filename = os.path.basename(path)
+        for idx, workshop in enumerate(st.session_state.uploaded_workshops):
+            # Gérer les deux formats : dict ou string (pour compatibilité)
+            document_id = None
+            file_name = ""
+            ateliers = []
+            
+            if isinstance(workshop, dict):
+                document_id = workshop.get("document_id")
+                file_name = workshop.get("file_name", "")
+                ateliers = workshop.get("ateliers", [])  # Liste des ateliers
+                # Format ancien avec atelier_name (un seul atelier)
+                if not ateliers:
+                    atelier_name = workshop.get("atelier_name", "")
+                    if atelier_name:
+                        ateliers = [atelier_name]
+                # Format ancien avec file_path
+                if not file_name:
+                    file_path = workshop.get("file_path", "")
+                    file_name = os.path.basename(file_path) if file_path else "Unknown"
+            else:
+                # Format ancien (string) - pas de document_id disponible
+                file_path = workshop
+                file_name = os.path.basename(file_path)
+            
+            # Construire le nom d'affichage
+            if not file_name:
+                file_name = f"Workshop (ID: {document_id})" if document_id else "Workshop (nom inconnu)"
+            
             col1, col2 = st.columns([4, 1])
             with col1:
-                st.text(f"• {filename}")
+                # Afficher le nom du fichier
+                st.text(f"• {file_name}")
+                # Afficher les ateliers en dessous si disponibles
+                if ateliers:
+                    for atelier in ateliers:
+                        st.caption(f"  └─ {atelier}")
             with col2:
-                if st.button("🗑️", key=f"delete_workshop_{path}", help="Supprimer"):
-                    st.session_state.uploaded_workshops.remove(path)
+                # Utiliser document_id + index comme clé unique pour le bouton (éviter les doublons)
+                button_key = f"delete_workshop_{document_id}_{idx}" if document_id else f"delete_workshop_{idx}"
+                if st.button("🗑️", key=button_key, help="Supprimer"):
+                    # Supprimer de la base de données si un projet est sélectionné
+                    if st.session_state.current_project_id and document_id:
+                        try:
+                            from database.repository import DocumentRepository
+                            from database.db import get_db_context
+                            with get_db_context() as db:
+                                DocumentRepository.delete(db, document_id)
+                        except Exception as e:
+                            st.warning(f"⚠️ Erreur lors de la suppression: {str(e)}")
+                    # Supprimer de la session state
+                    st.session_state.uploaded_workshops.pop(idx)
                     # Retirer aussi le nom du fichier du tracking si on peut le retrouver
-                    file_basename = os.path.basename(path)
-                    # Chercher le nom original dans uploaded_file_names
-                    for name in list(st.session_state.uploaded_file_names):
-                        if file_basename.endswith(name) or name in file_basename:
-                            st.session_state.uploaded_file_names.discard(name)
-                            break
+                    if file_name:
+                        # Chercher le nom original dans uploaded_file_names
+                        for name in list(st.session_state.uploaded_file_names):
+                            if file_name.endswith(name) or name in file_name:
+                                st.session_state.uploaded_file_names.discard(name)
+                                break
                     st.rerun()
 
 def display_company_context_section():
@@ -2077,6 +2776,26 @@ def display_company_context_section():
                     # Synchroniser le nom d'entreprise pour la section "Générer les Use Cases"
                     if validated_data.get("nom"):
                         st.session_state.company_name = validated_data["nom"]
+                    
+                    # Sauvegarder dans la base de données si un projet est sélectionné
+                    if st.session_state.current_project_id:
+                        try:
+                            from database.db import get_db_context
+                            from database.repository import ProjectRepository
+                            from database.schemas import ProjectUpdate
+                            
+                            with get_db_context() as db:
+                                project_update = ProjectUpdate(company_info=validated_data)
+                                updated_project = ProjectRepository.update(
+                                    db, 
+                                    st.session_state.current_project_id, 
+                                    project_update
+                                )
+                                if updated_project:
+                                    st.info("💾 Informations sauvegardées dans la base de données")
+                        except Exception as e:
+                            st.warning(f"⚠️ Erreur lors de la sauvegarde en base de données: {str(e)}")
+                    
                     st.success("✅ Informations validées et sauvegardées !")
                     st.rerun()
     
@@ -2097,10 +2816,147 @@ def display_recommendations_section():
     st.header("Génération des Enjeux et Recommandations")
     st.info("💡 Cette section génère un Executive Summary avec les enjeux stratégiques, l'évaluation de maturité IA et les recommandations.")
     
+    # Vérifier si des résultats validés existent déjà
+    if st.session_state.current_project_id:
+        has_challenges = has_validated_results(
+            st.session_state.current_project_id,
+            "executive_summary",
+            "challenges"
+        )
+        has_recommendations = has_validated_results(
+            st.session_state.current_project_id,
+            "executive_summary",
+            "recommendations"
+        )
+        has_maturity = has_validated_results(
+            st.session_state.current_project_id,
+            "executive_summary",
+            "maturity"
+        )
+        
+        if has_challenges or has_recommendations or has_maturity:
+            # Afficher directement les résultats finaux
+            st.success("✅ **Workflow terminé - Résultats disponibles**")
+            st.markdown("---")
+            
+            # Charger les résultats validés
+            validated_challenges = load_agent_results(
+                st.session_state.current_project_id,
+                "executive_summary",
+                "challenges",
+                "validated"
+            )
+            validated_recommendations = load_agent_results(
+                st.session_state.current_project_id,
+                "executive_summary",
+                "recommendations",
+                "validated"
+            )
+            validated_maturity = load_agent_results(
+                st.session_state.current_project_id,
+                "executive_summary",
+                "maturity",
+                "validated"
+            )
+            
+            # Afficher les résultats (similaire à display_executive_final_summary)
+            if validated_challenges:
+                challenges_list = validated_challenges.get("challenges", [])
+                st.subheader(f"Enjeux ({len(challenges_list)})")
+                for i, challenge in enumerate(challenges_list, 1):
+                    if isinstance(challenge, dict):
+                        st.markdown(f"**{i}. {challenge.get('titre', 'N/A')}**")
+                    else:
+                        st.markdown(f"**{i}. {str(challenge)}**")
+            
+            if validated_recommendations:
+                recommendations_list = validated_recommendations.get("recommendations", [])
+                st.subheader(f"Recommandations ({len(recommendations_list)})")
+                for i, rec in enumerate(recommendations_list, 1):
+                    if isinstance(rec, dict):
+                        st.markdown(f"**{i}. {rec.get('titre', 'N/A')}**")
+                    else:
+                        st.markdown(f"**{i}. {str(rec)}**")
+            
+            if validated_maturity:
+                maturity_score = validated_maturity.get("maturity_score")
+                maturity_summary = validated_maturity.get("maturity_summary", "")
+                if maturity_score is not None:
+                    st.subheader("Maturité IA")
+                    st.metric("Score", maturity_score)
+                    if maturity_summary:
+                        st.markdown(maturity_summary)
+            
+            st.markdown("---")
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("✏️ Modifier", use_container_width=True):
+                    # Rejeter les résultats pour permettre la modification
+                    reject_agent_results(
+                        st.session_state.current_project_id,
+                        "executive_summary",
+                        "challenges"
+                    )
+                    reject_agent_results(
+                        st.session_state.current_project_id,
+                        "executive_summary",
+                        "recommendations"
+                    )
+                    reject_agent_results(
+                        st.session_state.current_project_id,
+                        "executive_summary",
+                        "maturity"
+                    )
+                    # Réinitialiser le workflow
+                    st.session_state.executive_thread_id = None
+                    st.session_state.executive_workflow_status = None
+                    st.rerun()
+            with col2:
+                if st.button("🔄 Régénérer", use_container_width=True):
+                    # Rejeter les résultats existants
+                    reject_agent_results(
+                        st.session_state.current_project_id,
+                        "executive_summary",
+                        "challenges"
+                    )
+                    reject_agent_results(
+                        st.session_state.current_project_id,
+                        "executive_summary",
+                        "recommendations"
+                    )
+                    reject_agent_results(
+                        st.session_state.current_project_id,
+                        "executive_summary",
+                        "maturity"
+                    )
+                    # Réinitialiser le workflow
+                    st.session_state.executive_thread_id = None
+                    st.session_state.executive_workflow_status = None
+                    st.rerun()
+            
+            return
+    
     # Si le workflow est en cours, afficher la progression
     if st.session_state.get("executive_thread_id") and st.session_state.get("executive_workflow_status") is not None:
         display_executive_workflow_progress()
         return
+    
+    # Vérifier si des besoins/use cases validés existent dans "Validation des besoins et use cases"
+    if st.session_state.current_project_id:
+        has_word_validation_needs = has_validated_results(
+            st.session_state.current_project_id,
+            "word_validation",
+            "needs"
+        )
+        has_word_validation_use_cases = has_validated_results(
+            st.session_state.current_project_id,
+            "word_validation",
+            "use_cases"
+        )
+        
+        if not (has_word_validation_needs or has_word_validation_use_cases):
+            st.warning("⚠️ Veuillez d'abord valider les besoins et use cases dans la section 'Validation des besoins et use cases'")
+            return
     
     # Vérifier que les fichiers sont uploadés
     if not st.session_state.uploaded_transcripts and not st.session_state.uploaded_workshops:
@@ -2246,15 +3102,37 @@ def display_recommendations_section():
     # Bouton de démarrage
     st.markdown("---")
     if st.button("🚀 Démarrer la Génération Executive Summary", type="primary", width="stretch"):
-        word_path = st.session_state.get("word_path")
-        if not word_path:
-            st.error("❌ Erreur : chemin du fichier Word non trouvé")
+        # Récupérer les données validées (depuis word_validation ou depuis validated_word_extraction)
+        if validated_needs is None or validated_use_cases is None:
+            validated_data = st.session_state.get("validated_word_extraction", {})
+            if not validated_needs:
+                validated_needs = validated_data.get("validated_needs", [])
+            if not validated_use_cases:
+                validated_use_cases = validated_data.get("validated_use_cases", [])
+        
+        # Vérifier que les données validées sont présentes
+        if not validated_needs and not validated_use_cases:
+            st.error("❌ Erreur : Aucune donnée validée trouvée. Veuillez d'abord valider les besoins et use cases dans 'Validation des besoins et use cases'.")
             return
         
-        # Récupérer les données validées
-        validated_data = st.session_state.get("validated_word_extraction", {})
-        validated_needs = validated_data.get("validated_needs", [])
-        validated_use_cases = validated_data.get("validated_use_cases", [])
+        # Extraire les document_ids depuis uploaded_transcripts et uploaded_workshops
+        transcript_document_ids = []
+        for transcript in st.session_state.get("uploaded_transcripts", []):
+            if isinstance(transcript, dict) and "document_id" in transcript:
+                doc_id = transcript.get("document_id")
+                if doc_id is not None:
+                    transcript_document_ids.append(doc_id)
+        
+        workshop_document_ids = []
+        for workshop in st.session_state.get("uploaded_workshops", []):
+            if isinstance(workshop, dict) and "document_id" in workshop:
+                doc_id = workshop.get("document_id")
+                if doc_id is not None:
+                    workshop_document_ids.append(doc_id)
+        
+        if not transcript_document_ids and not workshop_document_ids:
+            st.error("❌ Erreur : Aucun document trouvé. Veuillez d'abord uploader et sauvegarder les transcripts et workshops dans la base de données.")
+            return
         
         # Démarrer le workflow Executive Summary
         with st.spinner("🚀 Démarrage du workflow Executive Summary..."):
@@ -2263,23 +3141,22 @@ def display_recommendations_section():
                 thread_id = str(uuid.uuid4())
                 st.session_state.executive_thread_id = thread_id
                 
-                # NOUVEAU: Préparer les speakers validés depuis uploaded_transcripts
+                # Préparer les speakers validés depuis uploaded_transcripts
                 validated_speakers = []
-                for transcript in st.session_state.uploaded_transcripts:
+                for transcript in st.session_state.get("uploaded_transcripts", []):
                     validated_speakers.extend(transcript.get("speakers", []))
                 
                 # Appel API pour démarrer le workflow avec les données validées
                 response = requests.post(
                     f"{API_URL}/executive-summary/threads/{thread_id}/runs",
                     json={
-                        "word_report_path": word_path,
-                        "transcript_files": get_transcript_file_paths(st.session_state.uploaded_transcripts),
-                        "workshop_files": st.session_state.uploaded_workshops,
+                        "transcript_document_ids": transcript_document_ids,
+                        "workshop_document_ids": workshop_document_ids,
                         "company_name": st.session_state.company_name,
                         "interviewer_note": interviewer_note or "",
                         "validated_needs": validated_needs,
                         "validated_use_cases": validated_use_cases,
-                        "validated_speakers": validated_speakers  # NOUVEAU
+                        "validated_speakers": validated_speakers
                     }
                 )
                 
@@ -2363,6 +3240,51 @@ def display_executive_workflow_progress():
         
         # Mettre à jour le statut pour ne plus poller
         st.session_state.executive_workflow_status = "completed"
+        
+        # Sauvegarder les résultats finaux dans la base de données
+        if st.session_state.current_project_id and st.session_state.get("executive_final_results"):
+            try:
+                final_results = st.session_state.executive_final_results
+                
+                # Sauvegarder les enjeux
+                validated_challenges = final_results.get("validated_challenges", [])
+                if validated_challenges:
+                    save_agent_result(
+                        project_id=st.session_state.current_project_id,
+                        workflow_type="executive_summary",
+                        result_type="challenges",
+                        data={"challenges": validated_challenges},
+                        status="validated"
+                    )
+                
+                # Sauvegarder les recommandations
+                validated_recommendations = final_results.get("validated_recommendations", [])
+                if validated_recommendations:
+                    save_agent_result(
+                        project_id=st.session_state.current_project_id,
+                        workflow_type="executive_summary",
+                        result_type="recommendations",
+                        data={"recommendations": validated_recommendations},
+                        status="validated"
+                    )
+                
+                # Sauvegarder la maturité
+                maturity_score = final_results.get("maturity_score")
+                maturity_summary = final_results.get("maturity_summary", "")
+                if maturity_score is not None:
+                    save_agent_result(
+                        project_id=st.session_state.current_project_id,
+                        workflow_type="executive_summary",
+                        result_type="maturity",
+                        data={
+                            "maturity_score": maturity_score,
+                            "maturity_summary": maturity_summary
+                        },
+                        status="validated"
+                    )
+            except Exception as e:
+                st.warning(f"⚠️ Erreur lors de la sauvegarde en base de données: {str(e)}")
+        
         st.rerun()
     
     elif status == "error":
@@ -2560,6 +3482,486 @@ def display_executive_final_summary():
             type="primary",
             use_container_width=True
         )
+
+def display_word_validation_section():
+    """
+    Section : Validation des besoins et use cases
+    Charge d'abord les besoins et use cases de la base de données (workflow_type="need_analysis")
+    Permet de modifier/supprimer/ajouter, ou d'uploader un Word Report pour remplacer.
+    """
+    st.header("✅ Validation des besoins et use cases")
+    
+    if not st.session_state.current_project_id:
+        st.warning("⚠️ Veuillez d'abord sélectionner ou créer un projet.")
+        return
+    
+    # Initialiser les états de session si nécessaire
+    if "word_validation_editing_needs" not in st.session_state:
+        st.session_state.word_validation_editing_needs = None
+    if "word_validation_editing_use_cases" not in st.session_state:
+        st.session_state.word_validation_editing_use_cases = None
+    if "word_validation_show_upload" not in st.session_state:
+        st.session_state.word_validation_show_upload = False
+    if "word_validation_edit_mode" not in st.session_state:
+        st.session_state.word_validation_edit_mode = False
+    
+    # Charger les données depuis la base de données (workflow_type="need_analysis")
+    has_needs = has_validated_results(
+        st.session_state.current_project_id,
+        "need_analysis",
+        "needs"
+    )
+    has_use_cases = has_validated_results(
+        st.session_state.current_project_id,
+        "need_analysis",
+        "use_cases"
+    )
+    
+    # Charger les données
+    validated_needs_data = None
+    validated_use_cases_data = None
+    needs_list = []
+    use_cases_list = []
+    
+    if has_needs:
+        validated_needs_data = load_agent_results(
+            st.session_state.current_project_id,
+            "need_analysis",
+            "needs",
+            "validated"
+        )
+        if validated_needs_data:
+            needs_list = validated_needs_data.get("needs", [])
+    
+    if has_use_cases:
+        validated_use_cases_data = load_agent_results(
+            st.session_state.current_project_id,
+            "need_analysis",
+            "use_cases",
+            "validated"
+        )
+        if validated_use_cases_data:
+            use_cases_list = validated_use_cases_data.get("use_cases", [])
+    
+    # Si on est en mode upload Word, afficher l'interface d'upload
+    if st.session_state.word_validation_show_upload:
+        st.info("💡 Mode : Upload d'un nouveau document Word. Les données extraites remplaceront les données existantes.")
+        
+        # Bouton pour revenir au mode édition
+        if st.button("← Retour au mode édition", type="secondary"):
+            st.session_state.word_validation_show_upload = False
+            st.session_state.word_validation_path = None
+            st.session_state.word_validation_extracted = False
+            st.session_state.word_validation_data = None
+            st.rerun()
+        
+        # Upload du Word Report
+        st.subheader("📄 Rapport Word")
+        word_file = st.file_uploader(
+            "Uploadez le rapport Word (.docx)",
+            type=["docx"],
+            key="word_validation_upload"
+        )
+        
+        # Si un fichier est uploadé, l'uploader vers l'API
+        if word_file:
+            if st.button("📤 Uploader et extraire", type="primary"):
+                with st.spinner("Upload du fichier..."):
+                    try:
+                        # Upload vers l'API
+                        word_paths = upload_files_to_api([word_file])
+                        all_paths = word_paths.get("file_paths", [])
+                        
+                        if all_paths:
+                            word_path = all_paths[0]
+                            st.session_state.word_validation_path = word_path
+                            
+                            # Sauvegarder le document dans la base de données
+                            try:
+                                file_name = os.path.basename(word_path)
+                                document_parser_service.parse_and_save_word_report(
+                                    file_path=word_path,
+                                    project_id=st.session_state.current_project_id,
+                                    file_name=file_name,
+                                    metadata={}
+                                )
+                            except Exception as e:
+                                st.warning(f"⚠️ Erreur lors de la sauvegarde du document: {str(e)}")
+                            
+                            st.success("✅ Fichier uploadé avec succès !")
+                            st.rerun()
+                        else:
+                            st.error("❌ Erreur lors de l'upload du fichier")
+                    except Exception as e:
+                        st.error(f"❌ Erreur: {str(e)}")
+        
+        # Extraction des données
+        word_path = st.session_state.get("word_validation_path")
+        
+        if word_path and not st.session_state.get("word_validation_extracted"):
+            st.subheader("🔍 Extraction")
+            
+            # Option pour forcer l'extraction LLM
+            force_llm = st.checkbox("🤖 Forcer l'extraction via LLM", value=False, key="word_validation_force_llm")
+            
+            if st.button("🔍 Extraire les besoins et use cases", type="primary"):
+                with st.spinner("Extraction des données du rapport Word..."):
+                    try:
+                        # Appeler l'API pour extraire les données
+                        response = requests.post(
+                            f"{API_URL}/word/extract",
+                            json={
+                                "word_path": word_path,
+                                "force_llm": force_llm
+                            },
+                            timeout=300
+                        )
+                        response.raise_for_status()
+                        extracted_data = response.json()
+                        st.session_state.word_validation_extracted = True
+                        st.session_state.word_validation_data = extracted_data
+                        
+                        extraction_method = extracted_data.get("extraction_method", "unknown")
+                        if extraction_method == "structured":
+                            st.success("✅ Extraction réussie via parsing structuré")
+                        elif extraction_method == "llm_fallback":
+                            st.info("ℹ️ Extraction réussie via LLM (fallback automatique)")
+                        elif extraction_method == "llm_forced":
+                            st.info("🤖 Extraction réussie via LLM (forcé)")
+                        
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ Erreur lors de l'extraction: {str(e)}")
+        
+        # Validation/Modification après extraction
+        if st.session_state.get("word_validation_data"):
+            st.subheader("✏️ Validation/Modification")
+            st.warning("⚠️ Les données extraites remplaceront les données existantes dans la base de données.")
+            
+            extracted_data = st.session_state.word_validation_data
+            final_needs = extracted_data.get("final_needs", [])
+            final_use_cases = extracted_data.get("final_use_cases", [])
+            
+            # Interface de validation pour les besoins
+            if final_needs:
+                st.markdown("#### 📋 Besoins identifiés")
+                needs_result = validation_interface.display_needs_for_validation(
+                    identified_needs=final_needs,
+                    validated_count=0,
+                    key_suffix="word_validation_needs"
+                )
+                
+                if needs_result:
+                    validated_needs = needs_result.get("validated_needs", [])
+                    
+                    # Sauvegarder dans la base de données (workflow_type="need_analysis" + copie avec "word_validation")
+                    if st.session_state.current_project_id and validated_needs:
+                        try:
+                            # Sauvegarder avec need_analysis (pour que "Générer les Use Cases" continue de fonctionner)
+                            save_agent_result(
+                                project_id=st.session_state.current_project_id,
+                                workflow_type="need_analysis",
+                                result_type="needs",
+                                data={"needs": validated_needs},
+                                status="validated"
+                            )
+                            # Créer une copie avec word_validation (pour que "Génération des enjeux" puisse vérifier)
+                            save_agent_result(
+                                project_id=st.session_state.current_project_id,
+                                workflow_type="word_validation",
+                                result_type="needs",
+                                data={"needs": validated_needs},
+                                status="validated"
+                            )
+                            st.success("✅ Besoins validés et sauvegardés !")
+                        except Exception as e:
+                            st.error(f"❌ Erreur lors de la sauvegarde: {str(e)}")
+            
+            # Interface de validation pour les use cases
+            if final_use_cases:
+                st.markdown("#### 💼 Use Cases identifiés")
+                use_cases_result = use_case_validation.display_use_cases_for_validation(
+                    use_cases=final_use_cases,
+                    validated_count=0,
+                    key_suffix="word_validation_use_cases"
+                )
+                
+                if use_cases_result:
+                    validated_use_cases = use_cases_result.get("validated_use_cases", [])
+                    
+                    # Sauvegarder dans la base de données (workflow_type="need_analysis" + copie avec "word_validation")
+                    if st.session_state.current_project_id and validated_use_cases:
+                        try:
+                            # Sauvegarder avec need_analysis (pour que "Générer les Use Cases" continue de fonctionner)
+                            save_agent_result(
+                                project_id=st.session_state.current_project_id,
+                                workflow_type="need_analysis",
+                                result_type="use_cases",
+                                data={"use_cases": validated_use_cases},
+                                status="validated"
+                            )
+                            # Créer une copie avec word_validation (pour que "Génération des enjeux" puisse vérifier)
+                            save_agent_result(
+                                project_id=st.session_state.current_project_id,
+                                workflow_type="word_validation",
+                                result_type="use_cases",
+                                data={"use_cases": validated_use_cases},
+                                status="validated"
+                            )
+                            st.success("✅ Use cases validés et sauvegardés !")
+                            
+                            # Réinitialiser l'état
+                            st.session_state.word_validation_extracted = False
+                            st.session_state.word_validation_data = None
+                            st.session_state.word_validation_path = None
+                            st.session_state.word_validation_show_upload = False
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"❌ Erreur lors de la sauvegarde: {str(e)}")
+        
+        return
+    
+    # Mode édition : Afficher les données existantes avec interface d'édition
+    if has_needs or has_use_cases:
+        st.info("💡 Modifiez, supprimez ou ajoutez des besoins et use cases. Vous pouvez également uploader un nouveau document Word pour remplacer toutes les données.")
+    else:
+        st.info("💡 Aucune donnée trouvée. Uploadez un document Word pour extraire les besoins et use cases, ou ajoutez-les manuellement.")
+    
+    # Bouton pour basculer vers le mode upload
+    if st.button("📄 Uploader un nouveau document Word", type="secondary"):
+        st.session_state.word_validation_show_upload = True
+        st.rerun()
+    
+    st.markdown("---")
+    
+    # Initialiser les listes d'édition si nécessaire
+    if st.session_state.word_validation_editing_needs is None:
+        st.session_state.word_validation_editing_needs = needs_list.copy() if needs_list else []
+    if st.session_state.word_validation_editing_use_cases is None:
+        st.session_state.word_validation_editing_use_cases = use_cases_list.copy() if use_cases_list else []
+    
+    # Interface d'édition des besoins
+    st.subheader("📋 Besoins")
+    
+    editing_needs = st.session_state.word_validation_editing_needs
+    
+    # Afficher chaque besoin avec possibilité de modification/suppression
+    for i, need in enumerate(editing_needs):
+        with st.expander(f"**{i+1}. {need.get('theme', 'N/A')}**", expanded=False):
+            col1, col2 = st.columns([4, 1])
+            
+            with col1:
+                # Formulaire d'édition
+                with st.form(key=f"edit_need_{i}"):
+                    theme = st.text_input("Thème", value=need.get('theme', ''), key=f"need_theme_{i}")
+                    quotes = st.text_area(
+                        "Citations (une par ligne)",
+                        value='\n'.join(need.get('quotes', [])),
+                        height=100,
+                        key=f"need_quotes_{i}"
+                    )
+                    
+                    col_save, col_delete = st.columns(2)
+                    with col_save:
+                        if st.form_submit_button("💾 Enregistrer", use_container_width=True):
+                            # Mettre à jour le besoin
+                            editing_needs[i] = {
+                                'id': need.get('id', i+1),
+                                'theme': theme,
+                                'quotes': [q.strip() for q in quotes.split('\n') if q.strip()]
+                            }
+                            st.session_state.word_validation_editing_needs = editing_needs
+                            st.success("✅ Besoin modifié")
+                            st.rerun()
+                    
+                    with col_delete:
+                        if st.form_submit_button("🗑️ Supprimer", use_container_width=True):
+                            # Supprimer le besoin
+                            editing_needs.pop(i)
+                            st.session_state.word_validation_editing_needs = editing_needs
+                            st.success("✅ Besoin supprimé")
+                            st.rerun()
+    
+    # Formulaire pour ajouter un nouveau besoin
+    with st.expander("➕ Ajouter un nouveau besoin", expanded=False):
+        with st.form(key="add_need"):
+            new_theme = st.text_input("Thème", key="new_need_theme")
+            new_quotes = st.text_area(
+                "Citations (une par ligne)",
+                height=100,
+                key="new_need_quotes"
+            )
+            
+            if st.form_submit_button("➕ Ajouter", use_container_width=True):
+                if new_theme.strip():
+                    new_need = {
+                        'id': len(editing_needs) + 1,
+                        'theme': new_theme.strip(),
+                        'quotes': [q.strip() for q in new_quotes.split('\n') if q.strip()]
+                    }
+                    editing_needs.append(new_need)
+                    st.session_state.word_validation_editing_needs = editing_needs
+                    st.success("✅ Besoin ajouté")
+                    st.rerun()
+                else:
+                    st.warning("⚠️ Veuillez saisir un thème")
+    
+    st.markdown("---")
+    
+    # Interface d'édition des use cases
+    st.subheader("💼 Use Cases")
+    
+    editing_use_cases = st.session_state.word_validation_editing_use_cases
+    
+    # Afficher chaque use case avec possibilité de modification/suppression
+    for i, uc in enumerate(editing_use_cases):
+        with st.expander(f"**{i+1}. {uc.get('titre', 'N/A')}**", expanded=False):
+            col1, col2 = st.columns([4, 1])
+            
+            with col1:
+                # Formulaire d'édition
+                with st.form(key=f"edit_use_case_{i}"):
+                    titre = st.text_input("Titre", value=uc.get('titre', ''), key=f"uc_titre_{i}")
+                    description = st.text_area(
+                        "Description",
+                        value=uc.get('description', ''),
+                        height=150,
+                        key=f"uc_description_{i}"
+                    )
+                    famille = st.text_input("Famille (optionnel)", value=uc.get('famille', ''), key=f"uc_famille_{i}")
+                    ia_utilisee = st.text_input("IA utilisée (optionnel)", value=uc.get('ia_utilisee', ''), key=f"uc_ia_{i}")
+                    
+                    col_save, col_delete = st.columns(2)
+                    with col_save:
+                        if st.form_submit_button("💾 Enregistrer", use_container_width=True):
+                            # Mettre à jour le use case
+                            editing_use_cases[i] = {
+                                'id': uc.get('id', i+1),
+                                'titre': titre,
+                                'description': description,
+                                'famille': famille if famille.strip() else None,
+                                'ia_utilisee': ia_utilisee if ia_utilisee.strip() else None
+                            }
+                            st.session_state.word_validation_editing_use_cases = editing_use_cases
+                            st.success("✅ Use case modifié")
+                            st.rerun()
+                    
+                    with col_delete:
+                        if st.form_submit_button("🗑️ Supprimer", use_container_width=True):
+                            # Supprimer le use case
+                            editing_use_cases.pop(i)
+                            st.session_state.word_validation_editing_use_cases = editing_use_cases
+                            st.success("✅ Use case supprimé")
+                            st.rerun()
+    
+    # Formulaire pour ajouter un nouveau use case
+    with st.expander("➕ Ajouter un nouveau use case", expanded=False):
+        with st.form(key="add_use_case"):
+            new_titre = st.text_input("Titre", key="new_uc_titre")
+            new_description = st.text_area(
+                "Description",
+                height=150,
+                key="new_uc_description"
+            )
+            new_famille = st.text_input("Famille (optionnel)", key="new_uc_famille")
+            new_ia_utilisee = st.text_input("IA utilisée (optionnel)", key="new_uc_ia")
+            
+            if st.form_submit_button("➕ Ajouter", use_container_width=True):
+                if new_titre.strip():
+                    new_uc = {
+                        'id': len(editing_use_cases) + 1,
+                        'titre': new_titre.strip(),
+                        'description': new_description.strip(),
+                        'famille': new_famille.strip() if new_famille.strip() else None,
+                        'ia_utilisee': new_ia_utilisee.strip() if new_ia_utilisee.strip() else None
+                    }
+                    editing_use_cases.append(new_uc)
+                    st.session_state.word_validation_editing_use_cases = editing_use_cases
+                    st.success("✅ Use case ajouté")
+                    st.rerun()
+                else:
+                    st.warning("⚠️ Veuillez saisir un titre")
+    
+    st.markdown("---")
+    
+    # Bouton pour sauvegarder toutes les modifications
+    if st.button("✅ Sauvegarder toutes les modifications", type="primary", use_container_width=True):
+        # Sauvegarder les besoins
+        if editing_needs:
+            try:
+                # Sauvegarder avec need_analysis (pour que "Générer les Use Cases" continue de fonctionner)
+                save_agent_result(
+                    project_id=st.session_state.current_project_id,
+                    workflow_type="need_analysis",
+                    result_type="needs",
+                    data={"needs": editing_needs},
+                    status="validated"
+                )
+                # Créer une copie avec word_validation (pour que "Génération des enjeux" puisse vérifier)
+                save_agent_result(
+                    project_id=st.session_state.current_project_id,
+                    workflow_type="word_validation",
+                    result_type="needs",
+                    data={"needs": editing_needs},
+                    status="validated"
+                )
+                st.success("✅ Besoins sauvegardés !")
+            except Exception as e:
+                st.error(f"❌ Erreur lors de la sauvegarde des besoins: {str(e)}")
+        elif has_needs:
+            # Si on avait des besoins mais qu'on les a tous supprimés, rejeter les anciens
+            reject_agent_results(
+                st.session_state.current_project_id,
+                "need_analysis",
+                "needs"
+            )
+            # Rejeter aussi les entrées word_validation
+            reject_agent_results(
+                st.session_state.current_project_id,
+                "word_validation",
+                "needs"
+            )
+        
+        # Sauvegarder les use cases
+        if editing_use_cases:
+            try:
+                # Sauvegarder avec need_analysis (pour que "Générer les Use Cases" continue de fonctionner)
+                save_agent_result(
+                    project_id=st.session_state.current_project_id,
+                    workflow_type="need_analysis",
+                    result_type="use_cases",
+                    data={"use_cases": editing_use_cases},
+                    status="validated"
+                )
+                # Créer une copie avec word_validation (pour que "Génération des enjeux" puisse vérifier)
+                save_agent_result(
+                    project_id=st.session_state.current_project_id,
+                    workflow_type="word_validation",
+                    result_type="use_cases",
+                    data={"use_cases": editing_use_cases},
+                    status="validated"
+                )
+                st.success("✅ Use cases sauvegardés !")
+            except Exception as e:
+                st.error(f"❌ Erreur lors de la sauvegarde des use cases: {str(e)}")
+        elif has_use_cases:
+            # Si on avait des use cases mais qu'on les a tous supprimés, rejeter les anciens
+            reject_agent_results(
+                st.session_state.current_project_id,
+                "need_analysis",
+                "use_cases"
+            )
+            # Rejeter aussi les entrées word_validation
+            reject_agent_results(
+                st.session_state.current_project_id,
+                "word_validation",
+                "use_cases"
+            )
+        
+        # Réinitialiser les états d'édition
+        st.session_state.word_validation_editing_needs = None
+        st.session_state.word_validation_editing_use_cases = None
+        st.rerun()
 
 def display_challenges_validation_interface():
     """
@@ -2904,6 +4306,20 @@ def display_rappel_mission():
             if mission_markdown:
                 st.session_state.rappel_mission = mission_markdown
                 st.session_state.rappel_mission_company = company_name
+                
+                # Sauvegarder dans la base de données
+                if st.session_state.current_project_id:
+                    try:
+                        save_agent_result(
+                            project_id=st.session_state.current_project_id,
+                            workflow_type="rappel_mission",
+                            result_type="rappel_mission",
+                            data={"rappel_mission": mission_markdown},
+                            status="validated"
+                        )
+                    except Exception as e:
+                        st.warning(f"⚠️ Erreur lors de la sauvegarde en base de données: {str(e)}")
+                
                 st.success("Rappel de la mission mis à jour.")
                 st.rerun()
             else:
@@ -3094,11 +4510,37 @@ def display_atouts_workflow_progress():
         workflow_state = st.session_state.get("atouts_workflow_state", {})
         final_atouts = workflow_state.get("final_atouts", [])
         atouts_markdown = workflow_state.get("atouts_markdown", "")
+        web_search_results = workflow_state.get("web_search_results", [])
         
         if final_atouts:
             st.session_state.atouts_data = {"atouts": final_atouts}
             st.session_state.atouts_markdown = atouts_markdown
             st.session_state.atouts_workflow_completed = True
+            
+            # Sauvegarder dans la base de données
+            if st.session_state.current_project_id:
+                try:
+                    # Sauvegarder les atouts validés
+                    save_agent_result(
+                        project_id=st.session_state.current_project_id,
+                        workflow_type="atouts",
+                        result_type="atouts",
+                        data={"atouts": final_atouts},
+                        status="validated"
+                    )
+                    
+                    # Sauvegarder les résultats de recherche web si disponibles
+                    if web_search_results:
+                        save_agent_result(
+                            project_id=st.session_state.current_project_id,
+                            workflow_type="atouts",
+                            result_type="web_search_results",
+                            data={"results": web_search_results},
+                            status="validated"
+                        )
+                except Exception as e:
+                    st.warning(f"⚠️ Erreur lors de la sauvegarde en base de données: {str(e)}")
+            
             st.success("✅ Workflow terminé avec succès !")
             time.sleep(1)
             st.rerun()
@@ -3163,6 +4605,64 @@ def display_atouts_entreprise():
     """Affiche la page d'extraction des atouts de l'entreprise avec HITL"""
     st.header("Atouts de l'entreprise")
     
+    # Vérifier si des résultats validés existent déjà
+    if st.session_state.current_project_id:
+        has_atouts = has_validated_results(
+            st.session_state.current_project_id,
+            "atouts",
+            "atouts"
+        )
+        
+        if has_atouts:
+            # Afficher directement les atouts
+            atouts_data = load_agent_results(
+                st.session_state.current_project_id,
+                "atouts",
+                "atouts",
+                "validated"
+            )
+            
+            if atouts_data:
+                atouts_list = atouts_data.get("atouts", [])
+                st.success(f"✅ **Atouts identifiés ({len(atouts_list)})**")
+                st.markdown("---")
+                
+                # Afficher les atouts
+                for i, atout in enumerate(atouts_list, 1):
+                    if isinstance(atout, dict):
+                        st.markdown(f"**{i}. {atout.get('titre', 'N/A')}**")
+                        description = atout.get('description', '')
+                        if description:
+                            st.markdown(description)
+                    else:
+                        st.markdown(f"**{i}. {str(atout)}**")
+                    st.markdown("---")
+                
+                st.markdown("---")
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("✏️ Modifier", use_container_width=True):
+                        reject_agent_results(
+                            st.session_state.current_project_id,
+                            "atouts",
+                            "atouts"
+                        )
+                        st.session_state.atouts_workflow_completed = False
+                        st.session_state.atouts_thread_id = None
+                        st.rerun()
+                with col2:
+                    if st.button("🔄 Régénérer", use_container_width=True):
+                        reject_agent_results(
+                            st.session_state.current_project_id,
+                            "atouts",
+                            "atouts"
+                        )
+                        st.session_state.atouts_workflow_completed = False
+                        st.session_state.atouts_thread_id = None
+                        st.rerun()
+                
+                return
+    
     st.markdown("""
     Cette section identifie les **atouts** de l'entreprise qui facilitent l'intégration de l'intelligence artificielle.
     
@@ -3222,13 +4722,20 @@ def display_atouts_entreprise():
         
         try:
             with st.spinner("Démarrage du workflow... Extraction et analyse en cours..."):
-                # Préparer les chemins des PDFs
-                pdf_paths = get_transcript_file_paths(uploaded_transcripts)
+                # Récupérer les document_ids depuis uploaded_transcripts
+                transcript_document_ids = [
+                    t.get("document_id") for t in uploaded_transcripts 
+                    if t.get("document_id") is not None
+                ]
+                
+                if not transcript_document_ids:
+                    st.error("❌ Aucun document transcript trouvé dans la base de données. Veuillez d'abord uploader et valider les transcripts.")
+                    return
                 
                 # Récupérer les noms des interviewers
                 interviewer_names = load_interviewers()
                 
-                # NOUVEAU: Préparer les speakers validés depuis uploaded_transcripts
+                # Préparer les speakers validés depuis uploaded_transcripts
                 validated_speakers = []
                 for transcript in uploaded_transcripts:
                     validated_speakers.extend(transcript.get("speakers", []))
@@ -3237,11 +4744,11 @@ def display_atouts_entreprise():
                 response = requests.post(
                     f"{API_URL}/atouts-entreprise/threads/{thread_id}/runs",
                     json={
-                        "pdf_paths": pdf_paths,
+                        "transcript_document_ids": transcript_document_ids,
                         "company_info": validated_company_info,
                         "interviewer_names": interviewer_names,
                         "atouts_additional_context": additional_context,
-                        "validated_speakers": validated_speakers  # NOUVEAU
+                        "validated_speakers": validated_speakers
                     },
                     timeout=600
                 )

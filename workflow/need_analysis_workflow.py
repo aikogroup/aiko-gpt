@@ -30,9 +30,9 @@ from utils.token_tracker import TokenTracker
 class WorkflowState(TypedDict):
     """État du workflow LangGraph"""
     messages: Annotated[List[BaseMessage], add_messages]
-    # Fichiers d'entrée
-    workshop_files: List[str]
-    transcript_files: List[str]
+    # IDs de documents dans la BDD
+    workshop_document_ids: List[int]
+    transcript_document_ids: List[int]
     company_info: Dict[str, Any]
     # Informations supplémentaires fournies par l'utilisateur
     additional_context: str
@@ -258,8 +258,8 @@ class NeedAnalysisWorkflow:
         """
         print(f"\n🚀 [PARALLÉLISATION] dispatcher_node - DÉBUT")
         print(f"📊 État d'entrée:")
-        print(f"   - workshop_files: {len(state.get('workshop_files', []))}")
-        print(f"   - transcript_files: {len(state.get('transcript_files', []))}")
+        print(f"   - workshop_document_ids: {len(state.get('workshop_document_ids', []))}")
+        print(f"   - transcript_document_ids: {len(state.get('transcript_document_ids', []))}")
         print(f"   - company_info: {bool(state.get('company_info', {}))}")
         print(f"   - Résultats pré-calculés:")
         print(f"     • workshop_results: {bool(state.get('workshop_results', {}))}")
@@ -319,19 +319,19 @@ class NeedAnalysisWorkflow:
                 print(f"🔧 [PARALLÈLE-1/3] Mode dev global - retour de données mockées vides")
                 return {"workshop_results": {"workshops": []}}
             
-            workshop_files = state.get("workshop_files", [])
+            workshop_document_ids = state.get("workshop_document_ids", [])
             
-            if workshop_files:
-                print(f"🔄 [PARALLÈLE-1/3] Traitement de {len(workshop_files)} fichiers workshop...")
+            if workshop_document_ids:
+                print(f"🔄 [PARALLÈLE-1/3] Traitement de {len(workshop_document_ids)} workshops depuis la BDD...")
                 all_results = []
-                for file_path in workshop_files:
-                    file_results = self.workshop_agent.process_workshop_file(file_path)
+                for document_id in workshop_document_ids:
+                    file_results = self.workshop_agent.process_workshop_from_db(document_id)
                     all_results.extend(file_results)
                 print(f"✅ [PARALLÈLE-1/3] {len(all_results)} workshops traités")
                 print(f"✅ [PARALLÈLE-1/3] workshop_agent_node - FIN")
                 return {"workshop_results": {"workshops": all_results}}
             else:
-                print(f"⚠️ [PARALLÈLE-1/3] Aucun fichier workshop fourni")
+                print(f"⚠️ [PARALLÈLE-1/3] Aucun workshop fourni")
                 print(f"✅ [PARALLÈLE-1/3] workshop_agent_node - FIN")
                 return {"workshop_results": {}}
             
@@ -377,16 +377,19 @@ class NeedAnalysisWorkflow:
                 print(f"🔧 [PARALLÈLE-2/3] Mode dev global - retour de données mockées vides")
                 return {"transcript_results": {"results": []}}
             
-            transcript_files = state.get("transcript_files", [])
+            transcript_document_ids = state.get("transcript_document_ids", [])
             
-            if transcript_files:
-                print(f"🔄 [PARALLÈLE-2/3] Traitement de {len(transcript_files)} PDFs...")
-                results = self.transcript_agent.process_multiple_pdfs(transcript_files)
-                print(f"✅ [PARALLÈLE-2/3] {len(results.get('results', []))} transcripts traités")
+            if transcript_document_ids:
+                print(f"🔄 [PARALLÈLE-2/3] Traitement de {len(transcript_document_ids)} transcripts depuis la BDD...")
+                results = []
+                for document_id in transcript_document_ids:
+                    result = self.transcript_agent.process_from_db(document_id)
+                    results.append(result)
+                print(f"✅ [PARALLÈLE-2/3] {len(results)} transcripts traités")
                 print(f"✅ [PARALLÈLE-2/3] transcript_agent_node - FIN")
-                return {"transcript_results": results}
+                return {"transcript_results": {"results": results}}
             else:
-                print(f"⚠️ [PARALLÈLE-2/3] Aucun fichier transcript fourni")
+                print(f"⚠️ [PARALLÈLE-2/3] Aucun transcript fourni")
                 print(f"✅ [PARALLÈLE-2/3] transcript_agent_node - FIN")
                 return {"transcript_results": []}
             
@@ -502,30 +505,33 @@ class NeedAnalysisWorkflow:
                 print(f"✅ [DEBUG] _start_agents_node - FIN (résultats pré-calculés utilisés)")
                 return state
             
-            # SINON, lancer les agents (mode legacy / fichiers fournis)
-            print(f"⚠️ [DEBUG] Aucun résultat pré-calculé - lancement des agents")
-            workshop_files = state.get("workshop_files", [])
-            transcript_files = state.get("transcript_files", [])
+            # SINON, lancer les agents depuis la BDD
+            print(f"⚠️ [DEBUG] Aucun résultat pré-calculé - lancement des agents depuis la BDD")
+            workshop_document_ids = state.get("workshop_document_ids", [])
+            transcript_document_ids = state.get("transcript_document_ids", [])
             company_info = state.get("company_info", {})
             
             # Workshop Agent
-            if workshop_files:
+            if workshop_document_ids:
                 all_results = []
-                for file_path in workshop_files:
-                    file_results = self.workshop_agent.process_workshop_file(file_path)
+                for document_id in workshop_document_ids:
+                    file_results = self.workshop_agent.process_workshop_from_db(document_id)
                     all_results.extend(file_results)
                 state["workshop_results"] = {"workshops": all_results}
             else:
                 state["workshop_results"] = {}
-                state["messages"] = state.get("messages", []) + [HumanMessage(content="Aucun fichier workshop fourni")]
+                state["messages"] = state.get("messages", []) + [HumanMessage(content="Aucun document workshop fourni")]
             
             # Transcript Agent
-            if transcript_files:
-                results = self.transcript_agent.process_multiple_pdfs(transcript_files)
-                state["transcript_results"] = results
+            if transcript_document_ids:
+                results = []
+                for document_id in transcript_document_ids:
+                    result = self.transcript_agent.process_from_db(document_id)
+                    results.append(result)
+                state["transcript_results"] = {"results": results}
             else:
                 state["transcript_results"] = []
-                state["messages"] = state.get("messages", []) + [HumanMessage(content="Aucun fichier transcript fourni")]
+                state["messages"] = state.get("messages", []) + [HumanMessage(content="Aucun document transcript fourni")]
             
             # Web Search Agent
             if company_info:
@@ -1047,7 +1053,8 @@ class NeedAnalysisWorkflow:
         except Exception as e:
             print(f"Erreur génération graph: {str(e)}")
     
-    def run(self, workshop_files: List[str] = None, transcript_files: List[str] = None, company_info: Dict[str, Any] = None, 
+    def run(self, workshop_document_ids: List[int] = None, transcript_document_ids: List[int] = None,
+            company_info: Dict[str, Any] = None, 
             workshop_results: Dict[str, Any] = None, transcript_results: List[Dict[str, Any]] = None, web_search_results: Dict[str, Any] = None,
             interviewer_names: List[str] = None, thread_id: str = None, additional_context: str = "") -> Dict[str, Any]:
         """
@@ -1056,12 +1063,12 @@ class NeedAnalysisWorkflow:
         MODE DEV: Charge les besoins depuis need_analysis_results.json et passe directement aux use cases.
         
         Args:
-            workshop_files: Liste des fichiers Excel des ateliers (legacy)
-            transcript_files: Liste des fichiers PDF des transcriptions (legacy)
+            workshop_document_ids: Liste des IDs de documents workshop dans la BDD
+            transcript_document_ids: Liste des IDs de documents transcript dans la BDD
             company_info: Informations sur l'entreprise pour la recherche web
-            workshop_results: Résultats pré-calculés du workshop agent (NOUVEAU)
-            transcript_results: Résultats pré-calculés du transcript agent (NOUVEAU)
-            web_search_results: Résultats pré-calculés du web search agent (NOUVEAU)
+            workshop_results: Résultats pré-calculés du workshop agent
+            transcript_results: Résultats pré-calculés du transcript agent
+            web_search_results: Résultats pré-calculés du web search agent
             thread_id: ID du thread pour le checkpointer (optionnel, généré automatiquement si non fourni)
             
         Returns:
@@ -1081,9 +1088,9 @@ class NeedAnalysisWorkflow:
             # État initial avec les fichiers d'entrée ET les résultats pré-calculés
             state = WorkflowState(
                 messages=[],
-                # Fichiers d'entrée (legacy)
-                workshop_files=workshop_files or [],
-                transcript_files=transcript_files or [],
+                # IDs de documents dans la BDD
+                workshop_document_ids=workshop_document_ids or [],
+                transcript_document_ids=transcript_document_ids or [],
                 company_info=company_info or {},
                 # Informations supplémentaires fournies par l'utilisateur
                 additional_context=additional_context or "",

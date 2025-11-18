@@ -37,27 +37,27 @@ class WorkshopEnjeuxAgent:
         # Réutiliser WorkshopAgent pour le parsing de base
         self.workshop_agent = WorkshopAgent(openai_api_key=api_key)
     
-    def extract_informations(self, workshop_files: List[str]) -> List[Dict[str, Any]]:
+    def extract_informations(self, document_ids: List[int]) -> List[Dict[str, Any]]:
         """
-        Extrait les informations liées aux enjeux stratégiques depuis plusieurs fichiers d'ateliers.
+        Extrait les informations liées aux enjeux stratégiques depuis plusieurs documents workshop dans la BDD.
         
         Args:
-            workshop_files: Liste des chemins vers les fichiers Excel d'ateliers
+            document_ids: Liste des IDs de documents workshop dans la base de données
             
         Returns:
             Liste des informations extraites avec métadonnées
         """
         all_informations = []
         
-        for file_path in workshop_files:
+        for document_id in document_ids:
             try:
-                logger.info(f"Traitement atelier pour enjeux: {file_path}")
+                logger.info(f"Traitement atelier pour enjeux: document_id={document_id}")
                 
-                # Utiliser WorkshopAgent pour parser (process_workshop_file attend un fichier, pas une liste)
-                workshops_data = self.workshop_agent.process_workshop_file(file_path)
+                # Utiliser WorkshopAgent pour charger depuis la BDD
+                workshops_data = self.workshop_agent.process_workshop_from_db(document_id)
                 
                 if not workshops_data:
-                    logger.warning(f"Aucune donnée d'atelier trouvée dans {file_path}")
+                    logger.warning(f"Aucune donnée d'atelier trouvée pour document_id={document_id}")
                     continue
                 
                 # Convertir les WorkshopData en dict si nécessaire
@@ -74,7 +74,7 @@ class WorkshopEnjeuxAgent:
                     all_informations.extend(informations)
                 
             except Exception as e:
-                logger.error(f"Erreur lors du traitement de {file_path}: {e}", exc_info=True)
+                logger.error(f"Erreur lors du traitement du document_id {document_id}: {e}", exc_info=True)
                 continue
         
         logger.info(f"✅ {len(all_informations)} informations d'enjeux extraites au total")

@@ -98,7 +98,12 @@ PRIORISATION STRATÉGIQUE IMPORTANTE : Les transcriptions contiennent des extrai
 - PRIORISE les besoins exprimés par la direction (stratégie, vision, enjeux business globaux) pour assurer la cohérence stratégique
 - ABSOLUMENT ESSENTIEL : Si un besoin est exprimé à la fois par la direction ET par le métier, c'est un besoin CRITIQUE - tu DOIS l'inclure et le mettre en avant
 - Utilise aussi les besoins exprimés uniquement par le métier (besoins opérationnels, problèmes terrain)
-- Pour prioriser, utilise les métadonnées speaker_level dans les données transcript : les citations avec niveau=direction doivent avoir plus de poids que celles avec niveau=métier
+- IMPORTANT : Les données transcript contiennent maintenant des objets avec métadonnées. Chaque élément (besoins_exprimes, frustrations_blocages, citations_cles, opportunites_automatisation) est un objet avec :
+  * "text" : le texte de la citation/besoin/frustration
+  * "speaker" : le nom du speaker
+  * "speaker_level" : "direction", "métier", ou "inconnu"
+  * "speaker_type" : "interviewé" ou "interviewer"
+- Pour prioriser, utilise le champ "speaker_level" de chaque objet : les citations avec speaker_level="direction" doivent avoir plus de poids que celles avec speaker_level="métier"
 
 DONNÉES WEB SEARCH (CONTEXTE UNIQUEMENT - Informations publiques sur l'entreprise) :
 {web_search_data}
@@ -112,11 +117,13 @@ INSTRUCTIONS D'ANALYSE :
    - iteration_count indique combien de personnes ont remonté ce besoin
    - Un besoin avec iteration_count élevé est plus critique et doit être priorisé
 2. Extrais les besoins des TRANSCRIPTS : utilise "besoins_exprimes", "frustrations_blocages", "opportunites_automatisation", "citations_cles"
+   IMPORTANT : Ces champs contiennent des objets avec métadonnées. Pour chaque objet, utilise le champ "text" pour la citation, et "speaker_level" pour la priorisation
 3. Ignore les informations génériques du WEB_SEARCH (acquisitions, stratégie, marketing)
 4. Chaque besoin DOIT avoir des citations textuelles provenant des workshops ou transcripts
 5. Privilégie les verbatims et citations directes des collaborateurs
 6. VÉRIFIE L'UNICITÉ DES THÈMES : Chaque thème ne doit apparaître QU'UNE SEULE FOIS dans ta liste de besoins
-7. FORMAT STRICT : Les citations doivent contenir UNIQUEMENT le texte, SANS mention de source (pas de "- Transcript", "- Nom de personne", etc.)
+7. FORMAT STRICT : Les citations doivent contenir UNIQUEMENT le texte (champ "text" des objets), SANS mention de source (pas de "- Transcript", "- Nom de personne", etc.)
+   Les métadonnées speaker_level sont utilisées pour la priorisation mais ne doivent PAS apparaître dans le texte des citations finales
 8. PRIORISATION : Les besoins remontés par plusieurs personnes (high iteration_count dans workshops) sont plus importants
 9. NOMBRE DE BESOINS :
    - Si l'utilisateur a spécifié un nombre dans les informations supplémentaires, respecte cette demande
@@ -169,7 +176,12 @@ PRIORISATION STRATÉGIQUE IMPORTANTE : Les transcriptions contiennent des extrai
 - PRIORISE les besoins exprimés par la direction (stratégie, vision, enjeux business globaux) pour assurer la cohérence stratégique
 - ABSOLUMENT ESSENTIEL : Si un besoin est exprimé à la fois par la direction ET par le métier, c'est un besoin CRITIQUE - tu DOIS l'inclure et le mettre en avant
 - Utilise aussi les besoins exprimés uniquement par le métier (besoins opérationnels, problèmes terrain)
-- Pour prioriser, utilise les métadonnées speaker_level dans les données transcript : les citations avec niveau=direction doivent avoir plus de poids que celles avec niveau=métier
+- IMPORTANT : Les données transcript contiennent maintenant des objets avec métadonnées. Chaque élément (besoins_exprimes, frustrations_blocages, citations_cles, opportunites_automatisation) est un objet avec :
+  * "text" : le texte de la citation/besoin/frustration
+  * "speaker" : le nom du speaker
+  * "speaker_level" : "direction", "métier", ou "inconnu"
+  * "speaker_type" : "interviewé" ou "interviewer"
+- Pour prioriser, utilise le champ "speaker_level" de chaque objet : les citations avec speaker_level="direction" doivent avoir plus de poids que celles avec speaker_level="métier"
 
 DONNÉES WEB SEARCH (CONTEXTE UNIQUEMENT - Informations publiques sur l'entreprise) :
 {web_search_data}
@@ -194,6 +206,7 @@ OBLIGATIONS :
 6. Proposer des besoins plus concrets, actionnables et mieux sourcés depuis les ATELIERS et ENTRETIENS
 7. Générer 5 nouveaux besoins DISTINCTS et PERTINENTS
 8. TOUTES les citations doivent venir des workshops (use_cases, objectives) ou transcripts (citations_cles, besoins_exprimes, frustrations_blocages, opportunites_automatisation)
+   RAPPEL : Pour les transcripts, utilise le champ "text" de chaque objet pour extraire le texte de la citation
 9. IGNORER les informations génériques du web (acquisitions, stratégie, conformité)
 
 RÈGLES DE FORMAT :

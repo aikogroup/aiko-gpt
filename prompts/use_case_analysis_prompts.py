@@ -63,7 +63,12 @@ PRIORISATION STRATÉGIQUE IMPORTANTE : Les transcriptions contiennent des extrai
 - PRIORISE les besoins exprimés par la direction pour aligner les cas d'usage avec la stratégie de l'entreprise
 - ABSOLUMENT ESSENTIEL : Si un besoin est exprimé à la fois par la direction ET par le métier, c'est un besoin CRITIQUE - les cas d'usage qui y répondent doivent être prioritaires
 - Utilise aussi les besoins exprimés uniquement par le métier pour contextualiser les solutions techniques et opérationnelles
-- Pour prioriser, utilise les métadonnées speaker_level dans les données transcript : les citations avec niveau=direction doivent avoir plus de poids que celles avec niveau=métier
+- IMPORTANT : Les données transcript contiennent maintenant des objets avec métadonnées. Chaque élément (besoins_exprimes, frustrations_blocages, citations_cles, opportunites_automatisation) est un objet avec :
+  * "text" : le texte de la citation/besoin/frustration
+  * "speaker" : le nom du speaker
+  * "speaker_level" : "direction", "métier", ou "inconnu"
+  * "speaker_type" : "interviewé" ou "interviewer"
+- Pour prioriser, utilise le champ "speaker_level" de chaque objet : les citations avec speaker_level="direction" doivent avoir plus de poids que celles avec speaker_level="métier"
 
 DONNÉES WEB SEARCH (Contexte marché et entreprise) :
 {web_search_data}
@@ -118,7 +123,12 @@ PRIORISATION STRATÉGIQUE IMPORTANTE : Les transcriptions contiennent des extrai
 - PRIORISE les besoins exprimés par la direction pour aligner les cas d'usage avec la stratégie de l'entreprise
 - ABSOLUMENT ESSENTIEL : Si un besoin est exprimé à la fois par la direction ET par le métier, c'est un besoin CRITIQUE - les cas d'usage qui y répondent doivent être prioritaires
 - Utilise aussi les besoins exprimés uniquement par le métier pour contextualiser les solutions techniques et opérationnelles
-- Pour prioriser, utilise les métadonnées speaker_level dans les données transcript : les citations avec niveau=direction doivent avoir plus de poids que celles avec niveau=métier
+- IMPORTANT : Les données transcript contiennent maintenant des objets avec métadonnées. Chaque élément (besoins_exprimes, frustrations_blocages, citations_cles, opportunites_automatisation) est un objet avec :
+  * "text" : le texte de la citation/besoin/frustration
+  * "speaker" : le nom du speaker
+  * "speaker_level" : "direction", "métier", ou "inconnu"
+  * "speaker_type" : "interviewé" ou "interviewer"
+- Pour prioriser, utilise le champ "speaker_level" de chaque objet : les citations avec speaker_level="direction" doivent avoir plus de poids que celles avec speaker_level="métier"
 
 DONNÉES WEB SEARCH (Contexte marché et entreprise - pour t'inspirer) :
 {web_search_data}

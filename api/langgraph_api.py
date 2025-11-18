@@ -29,12 +29,18 @@ from process_transcript.pdf_parser import PDFParser
 from process_transcript.json_parser import JSONParser
 from process_transcript.speaker_classifier import SpeakerClassifier
 
+# Importer les endpoints de base de données
+from api.db_endpoints import router as db_router
+
 # Initialisation de l'API
 app = FastAPI(
     title="aiko - LangGraph API",
     description="API pour le workflow d'analyse des besoins IA",
     version="1.0.0"
 )
+
+# Inclure les endpoints de base de données
+app.include_router(db_router)
 
 # Stockage en mémoire des workflows (en production, utiliser Redis ou DB)
 workflows: Dict[str, Any] = {}
@@ -52,8 +58,8 @@ UPLOAD_DIR.mkdir(exist_ok=True)
 
 class WorkflowInput(BaseModel):
     """Input pour démarrer un workflow"""
-    workshop_files: List[str] = []
-    transcript_files: List[str] = []
+    workshop_document_ids: List[int] = []
+    transcript_document_ids: List[int] = []
     company_name: Optional[str] = None
     company_url: Optional[str] = None
     company_description: Optional[str] = None
@@ -81,14 +87,13 @@ class UseCaseValidationFeedback(BaseModel):
 
 class ExecutiveSummaryInput(BaseModel):
     """Input pour démarrer un workflow Executive Summary"""
-    word_report_path: str
-    transcript_files: List[str] = []
-    workshop_files: List[str] = []
+    transcript_document_ids: List[int] = []
+    workshop_document_ids: List[int] = []
     company_name: str
     interviewer_note: str = ""
     validated_needs: Optional[List[Dict[str, Any]]] = None
     validated_use_cases: Optional[List[Dict[str, Any]]] = None
-    validated_speakers: Optional[List[Dict[str, str]]] = None  # NOUVEAU
+    validated_speakers: Optional[List[Dict[str, str]]] = None
 
 
 class RappelMissionInput(BaseModel):
@@ -100,11 +105,11 @@ class RappelMissionInput(BaseModel):
 
 class AtoutsEntrepriseInput(BaseModel):
     """Input pour démarrer un workflow d'extraction des atouts"""
-    pdf_paths: List[str]
+    transcript_document_ids: List[int]  # IDs des documents transcripts dans la DB
     company_info: Dict[str, Any]
     interviewer_names: Optional[List[str]] = None
     atouts_additional_context: Optional[str] = ""
-    validated_speakers: Optional[List[Dict[str, str]]] = None  # NOUVEAU
+    validated_speakers: Optional[List[Dict[str, str]]] = None
 
 
 class PreAtoutContextInput(BaseModel):
@@ -212,7 +217,7 @@ async def classify_speakers(input_data: ClassifySpeakersInput):
     Returns:
         {
             "speakers": [
-                {"name": "...", "role": "...", "is_interviewer": bool},
+                {"name": "...", "role": "...", "level": "direction"|"métier"|"inconnu"|None, "is_interviewer": bool},
                 ...
             ]
         }
@@ -358,8 +363,8 @@ async def create_run(thread_id: str, workflow_input: WorkflowInput):
         
         # Lancer le workflow
         print(f"\n🚀 [API] Démarrage du workflow pour thread {thread_id}")
-        print(f"📁 Workshop files: {workflow_input.workshop_files}")
-        print(f"📁 Transcript files: {workflow_input.transcript_files}")
+        print(f"📁 Workshop document IDs: {workflow_input.workshop_document_ids}")
+        print(f"📁 Transcript document IDs: {workflow_input.transcript_document_ids}")
         print(f"🏢 Company: {workflow_input.company_name}")
         if workflow_input.company_url:
             print(f"🌐 Company URL: {workflow_input.company_url}")
@@ -384,8 +389,8 @@ async def create_run(thread_id: str, workflow_input: WorkflowInput):
         
         # Exécuter le workflow (mode asynchrone géré par LangGraph)
         result = workflow.run(
-            workshop_files=workflow_input.workshop_files,
-            transcript_files=workflow_input.transcript_files,
+            workshop_document_ids=workflow_input.workshop_document_ids,
+            transcript_document_ids=workflow_input.transcript_document_ids,
             company_info=company_info,
             interviewer_names=workflow_input.interviewer_names,
             thread_id=thread_id,
@@ -718,17 +723,17 @@ async def create_atouts_run(thread_id: str, atouts_input: AtoutsEntrepriseInput)
         workflow = workflow_data["workflow"]
         
         print(f"\n🚀 [API] Démarrage workflow Atouts pour thread {thread_id}")
-        print(f"📁 PDFs: {len(atouts_input.pdf_paths)}")
+        print(f"📁 Documents: {len(atouts_input.transcript_document_ids)}")
         print(f"🏢 Entreprise: {atouts_input.company_info.get('nom', 'N/A')}")
         print(f"📝 Contexte additionnel: {len(atouts_input.atouts_additional_context)} caractères")
         
         # Exécuter le workflow avec le contexte additionnel
         result = workflow.run(
-            pdf_paths=atouts_input.pdf_paths,
+            transcript_document_ids=atouts_input.transcript_document_ids,
             company_info=atouts_input.company_info,
             thread_id=thread_id,
             atouts_additional_context=atouts_input.atouts_additional_context,
-            validated_speakers=atouts_input.validated_speakers  # NOUVEAU
+            validated_speakers=atouts_input.validated_speakers
         )
         
         workflow_data["state"] = result
@@ -925,15 +930,14 @@ async def create_executive_run(thread_id: str, workflow_input: ExecutiveSummaryI
         
         # Exécuter le workflow
         result = workflow.run(
-            word_report_path=workflow_input.word_report_path,
-            transcript_files=workflow_input.transcript_files,
-            workshop_files=workflow_input.workshop_files,
+            transcript_document_ids=workflow_input.transcript_document_ids,
+            workshop_document_ids=workflow_input.workshop_document_ids,
             company_name=workflow_input.company_name,
             interviewer_note=workflow_input.interviewer_note,
             thread_id=thread_id,
             validated_needs=workflow_input.validated_needs,
             validated_use_cases=workflow_input.validated_use_cases,
-            validated_speakers=workflow_input.validated_speakers  # NOUVEAU
+            validated_speakers=workflow_input.validated_speakers
         )
         
         # Mettre à jour l'état

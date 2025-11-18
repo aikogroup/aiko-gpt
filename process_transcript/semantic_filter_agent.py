@@ -117,11 +117,45 @@ class SemanticFilterAgent:
                        f"Frustrations: {len(analysis.get('frustrations_blocages', []))}, "
                        f"Opportunités: {len(analysis.get('opportunites_automatisation', []))}")
             
+            # Log détaillé de la structure SemanticAnalysisResponse
+            logger.info("=" * 80)
+            logger.info("📊 STRUCTURE COMPLÈTE DE SemanticAnalysisResponse")
+            logger.info("=" * 80)
+            
+            import json
+            for key in ['besoins_exprimes', 'frustrations_blocages', 'attentes_implicites', 
+                       'opportunites_amelioration', 'opportunites_automatisation', 'citations_cles']:
+                items = analysis.get(key, [])
+                logger.info(f"\n🔹 {key.upper()}: {len(items)} éléments")
+                
+                if items:
+                    # Afficher le premier élément comme échantillon
+                    sample = items[0]
+                    logger.info(f"   Échantillon (premier élément):")
+                    logger.info(f"   {json.dumps(sample, ensure_ascii=False, indent=6)}")
+                    
+                    # Vérifier la structure
+                    if isinstance(sample, dict):
+                        logger.info(f"   ✓ Structure: dict avec clés: {list(sample.keys())}")
+                        if 'speaker_level' in sample:
+                            logger.info(f"   ✓ speaker_level présent: {sample.get('speaker_level')}")
+                        if 'speaker' in sample:
+                            logger.info(f"   ✓ speaker présent: {sample.get('speaker')}")
+                        if 'text' in sample:
+                            text_preview = sample.get('text', '')[:100]
+                            logger.info(f"   ✓ text présent (preview): {text_preview}...")
+                    else:
+                        logger.info(f"   ⚠ Structure: {type(sample).__name__} (attendu: dict)")
+                else:
+                    logger.info(f"   (liste vide)")
+            
+            logger.info("=" * 80)
+            
             return analysis
             
         except Exception as e:
             logger.error(f"Erreur lors de l'analyse sémantique: {e}", exc_info=True)
-            # Retourner une structure par défaut en cas d'erreur
+            # Retourner une structure par défaut en cas d'erreur (format compatible avec CitationWithMetadata)
             return {
                 "besoins_exprimes": [],
                 "frustrations_blocages": [],
@@ -138,19 +172,25 @@ class SemanticFilterAgent:
         
         summary_parts = []
         
+        # Fonction helper pour extraire le texte d'un élément (string ou dict)
+        def get_text(item):
+            if isinstance(item, dict):
+                return item.get("text", str(item))
+            return str(item)
+        
         if analysis.get("besoins_exprimes"):
             summary_parts.append(f"Besoins exprimés ({len(analysis['besoins_exprimes'])}):")
             for besoin in analysis["besoins_exprimes"]:
-                summary_parts.append(f"  - {besoin}")
+                summary_parts.append(f"  - {get_text(besoin)}")
         
         if analysis.get("frustrations_blocages"):
             summary_parts.append(f"Frustrations/Blocages ({len(analysis['frustrations_blocages'])}):")
             for frustration in analysis["frustrations_blocages"]:
-                summary_parts.append(f"  - {frustration}")
+                summary_parts.append(f"  - {get_text(frustration)}")
         
         if analysis.get("opportunites_automatisation"):
             summary_parts.append(f"Opportunités d'automatisation ({len(analysis['opportunites_automatisation'])}):")
             for opportunite in analysis["opportunites_automatisation"]:
-                summary_parts.append(f"  - {opportunite}")
+                summary_parts.append(f"  - {get_text(opportunite)}")
         
         return "\n".join(summary_parts)

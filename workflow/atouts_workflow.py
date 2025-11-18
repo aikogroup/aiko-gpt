@@ -6,12 +6,8 @@ from typing import TypedDict, Dict, Any, Optional, List
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
 import logging
-from pathlib import Path
 
 from process_transcript.interesting_parts_agent import InterestingPartsAgent
-from process_transcript.pdf_parser import PDFParser
-from process_transcript.json_parser import JSONParser
-from process_transcript.speaker_classifier import SpeakerClassifier
 from atouts.atouts_agent import AtoutsAgent
 
 logger = logging.getLogger(__name__)
@@ -21,7 +17,7 @@ class AtoutsState(TypedDict, total=False):
     """État du workflow d'extraction des atouts"""
     
     # Inputs
-    pdf_paths: List[str]
+    transcript_document_ids: List[int]  # IDs des documents transcripts dans la DB
     company_info: Dict[str, Any]
     validated_speakers: List[Dict[str, str]]  # NOUVEAU: Speakers validés par l'utilisateur
     
@@ -58,10 +54,7 @@ class AtoutsWorkflow:
     """Workflow pour extraire les atouts de l'entreprise"""
     
     def __init__(self, interviewer_names: Optional[List[str]] = None, checkpointer: Optional[MemorySaver] = None) -> None:
-        self.pdf_parser = PDFParser()
-        self.json_parser = JSONParser()
         self.interesting_parts_agent = InterestingPartsAgent()
-        self.speaker_classifier = SpeakerClassifier(interviewer_names=interviewer_names)
         self.atouts_agent = AtoutsAgent()
         self.checkpointer = checkpointer or MemorySaver()
         self.graph = self._create_graph()
@@ -116,63 +109,65 @@ class AtoutsWorkflow:
         )
     
     def _extract_interesting_parts_node(self, state: AtoutsState) -> AtoutsState:
-        """Extrait les parties intéressantes des transcriptions avec classification des speakers"""
-        pdf_paths = state.get("pdf_paths", [])
-        validated_speakers = state.get("validated_speakers", [])  # NOUVEAU
+        """Extrait les parties intéressantes depuis la DB (déjà enrichies)"""
+        transcript_document_ids = state.get("transcript_document_ids", [])
+        validated_speakers = state.get("validated_speakers", [])
         
-        if not pdf_paths:
-            logger.warning("Aucun PDF fourni")
+        if not transcript_document_ids:
+            logger.warning("Aucun document transcript fourni")
             state["interesting_interventions"] = []
             return state
         
         try:
+            from database.db import get_db_context
+            from database.repository import TranscriptRepository
+            
             all_interventions = []
             
-            for pdf_path in pdf_paths:
-                logger.info(f"Traitement du PDF: {pdf_path}")
-                
-                # Étape 1: Parser le PDF selon son type
-                file_extension = Path(pdf_path).suffix.lower()
-                if file_extension == '.json':
-                    interventions = self.json_parser.parse_transcript(pdf_path)
-                elif file_extension == '.pdf':
-                    interventions = self.pdf_parser.parse_transcript(pdf_path)
-                else:
-                    logger.warning(f"Format non supporté: {file_extension}, skip")
-                    continue
-                
-                logger.info(f"Parsé {len(interventions)} interventions de {pdf_path}")
-                
-                # NOUVEAU: Filtrer UNIQUEMENT les speakers validés par l'utilisateur
-                if validated_speakers:
-                    validated_names = {s["name"] for s in validated_speakers}
-                    logger.info(f"🔍 Filtrage sur {len(validated_names)} speakers validés")
+            with get_db_context() as db:
+                for document_id in transcript_document_ids:
+                    logger.info(f"Chargement du document {document_id}")
                     
-                    interventions = [
-                        interv for interv in interventions
-                        if interv.get("speaker") in validated_names
-                    ]
+                    # Récupérer directement les interventions enrichies depuis la DB
+                    # (déjà filtrées pour exclure les interviewers)
+                    enriched_interventions = TranscriptRepository.get_enriched_by_document(
+                        db, document_id, filter_interviewers=True
+                    )
                     
-                    logger.info(f"✓ {len(interventions)} interventions après filtrage des speakers validés")
-                
-                # Étape 2: Classifier les speakers (interviewer/interviewé, direction/métier)
-                logger.info("Classification des speakers...")
-                enriched_interventions = self.speaker_classifier.classify_speakers(interventions)
-                logger.info(f"✓ {len(enriched_interventions)} interventions classifiées")
-                
-                # Étape 3: Filtrer les parties intéressantes (sur les données enrichies)
-                logger.info("Filtrage des parties intéressantes...")
-                interesting_interventions = self.interesting_parts_agent._filter_interesting_parts(enriched_interventions)
-                logger.info(f"✓ {len(interesting_interventions)} interventions intéressantes")
-                
-                # Étape 4: FILTRER les interviewers (ne garder que les interviewés)
-                interviewee_interventions = [
-                    interv for interv in interesting_interventions
-                    if interv.get("speaker_type") == "interviewé"
-                ]
-                logger.info(f"✓ {len(interviewee_interventions)} interventions d'interviewés (interviewers filtrés)")
-                
-                all_interventions.extend(interviewee_interventions)
+                    logger.info(f"✓ {len(enriched_interventions)} interventions enrichies chargées")
+                    
+                    # Adapter le format pour compatibilité avec interesting_parts_agent
+                    formatted_interventions = []
+                    for interv in enriched_interventions:
+                        formatted_interv = {
+                            "speaker": interv.get("speaker_name") or interv.get("speaker"),
+                            "timestamp": interv.get("timestamp"),
+                            "text": interv.get("text"),
+                            "speaker_type": interv.get("speaker_type"),
+                            "speaker_level": interv.get("speaker_level"),
+                        }
+                        formatted_interventions.append(formatted_interv)
+                    
+                    # Filtrer UNIQUEMENT les speakers validés par l'utilisateur (si fourni)
+                    if validated_speakers:
+                        validated_names = {s["name"] for s in validated_speakers}
+                        logger.info(f"🔍 Filtrage sur {len(validated_names)} speakers validés")
+                        
+                        formatted_interventions = [
+                            interv for interv in formatted_interventions
+                            if interv.get("speaker") in validated_names
+                        ]
+                        
+                        logger.info(f"✓ {len(formatted_interventions)} interventions après filtrage")
+                    
+                    # Filtrer les parties intéressantes
+                    logger.info("Filtrage des parties intéressantes...")
+                    interesting_interventions = self.interesting_parts_agent._filter_interesting_parts(
+                        formatted_interventions
+                    )
+                    logger.info(f"✓ {len(interesting_interventions)} interventions intéressantes")
+                    
+                    all_interventions.extend(interesting_interventions)
             
             state["interesting_interventions"] = all_interventions
             logger.info(f"Total: {len(all_interventions)} interventions intéressantes d'interviewés")
@@ -417,29 +412,29 @@ class AtoutsWorkflow:
     
     def run(
         self,
-        pdf_paths: List[str],
+        transcript_document_ids: List[int],
         company_info: Dict[str, Any],
         thread_id: Optional[str] = None,
         atouts_additional_context: str = "",
-        validated_speakers: Optional[List[Dict[str, str]]] = None  # NOUVEAU
+        validated_speakers: Optional[List[Dict[str, str]]] = None
     ) -> Dict[str, Any]:
         """
         Exécute le workflow d'extraction des atouts
         
         Args:
-            pdf_paths: Liste des chemins vers les PDFs de transcription
+            transcript_document_ids: Liste des IDs de documents transcripts dans la DB
             company_info: Informations sur l'entreprise depuis web search
             thread_id: ID du thread pour la persistance (optionnel)
             atouts_additional_context: Contexte additionnel fourni dès le démarrage
-            validated_speakers: Liste des speakers validés par l'utilisateur (NOUVEAU)
+            validated_speakers: Liste des speakers validés par l'utilisateur
             
         Returns:
             État final du workflow avec les atouts extraits
         """
         initial_state: AtoutsState = {
-            "pdf_paths": pdf_paths,
+            "transcript_document_ids": transcript_document_ids,
             "company_info": company_info,
-            "validated_speakers": validated_speakers or [],  # NOUVEAU
+            "validated_speakers": validated_speakers or [],
             "iteration_count": 0,
             "validated_atouts": [],
             "rejected_atouts": [],

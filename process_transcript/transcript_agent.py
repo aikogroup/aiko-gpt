@@ -29,6 +29,123 @@ class TranscriptAgent:
             format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
         )
     
+    def process_from_db(
+        self,
+        document_id: int,
+        validated_speakers: Optional[List[Dict[str, str]]] = None,
+        filter_interviewers: bool = True
+    ) -> Dict[str, Any]:
+        """
+        Traite un transcript depuis la base de données.
+        
+        Les interventions sont déjà enrichies avec speaker_type, role, level depuis la DB.
+        Plus besoin de classification LLM.
+        
+        Args:
+            document_id: ID du document dans la table documents
+            validated_speakers: Liste optionnelle des speakers validés par l'utilisateur
+                              Format: [{"name": "...", "role": "..."}, ...]
+            filter_interviewers: Si True, exclut les interventions des interviewers (défaut: True)
+            
+        Returns:
+            Dictionnaire contenant les résultats de l'analyse
+        """
+        logger.info(f"=== Début du traitement depuis la BDD pour document_id={document_id} ===")
+        
+        try:
+            from database.db import get_db_context
+            from database.repository import TranscriptRepository
+            
+            # Charger les interventions enrichies depuis la BDD
+            with get_db_context() as db:
+                enriched_interventions = TranscriptRepository.get_enriched_by_document(
+                    db, document_id, filter_interviewers=filter_interviewers
+                )
+            
+            if not enriched_interventions:
+                logger.warning(f"Aucune intervention trouvée pour document_id={document_id}")
+                return {
+                    "document_id": document_id,
+                    "status": "error",
+                    "error": "Aucune intervention trouvée"
+                }
+            
+            logger.info(f"✓ {len(enriched_interventions)} interventions enrichies chargées depuis la BDD")
+            
+            # Adapter le format pour compatibilité avec les agents
+            # Convertir speaker_level en speaker_level (même nom, mais s'assurer qu'il est présent)
+            formatted_interventions = []
+            for interv in enriched_interventions:
+                formatted_interv = {
+                    "speaker": interv.get("speaker_name") or interv.get("speaker"),  # Utiliser nom validé si disponible
+                    "timestamp": interv.get("timestamp"),
+                    "text": interv.get("text"),
+                    "speaker_type": interv.get("speaker_type"),
+                    "speaker_level": interv.get("speaker_level"),  # Déjà présent depuis speakers
+                }
+                formatted_interventions.append(formatted_interv)
+            
+            # Filtrer UNIQUEMENT les speakers validés par l'utilisateur (si fourni)
+            if validated_speakers:
+                validated_names = {s["name"] for s in validated_speakers}
+                logger.info(f"🔍 Filtrage sur {len(validated_names)} speakers validés")
+                
+                formatted_interventions = [
+                    interv for interv in formatted_interventions
+                    if interv.get("speaker") in validated_names
+                ]
+                
+                logger.info(f"✓ {len(formatted_interventions)} interventions après filtrage")
+            
+            # Plus besoin de classify_speakers() - les données sont déjà enrichies !
+            
+            # Étape 2: Filtrage des parties intéressantes
+            logger.info("Étape 2: Filtrage des parties intéressantes")
+            interesting_interventions = self.interesting_parts_agent._filter_interesting_parts(formatted_interventions)
+            logger.info(f"✓ {len(interesting_interventions)} interventions intéressantes identifiées")
+            
+            # Étape 3: Analyse sémantique
+            logger.info("Étape 3: Analyse sémantique avec GPT-5-nano")
+            semantic_analysis = self.semantic_filter_agent._perform_semantic_analysis(
+                self.semantic_filter_agent._prepare_text_for_analysis(interesting_interventions)
+            )
+            logger.info("✓ Analyse sémantique terminée")
+            
+            # Extraire les speakers uniques
+            speakers = list(set(
+                interv.get("speaker") 
+                for interv in formatted_interventions 
+                if interv.get("speaker")
+            ))
+            
+            # Résultat final
+            result = {
+                "document_id": document_id,
+                "status": "success",
+                "parsing": {
+                    "total_interventions": len(formatted_interventions),
+                    "speakers": speakers,
+                    "interventions": formatted_interventions  # Déjà enrichies !
+                },
+                "interesting_parts": {
+                    "count": len(interesting_interventions),
+                    "interventions": interesting_interventions
+                },
+                "semantic_analysis": semantic_analysis,
+                "summary": self.semantic_filter_agent.get_summary({"semantic_analysis": semantic_analysis})
+            }
+            
+            logger.info(f"=== Traitement terminé avec succès ===")
+            return result
+            
+        except Exception as e:
+            logger.error(f"Erreur lors du traitement depuis la BDD document_id={document_id}: {e}")
+            return {
+                "document_id": document_id,
+                "status": "error",
+                "error": str(e)
+            }
+    
     def process_single_file(self, file_path: str, validated_speakers: Optional[List[Dict[str, str]]] = None) -> Dict[str, Any]:
         """
         Traite un seul fichier de transcription (PDF ou JSON) de manière optimisée
@@ -333,17 +450,29 @@ class TranscriptAgent:
                 all_opportunities.extend(analysis.get("opportunites_automatisation", []))
                 all_citations.extend(analysis.get("citations_cles", []))
         
-        # Déduplication
+        # Fonction helper pour dédupliquer par texte (compatible avec strings et dicts)
+        def deduplicate_by_text(items):
+            seen_texts = set()
+            unique_items = []
+            for item in items:
+                # Extraire le texte : soit directement si string, soit depuis le champ "text" si dict
+                text = item if isinstance(item, str) else item.get("text", str(item))
+                if text not in seen_texts:
+                    seen_texts.add(text)
+                    unique_items.append(item)
+            return unique_items
+        
+        # Déduplication par texte
         consolidated = {
-            "besoins_exprimes": list(set(all_needs)),
-            "frustrations_blocages": list(set(all_frustrations)),
-            "opportunites_automatisation": list(set(all_opportunities)),
-            "citations_cles": list(set(all_citations)),
+            "besoins_exprimes": deduplicate_by_text(all_needs),
+            "frustrations_blocages": deduplicate_by_text(all_frustrations),
+            "opportunites_automatisation": deduplicate_by_text(all_opportunities),
+            "citations_cles": deduplicate_by_text(all_citations),
             "statistics": {
-                "total_needs": len(set(all_needs)),
-                "total_frustrations": len(set(all_frustrations)),
-                "total_opportunities": len(set(all_opportunities)),
-                "total_citations": len(set(all_citations))
+                "total_needs": len(deduplicate_by_text(all_needs)),
+                "total_frustrations": len(deduplicate_by_text(all_frustrations)),
+                "total_opportunities": len(deduplicate_by_text(all_opportunities)),
+                "total_citations": len(deduplicate_by_text(all_citations))
             }
         }
         
@@ -352,40 +481,38 @@ class TranscriptAgent:
         citations_metier = 0
         citations_interviewer_confirmees = 0
         
-        for result in results:
-            if result["status"] == "success":
-                # Analyser les interventions pour compter par niveau
-                parsing_data = result.get("parsing", {})
-                interventions_data = parsing_data.get("interventions", [])
+        # Compter depuis les citations consolidées (qui ont maintenant les métadonnées)
+        for citation in consolidated["citations_cles"]:
+            if isinstance(citation, dict):
+                speaker_level = citation.get("speaker_level")
+                speaker_type = citation.get("speaker_type")
                 
-                for intervention in interventions_data:
-                    speaker_level = intervention.get("speaker_level")
-                    speaker_type = intervention.get("speaker_type")
-                    
-                    # Pour les citations, on compte si l'intervention est dans les parties intéressantes
-                    interesting_interventions = result.get("interesting_parts", {}).get("interventions", [])
-                    if any(
-                        intv.get("speaker") == intervention.get("speaker") and
-                        intv.get("text") == intervention.get("text")
-                        for intv in interesting_interventions
-                    ):
-                        if speaker_level == "direction":
-                            citations_direction += 1
-                        elif speaker_level == "métier":
-                            citations_metier += 1
-                        
-                        # Détection approximative des citations interviewer confirmées
-                        # (basée sur la présence d'une citation de l'interviewer suivie d'une confirmation)
-                        if speaker_type == "interviewer":
-                            # Vérifier les interventions suivantes pour une confirmation
-                            idx = interventions_data.index(intervention) if intervention in interventions_data else -1
-                            if idx >= 0 and idx + 1 < len(interventions_data):
-                                next_intervention = interventions_data[idx + 1]
-                                if next_intervention.get("speaker_type") == "interviewé":
-                                    text_lower = next_intervention.get("text", "").lower()
-                                    confirmations = ["tout à fait", "exactement", "oui", "c'est ça", "absolument", "effectivement"]
-                                    if any(conf in text_lower for conf in confirmations):
-                                        citations_interviewer_confirmees += 1
+                if speaker_level == "direction":
+                    citations_direction += 1
+                elif speaker_level == "métier":
+                    citations_metier += 1
+                
+                # Les citations d'interviewer confirmées sont déjà incluses dans citations_cles
+                # avec speaker_type="interviewer" (car confirmées par l'interviewé)
+                if speaker_type == "interviewer":
+                    citations_interviewer_confirmees += 1
+        
+        # Compter aussi depuis les besoins et frustrations
+        for besoin in consolidated["besoins_exprimes"]:
+            if isinstance(besoin, dict):
+                speaker_level = besoin.get("speaker_level")
+                if speaker_level == "direction":
+                    citations_direction += 1
+                elif speaker_level == "métier":
+                    citations_metier += 1
+        
+        for frustration in consolidated["frustrations_blocages"]:
+            if isinstance(frustration, dict):
+                speaker_level = frustration.get("speaker_level")
+                if speaker_level == "direction":
+                    citations_direction += 1
+                elif speaker_level == "métier":
+                    citations_metier += 1
         
         consolidated["statistics"]["citations_direction"] = citations_direction
         consolidated["statistics"]["citations_metier"] = citations_metier

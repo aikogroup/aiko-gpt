@@ -53,10 +53,17 @@ IMPORTANT - Gestion des citations :
 - Extraire TOUTES les citations des interviewés sans distinction (direction et métier)
 - Les métadonnées [type=interviewé|niveau=direction] ou [type=interviewé|niveau=métier] sont incluses à titre informatif pour l'analyse ultérieure
 
+IMPORTANT - Métadonnées à inclure :
+Pour chaque citation, besoin, frustration ou opportunité extrait, tu DOIS inclure les métadonnées suivantes :
+- speaker : Le nom du speaker qui a exprimé cette citation (extrait des métadonnées de la transcription)
+- speaker_level : Le niveau hiérarchique du speaker ('direction', 'métier', ou 'inconnu') - extrait des métadonnées [niveau=...]
+- speaker_type : Le type de speaker ('interviewé' ou 'interviewer') - extrait des métadonnées [type=...]
+- text : Le texte exact de la citation, besoin, frustration ou opportunité
+
 Transcription :
 {transcript_text}
 
-Sois précis et factuel, base-toi uniquement sur le contenu de la transcription fournie. Utilise les métadonnées [type=...|niveau=...] pour identifier l'origine des interventions, mais ne fais AUCUNE priorisation - extrais toutes les citations pertinentes des interviewés.
+Sois précis et factuel, base-toi uniquement sur le contenu de la transcription fournie. Utilise les métadonnées [type=...|niveau=...] pour identifier l'origine des interventions et inclure ces informations dans chaque élément extrait. Ne fais AUCUNE priorisation - extrais toutes les citations pertinentes des interviewés avec leurs métadonnées complètes.
 """
 
 # Prompt système pour l'analyse sémantique (version améliorée)
@@ -77,5 +84,14 @@ Règles importantes pour les citations :
 - Extraire TOUTES les citations pertinentes des interviewés, qu'ils soient de la direction ou du métier - ne fais AUCUNE priorisation
 - Les métadonnées niveau=direction ou niveau=métier sont incluses à titre informatif pour permettre une priorisation ultérieure dans l'analyse des besoins, mais ne doivent pas influencer cette analyse sémantique
 
-Tu dois être précis et factuel, en te basant uniquement sur le contenu de la transcription. L'analyse doit rester neutre et exhaustive pour tous les interviewés.
+RÈGLE CRITIQUE - Métadonnées obligatoires :
+Pour CHAQUE élément extrait (besoin, frustration, opportunité, citation), tu DOIS inclure :
+- Le texte exact de l'élément
+- Le nom du speaker (extrait de la transcription)
+- Le niveau hiérarchique du speaker (direction/métier/inconnu) - extrait des métadonnées [niveau=...]
+- Le type de speaker (interviewé/interviewer) - extrait des métadonnées [type=...]
+
+Ces métadonnées sont ESSENTIELLES pour permettre une priorisation ultérieure basée sur le niveau hiérarchique du speaker.
+
+Tu dois être précis et factuel, en te basant uniquement sur le contenu de la transcription. L'analyse doit rester neutre et exhaustive pour tous les interviewés, mais avec toutes les métadonnées nécessaires.
 """

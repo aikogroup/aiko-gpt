@@ -14,7 +14,6 @@ import sys
 sys.path.append('/home/addeche/aiko/aikoGPT')
 import config as project_config
 
-from executive_summary.word_report_extractor import WordReportExtractor
 from executive_summary.transcript_enjeux_agent import TranscriptEnjeuxAgent
 from executive_summary.workshop_enjeux_agent import WorkshopEnjeuxAgent
 from executive_summary.transcript_maturite_agent import TranscriptMaturiteAgent
@@ -26,16 +25,15 @@ from utils.token_tracker import TokenTracker
 class ExecutiveSummaryState(TypedDict):
     """État du workflow LangGraph pour Executive Summary"""
     messages: Annotated[List[BaseMessage], add_messages]
-    # Fichiers
-    word_report_path: str
-    transcript_files: List[str]
-    workshop_files: List[str]
+    # Document IDs (depuis la base de données)
+    transcript_document_ids: List[int]
+    workshop_document_ids: List[int]
     company_name: str
     interviewer_note: str
-    validated_speakers: List[Dict]  # NOUVEAU: Speakers validés par l'utilisateur
-    # Extraction Word
-    extracted_needs: List[Dict]
-    extracted_use_cases: List[Dict]
+    validated_speakers: List[Dict]  # Speakers validés par l'utilisateur
+    # Données validées (depuis "Validation des besoins et use cases")
+    extracted_needs: List[Dict]  # Besoins validés depuis la BDD
+    extracted_use_cases: List[Dict]  # Use cases validés depuis la BDD
     # Citations extraites
     transcript_enjeux_citations: List[Dict]
     workshop_enjeux_citations: List[Dict]
@@ -85,7 +83,6 @@ class ExecutiveSummaryWorkflow:
         )
         
         # Initialiser les agents
-        self.word_extractor = WordReportExtractor(api_key=api_key)
         self.transcript_enjeux_agent = TranscriptEnjeuxAgent(api_key=api_key)
         self.workshop_enjeux_agent = WorkshopEnjeuxAgent(api_key=api_key)
         self.transcript_maturite_agent = TranscriptMaturiteAgent(api_key=api_key)
@@ -104,7 +101,7 @@ class ExecutiveSummaryWorkflow:
         
         # Ajout des nœuds
         workflow.add_node("dispatcher", self._dispatcher_node)
-        workflow.add_node("extract_word", self._extract_word_node)
+        workflow.add_node("load_validated_data", self._load_validated_data_node)
         workflow.add_node("transcript_enjeux", self._transcript_enjeux_node)
         workflow.add_node("workshop_enjeux", self._workshop_enjeux_node)
         workflow.add_node("transcript_maturite", self._transcript_maturite_node)
@@ -121,15 +118,15 @@ class ExecutiveSummaryWorkflow:
         # Point d'entrée
         workflow.set_entry_point("dispatcher")
         
-        # Flux parallèle : extraction Word + 4 agents spécialisés
-        workflow.add_edge("dispatcher", "extract_word")
+        # Flux parallèle : chargement données validées + 4 agents spécialisés
+        workflow.add_edge("dispatcher", "load_validated_data")
         workflow.add_edge("dispatcher", "transcript_enjeux")
         workflow.add_edge("dispatcher", "workshop_enjeux")
         workflow.add_edge("dispatcher", "transcript_maturite")
         workflow.add_edge("dispatcher", "workshop_maturite")
         
         # Convergence vers collect_citations
-        workflow.add_edge("extract_word", "collect_citations")
+        workflow.add_edge("load_validated_data", "collect_citations")
         workflow.add_edge("transcript_enjeux", "collect_citations")
         workflow.add_edge("workshop_enjeux", "collect_citations")
         workflow.add_edge("transcript_maturite", "collect_citations")
@@ -178,41 +175,38 @@ class ExecutiveSummaryWorkflow:
     
     def run(
         self,
-        word_report_path: str,
-        transcript_files: List[str],
-        workshop_files: List[str],
+        transcript_document_ids: List[int],
+        workshop_document_ids: List[int],
         company_name: str,
         interviewer_note: str = "",
         thread_id: str = None,
         validated_needs: Optional[List[Dict[str, Any]]] = None,
         validated_use_cases: Optional[List[Dict[str, Any]]] = None,
-        validated_speakers: Optional[List[Dict[str, str]]] = None  # NOUVEAU
+        validated_speakers: Optional[List[Dict[str, str]]] = None
     ) -> Dict[str, Any]:
         """
         Exécute le workflow.
         
         Args:
-            word_report_path: Chemin vers le fichier Word
-            transcript_files: Liste des fichiers de transcript
-            workshop_files: Liste des fichiers d'ateliers
+            transcript_document_ids: Liste des IDs de documents transcript dans la BDD
+            workshop_document_ids: Liste des IDs de documents workshop dans la BDD
             company_name: Nom de l'entreprise
             interviewer_note: Note de l'intervieweur
             thread_id: ID du thread pour la persistance
-            validated_needs: Besoins validés par l'utilisateur (optionnel)
-            validated_use_cases: Cas d'usage validés par l'utilisateur (optionnel)
-            validated_speakers: Speakers validés par l'utilisateur (optionnel, NOUVEAU)
+            validated_needs: Besoins validés par l'utilisateur (depuis "Validation des besoins et use cases")
+            validated_use_cases: Cas d'usage validés par l'utilisateur (depuis "Validation des besoins et use cases")
+            validated_speakers: Speakers validés par l'utilisateur (optionnel)
             
         Returns:
             État final du workflow
         """
         initial_state = {
             "messages": [],
-            "word_report_path": word_report_path,
-            "transcript_files": transcript_files or [],
-            "workshop_files": workshop_files or [],
+            "transcript_document_ids": transcript_document_ids or [],
+            "workshop_document_ids": workshop_document_ids or [],
             "company_name": company_name,
             "interviewer_note": interviewer_note,
-            "validated_speakers": validated_speakers or [],  # NOUVEAU
+            "validated_speakers": validated_speakers or [],
             "extracted_needs": validated_needs or [],
             "extracted_use_cases": validated_use_cases or [],
             "transcript_enjeux_citations": [],
@@ -288,16 +282,17 @@ class ExecutiveSummaryWorkflow:
     def _dispatcher_node(self, state: ExecutiveSummaryState) -> ExecutiveSummaryState:
         """Nœud dispatcher qui prépare le travail"""
         print(f"\n🚀 [EXECUTIVE] dispatcher_node - DÉBUT")
-        print(f"📊 Fichiers: Word={bool(state.get('word_report_path'))}, "
-              f"Transcripts={len(state.get('transcript_files', []))}, "
-              f"Workshops={len(state.get('workshop_files', []))}")
+        print(f"📊 Document IDs: Transcripts={len(state.get('transcript_document_ids', []))}, "
+              f"Workshops={len(state.get('workshop_document_ids', []))}")
+        print(f"📊 Données validées: Besoins={len(state.get('extracted_needs', []))}, "
+              f"Use cases={len(state.get('extracted_use_cases', []))}")
         return state
     
-    def _extract_word_node(self, state: ExecutiveSummaryState) -> Dict[str, Any]:
-        """Extrait les données depuis le fichier Word ou utilise les données validées"""
-        print(f"\n📄 [EXECUTIVE] extract_word_node - DÉBUT")
+    def _load_validated_data_node(self, state: ExecutiveSummaryState) -> Dict[str, Any]:
+        """Charge les données validées depuis la base de données ou utilise celles déjà présentes"""
+        print(f"\n📄 [EXECUTIVE] load_validated_data_node - DÉBUT")
         try:
-            # Vérifier si des données validées sont déjà présentes
+            # Vérifier si des données validées sont déjà présentes dans l'état
             extracted_needs = state.get("extracted_needs", [])
             extracted_use_cases = state.get("extracted_use_cases", [])
             
@@ -305,62 +300,48 @@ class ExecutiveSummaryWorkflow:
             if extracted_needs or extracted_use_cases:
                 print(f"✅ Utilisation des données validées: {len(extracted_needs)} besoins, "
                       f"{len(extracted_use_cases)} cas d'usage")
+                
+                # Afficher le détail des cas d'usage
+                if extracted_use_cases:
+                    print(f"\n📊 [EXECUTIVE] DÉTAIL DES CAS D'USAGE ({len(extracted_use_cases)}):")
+                    for i, uc in enumerate(extracted_use_cases, 1):
+                        titre = uc.get("titre", "N/A")
+                        famille = uc.get("famille")
+                        if famille:
+                            print(f"   {i}. [{famille}] {titre}")
+                        else:
+                            print(f"   {i}. {titre}")
+                
                 return {
                     "extracted_needs": extracted_needs,
                     "extracted_use_cases": extracted_use_cases
                 }
             
-            # Sinon, faire l'extraction depuis le fichier Word
-            word_path = state.get("word_report_path", "")
-            if not word_path:
-                print("⚠️ Aucun fichier Word fourni")
-                return {}
-            
-            extracted = self.word_extractor.extract_from_word(word_path)
-            
-            extracted_needs = extracted.get("final_needs", [])
-            extracted_use_cases = extracted.get("final_use_cases", [])
-            # Rétrocompatibilité avec l'ancien format
-            if not extracted_use_cases:
-                final_quick_wins = extracted.get("final_quick_wins", [])
-                final_structuration_ia = extracted.get("final_structuration_ia", [])
-                extracted_use_cases = final_quick_wins + final_structuration_ia
-            
-            print(f"✅ Extraction: {len(extracted_needs)} besoins, "
-                  f"{len(extracted_use_cases)} cas d'usage")
-            
-            # Afficher le détail des cas d'usage
-            print(f"\n📊 [EXECUTIVE] DÉTAIL DES CAS D'USAGE ({len(extracted_use_cases)}):")
-            for i, uc in enumerate(extracted_use_cases, 1):
-                titre = uc.get("titre", "N/A")
-                famille = uc.get("famille")
-                if famille:
-                    print(f"   {i}. [{famille}] {titre}")
-                else:
-                    print(f"   {i}. {titre}")
-            
+            # Si aucune donnée validée n'est fournie, essayer de charger depuis la BDD
+            # (Cette fonctionnalité peut être ajoutée plus tard si nécessaire)
+            print("⚠️ Aucune donnée validée fournie. Les besoins et use cases doivent être validés dans 'Validation des besoins et use cases' avant de lancer ce workflow.")
             return {
-                "extracted_needs": extracted_needs,
-                "extracted_use_cases": extracted_use_cases
+                "extracted_needs": [],
+                "extracted_use_cases": []
             }
             
         except Exception as e:
-            print(f"❌ Erreur extraction Word: {e}")
+            print(f"❌ Erreur chargement données validées: {e}")
             return {
-                "messages": [HumanMessage(content=f"Erreur extraction Word: {str(e)}")]
+                "messages": [HumanMessage(content=f"Erreur chargement données: {str(e)}")]
             }
     
     def _transcript_enjeux_node(self, state: ExecutiveSummaryState) -> Dict[str, Any]:
         """Extrait citations enjeux depuis transcripts"""
         print(f"\n📝 [EXECUTIVE] transcript_enjeux_node - DÉBUT")
         try:
-            transcript_files = state.get("transcript_files", [])
-            validated_speakers = state.get("validated_speakers", [])  # NOUVEAU
-            if not transcript_files:
-                print("⚠️ Aucun fichier transcript")
+            transcript_document_ids = state.get("transcript_document_ids", [])
+            validated_speakers = state.get("validated_speakers", [])
+            if not transcript_document_ids:
+                print("⚠️ Aucun document transcript")
                 return {"transcript_enjeux_citations": []}
             
-            citations = self.transcript_enjeux_agent.extract_citations(transcript_files, validated_speakers=validated_speakers)
+            citations = self.transcript_enjeux_agent.extract_citations(transcript_document_ids, validated_speakers=validated_speakers)
             print(f"✅ {len(citations)} citations d'enjeux extraites")
             
             return {"transcript_enjeux_citations": citations}
@@ -373,12 +354,12 @@ class ExecutiveSummaryWorkflow:
         """Extrait informations enjeux depuis ateliers"""
         print(f"\n📊 [EXECUTIVE] workshop_enjeux_node - DÉBUT")
         try:
-            workshop_files = state.get("workshop_files", [])
-            if not workshop_files:
-                print("⚠️ Aucun fichier workshop")
+            workshop_document_ids = state.get("workshop_document_ids", [])
+            if not workshop_document_ids:
+                print("⚠️ Aucun document workshop")
                 return {"workshop_enjeux_citations": []}
             
-            informations = self.workshop_enjeux_agent.extract_informations(workshop_files)
+            informations = self.workshop_enjeux_agent.extract_informations(workshop_document_ids)
             print(f"✅ {len(informations)} informations d'enjeux extraites")
             
             return {"workshop_enjeux_citations": informations}
@@ -391,13 +372,13 @@ class ExecutiveSummaryWorkflow:
         """Extrait citations maturité depuis transcripts"""
         print(f"\n📝 [EXECUTIVE] transcript_maturite_node - DÉBUT")
         try:
-            transcript_files = state.get("transcript_files", [])
-            validated_speakers = state.get("validated_speakers", [])  # NOUVEAU
-            if not transcript_files:
-                print("⚠️ Aucun fichier transcript")
+            transcript_document_ids = state.get("transcript_document_ids", [])
+            validated_speakers = state.get("validated_speakers", [])
+            if not transcript_document_ids:
+                print("⚠️ Aucun document transcript")
                 return {"transcript_maturite_citations": []}
             
-            citations = self.transcript_maturite_agent.extract_citations(transcript_files, validated_speakers=validated_speakers)
+            citations = self.transcript_maturite_agent.extract_citations(transcript_document_ids, validated_speakers=validated_speakers)
             print(f"✅ {len(citations)} citations de maturité extraites")
             
             return {"transcript_maturite_citations": citations}
@@ -410,12 +391,12 @@ class ExecutiveSummaryWorkflow:
         """Extrait informations maturité depuis ateliers"""
         print(f"\n📊 [EXECUTIVE] workshop_maturite_node - DÉBUT")
         try:
-            workshop_files = state.get("workshop_files", [])
-            if not workshop_files:
-                print("⚠️ Aucun fichier workshop")
+            workshop_document_ids = state.get("workshop_document_ids", [])
+            if not workshop_document_ids:
+                print("⚠️ Aucun document workshop")
                 return {"workshop_maturite_citations": []}
             
-            informations = self.workshop_maturite_agent.extract_informations(workshop_files)
+            informations = self.workshop_maturite_agent.extract_informations(workshop_document_ids)
             print(f"✅ {len(informations)} informations de maturité extraites")
             
             return {"workshop_maturite_citations": informations}
@@ -769,12 +750,21 @@ class ExecutiveSummaryWorkflow:
             return "continue_recommendations"
     
     def _format_citations(self, citations: List[Dict[str, Any]]) -> str:
-        """Formate les citations pour le prompt"""
+        """Formate les citations pour le prompt, triées par timestamp puis par speaker"""
         if not citations:
             return "Aucune citation disponible"
         
+        # Trier les citations : d'abord par timestamp (si disponible), puis par speaker
+        sorted_citations = sorted(
+            citations,
+            key=lambda c: (
+                c.get("timestamp", "") or "",  # Timestamp en premier
+                c.get("speaker", "").lower()  # Puis speaker alphabétique
+            )
+        )
+        
         formatted = []
-        for cit in citations:
+        for cit in sorted_citations:
             speaker = cit.get("speaker", "")
             citation = cit.get("citation", "")
             formatted.append(f"{speaker}: {citation}")
@@ -782,12 +772,21 @@ class ExecutiveSummaryWorkflow:
         return "\n".join(formatted)
     
     def _format_workshop_info(self, informations: List[Dict[str, Any]]) -> str:
-        """Formate les informations d'ateliers pour le prompt"""
+        """Formate les informations d'ateliers pour le prompt, triées par atelier puis par use_case"""
         if not informations:
             return "Aucune information d'atelier disponible"
         
+        # Trier les informations : d'abord par atelier, puis par use_case
+        sorted_informations = sorted(
+            informations,
+            key=lambda info: (
+                info.get("atelier", "").lower(),
+                info.get("use_case", "").lower()
+            )
+        )
+        
         formatted = []
-        for info in informations:
+        for info in sorted_informations:
             atelier = info.get("atelier", "")
             use_case = info.get("use_case", "")
             objectif = info.get("objectif", "")
@@ -796,12 +795,22 @@ class ExecutiveSummaryWorkflow:
         return "\n".join(formatted)
     
     def _format_maturite_citations(self, citations: List[Dict[str, Any]]) -> str:
-        """Formate les citations de maturité pour le prompt"""
+        """Formate les citations de maturité pour le prompt, triées par type_info puis par timestamp"""
         if not citations:
             return "Aucune citation de maturité disponible"
         
+        # Trier les citations : d'abord par type_info, puis par timestamp, puis par speaker
+        sorted_citations = sorted(
+            citations,
+            key=lambda c: (
+                c.get("type_info", "").lower(),  # Type d'info en premier
+                c.get("timestamp", "") or "",  # Puis timestamp
+                c.get("speaker", "").lower()  # Puis speaker
+            )
+        )
+        
         formatted = []
-        for cit in citations:
+        for cit in sorted_citations:
             speaker = cit.get("speaker", "")
             citation = cit.get("citation", "")
             type_info = cit.get("type_info", "")
@@ -810,12 +819,22 @@ class ExecutiveSummaryWorkflow:
         return "\n".join(formatted)
     
     def _format_workshop_maturite(self, informations: List[Dict[str, Any]]) -> str:
-        """Formate les informations de maturité d'ateliers pour le prompt"""
+        """Formate les informations de maturité d'ateliers pour le prompt, triées par type_info puis par atelier"""
         if not informations:
             return "Aucune information de maturité d'atelier disponible"
         
+        # Trier les informations : d'abord par type_info, puis par atelier, puis par use_case
+        sorted_informations = sorted(
+            informations,
+            key=lambda info: (
+                info.get("type_info", "").lower(),  # Type d'info en premier
+                info.get("atelier", "").lower(),  # Puis atelier
+                info.get("use_case", "").lower()  # Puis use_case
+            )
+        )
+        
         formatted = []
-        for info in informations:
+        for info in sorted_informations:
             atelier = info.get("atelier", "")
             use_case = info.get("use_case", "")
             type_info = info.get("type_info", "")

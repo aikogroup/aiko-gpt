@@ -354,12 +354,18 @@ class ExecutiveSummaryAgent:
             return {"recommendations": []}
     
     def _format_needs(self, needs: List[Dict[str, Any]]) -> str:
-        """Formate les besoins pour le prompt - ne passe que les titres"""
+        """Formate les besoins pour le prompt - ne passe que les titres, triés alphabétiquement"""
         if not needs:
             return "Aucun besoin identifié"
         
+        # Trier les besoins par titre alphabétique
+        sorted_needs = sorted(
+            needs,
+            key=lambda n: (n.get("titre") or n.get("theme", "")).lower()
+        )
+        
         formatted = []
-        for i, need in enumerate(needs, 1):
+        for i, need in enumerate(sorted_needs, 1):
             # Utiliser "titre" ou "theme" selon la structure du besoin
             titre = need.get("titre") or need.get("theme", f"Besoins {i}")
             formatted.append(f"{i}. {titre}")
@@ -367,12 +373,21 @@ class ExecutiveSummaryAgent:
         return "\n".join(formatted)
     
     def _format_use_cases(self, use_cases: List[Dict[str, Any]]) -> str:
-        """Formate les cas d'usage pour le prompt"""
+        """Formate les cas d'usage pour le prompt, triés par famille puis par titre"""
         if not use_cases:
             return "Aucun cas d'usage identifié"
         
+        # Trier les use cases : d'abord par famille (si présente), puis par titre alphabétique
+        sorted_use_cases = sorted(
+            use_cases,
+            key=lambda uc: (
+                uc.get("famille", "") or "",  # Famille en premier (None devient "")
+                uc.get("titre", "").lower()  # Puis titre alphabétique
+            )
+        )
+        
         formatted = []
-        for i, uc in enumerate(use_cases, 1):
+        for i, uc in enumerate(sorted_use_cases, 1):
             titre = uc.get("titre", f"Cas d'usage {i}")
             description = uc.get("description", "")
             formatted.append(f"{i}. {titre}:\n   {description}")

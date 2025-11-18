@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: aiko_postgres
+    environment:
+      POSTGRES_USER: aiko_user
+      POSTGRES_PASSWORD: aiko_password
+      POSTGRES_DB: aiko_db
+      # Configuration pour la performance
+      POSTGRES_INITDB_ARGS: "-E UTF8 --locale=fr_FR.UTF-8"
+    ports:
+      - "5432:5432"
+    volumes:
+      # Persister les données
+      - postgres_data:/var/lib/postgresql/data
+      # Optionnel: monter le schéma SQL pour initialisation
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aiko_user -d aiko_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - aiko_network
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  aiko_network:
+    driver: bridge
+

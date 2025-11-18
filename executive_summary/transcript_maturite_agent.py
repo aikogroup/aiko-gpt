@@ -38,44 +38,52 @@ class TranscriptMaturiteAgent:
         # Réutiliser TranscriptAgent pour le parsing de base
         self.transcript_agent = TranscriptAgent(openai_api_key=api_key, interviewer_names=interviewer_names)
     
-    def extract_citations(self, transcript_files: List[str], validated_speakers: Optional[List[Dict[str, str]]] = None) -> List[Dict[str, Any]]:
+    def extract_citations(self, document_ids: List[int], validated_speakers: Optional[List[Dict[str, str]]] = None) -> List[Dict[str, Any]]:
         """
-        Extrait les citations liées à la maturité IA depuis plusieurs fichiers de transcript.
+        Extrait les citations liées à la maturité IA depuis plusieurs documents transcript dans la BDD.
         
         Args:
-            transcript_files: Liste des chemins vers les fichiers de transcript (PDF ou JSON)
-            validated_speakers: Liste optionnelle des speakers validés par l'utilisateur (NOUVEAU)
+            document_ids: Liste des IDs de documents transcript dans la base de données
+            validated_speakers: Liste optionnelle des speakers validés par l'utilisateur
             
         Returns:
             Liste des citations extraites avec métadonnées
         """
         all_citations = []
         
-        for file_path in transcript_files:
+        for document_id in document_ids:
             try:
-                logger.info(f"Traitement transcript pour maturité: {file_path}")
+                logger.info(f"Traitement transcript pour maturité: document_id={document_id}")
                 
-                # Utiliser TranscriptAgent pour parser et filtrer (SANS analyse sémantique)
-                result = self.transcript_agent.get_interesting_parts_only(file_path, validated_speakers=validated_speakers)
+                # Utiliser TranscriptAgent pour charger depuis la BDD et filtrer (SANS analyse sémantique)
+                result = self.transcript_agent.process_from_db(
+                    document_id=document_id,
+                    validated_speakers=validated_speakers,
+                    filter_interviewers=True
+                )
                 
-                # Extraire les interventions intéressantes
-                interesting_parts = result.get("interesting_parts", {})
-                interesting_interventions = interesting_parts.get("interventions", [])
+                # Extraire les interventions depuis le résultat
+                if result.get("status") == "error":
+                    logger.warning(f"Erreur lors du traitement du document {document_id}: {result.get('error')}")
+                    continue
                 
-                if not interesting_interventions:
-                    logger.warning(f"Aucune intervention intéressante trouvée dans {file_path}")
+                # Les interventions sont dans le résultat directement
+                interventions = result.get("interventions", [])
+                
+                if not interventions:
+                    logger.warning(f"Aucune intervention trouvée pour document_id={document_id}")
                     continue
                 
                 # Préparer le texte pour l'extraction
-                transcript_text = self._prepare_transcript_text(interesting_interventions)
+                transcript_text = self._prepare_transcript_text(interventions)
                 
                 # Extraire les citations avec LLM
-                citations = self._extract_citations_with_llm(transcript_text, interesting_interventions)
+                citations = self._extract_citations_with_llm(transcript_text, interventions)
                 
                 all_citations.extend(citations)
                 
             except Exception as e:
-                logger.error(f"Erreur lors du traitement de {file_path}: {e}", exc_info=True)
+                logger.error(f"Erreur lors du traitement du document_id {document_id}: {e}", exc_info=True)
                 continue
         
         logger.info(f"✅ {len(all_citations)} citations de maturité extraites au total")

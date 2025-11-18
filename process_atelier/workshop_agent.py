@@ -363,6 +363,91 @@ class WorkshopAgent:
         
         return workshop_results
     
+    def process_workshop_from_db(self, document_id: int) -> List[WorkshopData]:
+        """
+        Traite les workshops depuis la base de données.
+        
+        Charge les workshops depuis la table workshops pour un document_id donné.
+        Si aggregate est NULL, traite avec LLM et met à jour la BDD.
+        Sinon, retourne les données déjà agrégées.
+        
+        Args:
+            document_id: ID du document dans la table documents
+            
+        Returns:
+            Liste des données d'ateliers structurées
+        """
+        logger.info(f"Début du traitement des workshops depuis la BDD pour document_id={document_id}")
+        
+        from database.db import get_db_context
+        from database.repository import WorkshopRepository
+        
+        with get_db_context() as db:
+            # Charger les workshops depuis la BDD
+            db_workshops = WorkshopRepository.get_by_document(db, document_id)
+            
+            if not db_workshops:
+                logger.warning(f"Aucun workshop trouvé pour document_id={document_id}")
+                return []
+            
+            workshop_results = []
+            
+            # Traiter chaque workshop
+            for idx, db_workshop in enumerate(db_workshops, 1):
+                # Si aggregate existe, désérialiser directement
+                if db_workshop.aggregate:
+                    logger.info(f"Workshop '{db_workshop.atelier_name}' déjà traité, utilisation de l'agrégat")
+                    try:
+                        # Désérialiser l'agrégat en WorkshopData
+                        aggregate_dict = db_workshop.aggregate
+                        workshop_result = WorkshopData(**aggregate_dict)
+                        workshop_results.append(workshop_result)
+                        continue
+                    except Exception as e:
+                        logger.error(f"Erreur lors de la désérialisation de l'agrégat: {e}")
+                        # Continuer avec le traitement LLM
+                
+                # Si aggregate est NULL, traiter avec LLM
+                logger.info(f"Traitement LLM du workshop '{db_workshop.atelier_name}'")
+                
+                # Convertir raw_extract en DataFrame pour utiliser _process_single_workshop
+                raw_extract = db_workshop.raw_extract
+                rows = []
+                for key, value in raw_extract.items():
+                    if isinstance(value, dict):
+                        rows.append({
+                            'Atelier': db_workshop.atelier_name,
+                            'Use_Case': value.get('text', ''),
+                            'Objective': value.get('objective', '')
+                        })
+                
+                if not rows:
+                    logger.warning(f"Aucune donnée dans raw_extract pour '{db_workshop.atelier_name}'")
+                    continue
+                
+                workshop_df = pd.DataFrame(rows)
+                workshop_id = f"W{idx:03d}"
+                
+                # Traiter avec LLM
+                workshop_result = self._process_single_workshop(
+                    db_workshop.atelier_name,
+                    workshop_df,
+                    workshop_id
+                )
+                
+                # Sauvegarder l'agrégat dans la BDD
+                try:
+                    aggregate_dict = workshop_result.model_dump()
+                    WorkshopRepository.update_aggregate(db, db_workshop.id, aggregate_dict)
+                    logger.info(f"✅ Agréat sauvegardé pour '{db_workshop.atelier_name}'")
+                except Exception as e:
+                    logger.error(f"Erreur lors de la sauvegarde de l'agrégat: {e}")
+                
+                workshop_results.append(workshop_result)
+            
+            logger.info(f"Traitement terminé: {len(workshop_results)} workshops traités depuis la BDD")
+            return workshop_results
+    
     def save_results(self, results: List[WorkshopData], output_path: str):
         """
         Sauvegarde les résultats en JSON
