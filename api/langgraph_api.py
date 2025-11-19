@@ -23,6 +23,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 from workflow.need_analysis_workflow import NeedAnalysisWorkflow
 from workflow.rappel_mission_workflow import RappelMissionWorkflow
 from workflow.atouts_workflow import AtoutsWorkflow
+from workflow.value_chain_workflow import ValueChainWorkflow
 from executive_summary.executive_summary_workflow import ExecutiveSummaryWorkflow
 from langgraph.checkpoint.memory import MemorySaver
 from process_transcript.pdf_parser import PDFParser
@@ -47,6 +48,7 @@ workflows: Dict[str, Any] = {}
 executive_workflows: Dict[str, Any] = {}  # Workflows Executive Summary
 rappel_workflows: Dict[str, Any] = {}  # Workflows Rappel de la mission
 atouts_workflows: Dict[str, Any] = {}  # Workflows Atouts de l'entreprise
+value_chain_workflows: Dict[str, Any] = {}  # Workflows Chaîne de valeur
 checkpointer = MemorySaver()
 
 # Dossier temporaire pour les fichiers uploadés
@@ -122,6 +124,20 @@ class AtoutsValidationFeedback(BaseModel):
     rejected_atouts: List[Dict[str, Any]]
     user_feedback: str = ""
     atouts_user_action: str = "finalize_atouts"  # "continue_atouts" ou "finalize_atouts"
+
+
+class ValueChainInput(BaseModel):
+    """Input pour démarrer un workflow d'extraction de la chaîne de valeur"""
+    transcript_document_ids: List[int]  # IDs des documents transcripts dans la DB
+    company_info: Dict[str, Any]
+
+
+class ValueChainValidationFeedback(BaseModel):
+    """Feedback de validation de la chaîne de valeur"""
+    validation_type: str  # "teams", "activities", "friction_points"
+    validated_items: List[Dict[str, Any]]
+    rejected_items: List[Dict[str, Any]]
+    user_action: str  # "continue_teams", "continue_to_activities", "continue_activities", "continue_to_friction", "continue_friction", "finalize"
 
 
 class ExecutiveValidationFeedback(BaseModel):
@@ -863,6 +879,185 @@ async def send_atouts_validation(thread_id: str, feedback: AtoutsValidationFeedb
         raise HTTPException(status_code=500, detail=f"Erreur reprise workflow: {str(e)}")
 
 
+# ==================== ENDPOINTS CHAÎNE DE VALEUR ====================
+
+@app.post("/value-chain/threads/{thread_id}/runs")
+async def create_value_chain_run(thread_id: str, value_chain_input: ValueChainInput):
+    """Démarre un workflow d'extraction de la chaîne de valeur"""
+    try:
+        if thread_id not in value_chain_workflows:
+            workflow = ValueChainWorkflow(checkpointer=checkpointer)
+            value_chain_workflows[thread_id] = {
+                "workflow": workflow,
+                "state": None,
+                "status": "created"
+            }
+        
+        workflow_data = value_chain_workflows[thread_id]
+        workflow = workflow_data["workflow"]
+        
+        print(f"\n🚀 [API] Démarrage workflow Chaîne de valeur pour thread {thread_id}")
+        print(f"📁 Documents: {len(value_chain_input.transcript_document_ids)}")
+        print(f"🏢 Entreprise: {value_chain_input.company_info.get('nom', 'N/A')}")
+        
+        # Exécuter le workflow
+        result = workflow.run(
+            transcript_document_ids=value_chain_input.transcript_document_ids,
+            company_info=value_chain_input.company_info,
+            thread_id=thread_id
+        )
+        
+        workflow_data["state"] = result
+        workflow_data["status"] = "paused" if result.get("workflow_paused") else ("completed" if result.get("success") else "error")
+        
+        return {
+            "thread_id": thread_id,
+            "status": workflow_data["status"],
+            "result": result
+        }
+    
+    except Exception as e:
+        print(f"❌ [API] Erreur Chaîne de valeur: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Erreur workflow chaîne de valeur: {str(e)}")
+
+
+@app.get("/value-chain/threads/{thread_id}/state")
+async def get_value_chain_state(thread_id: str):
+    """
+    Récupère l'état actuel du workflow Chaîne de valeur.
+    Utilise le snapshot LangGraph pour déterminer le vrai prochain nœud.
+    """
+    # Si le thread n'existe pas encore dans le dictionnaire, vérifier s'il existe dans le checkpointer
+    if thread_id not in value_chain_workflows:
+        # Vérifier si le thread existe dans le checkpointer LangGraph
+        try:
+            # Créer un workflow temporaire pour vérifier
+            temp_workflow = ValueChainWorkflow(checkpointer=checkpointer)
+            config = {"configurable": {"thread_id": thread_id}}
+            snapshot = temp_workflow.graph.get_state(config)
+            
+            if snapshot and snapshot.values:
+                # Le thread existe dans le checkpointer, initialiser le workflow
+                workflow = ValueChainWorkflow(checkpointer=checkpointer)
+                value_chain_workflows[thread_id] = {
+                    "workflow": workflow,
+                    "state": snapshot.values,
+                    "status": "paused" if snapshot.next else "completed"
+                }
+            else:
+                # Le thread n'existe nulle part
+                raise HTTPException(status_code=404, detail="Thread non trouvé")
+        except HTTPException:
+            raise
+        except Exception as e:
+            # Si erreur lors de la vérification, retourner 404
+            raise HTTPException(status_code=404, detail=f"Thread non trouvé: {str(e)}")
+    
+    workflow_data = value_chain_workflows[thread_id]
+    workflow = workflow_data["workflow"]
+    
+    # Récupérer l'état actuel depuis le checkpointer LangGraph
+    config = {"configurable": {"thread_id": thread_id}}
+    snapshot = workflow.graph.get_state(config)
+    
+    if snapshot and snapshot.values:
+        state = snapshot.values
+        workflow_data["state"] = state
+        
+        # Déterminer le prochain nœud depuis le snapshot LangGraph
+        next_nodes = []
+        if snapshot.next:
+            if isinstance(snapshot.next, (list, tuple)):
+                next_nodes = list(snapshot.next)
+            else:
+                next_nodes = [snapshot.next]
+        
+        # Mettre à jour le statut en fonction du prochain nœud
+        if any(node in next_nodes for node in ["validate_teams", "validate_activities", "validate_friction_points"]):
+            workflow_data["status"] = "paused"
+        elif len(next_nodes) == 0:
+            workflow_data["status"] = "completed"
+        else:
+            workflow_data["status"] = "running"
+        
+        return {
+            "thread_id": thread_id,
+            "status": workflow_data["status"],
+            "values": state,
+            "next": tuple(next_nodes) if next_nodes else []
+        }
+    else:
+        # Fallback si pas de snapshot
+        state = workflow_data.get("state", {})
+        return {
+            "thread_id": thread_id,
+            "status": workflow_data.get("status", "paused"),
+            "values": state,
+            "next": []
+        }
+
+
+@app.post("/value-chain/threads/{thread_id}/validate")
+async def send_value_chain_validation(thread_id: str, feedback: ValueChainValidationFeedback):
+    """
+    Envoie le feedback de validation de la chaîne de valeur et reprend le workflow.
+    """
+    if thread_id not in value_chain_workflows:
+        raise HTTPException(status_code=404, detail="Thread non trouvé")
+    
+    try:
+        workflow_data = value_chain_workflows[thread_id]
+        workflow = workflow_data["workflow"]
+        
+        print(f"\n📝 [API] Réception du feedback de validation chaîne de valeur pour thread {thread_id}")
+        print(f"📋 Type de validation: {feedback.validation_type}")
+        print(f"✅ Validés: {len(feedback.validated_items)}")
+        print(f"❌ Rejetés: {len(feedback.rejected_items)}")
+        print(f"🎯 Action utilisateur: {feedback.user_action}")
+        
+        # Reprendre le workflow avec le feedback
+        result = workflow.resume_workflow_with_validation(
+            validation_type=feedback.validation_type,
+            validated_items=feedback.validated_items,
+            rejected_items=feedback.rejected_items,
+            user_action=feedback.user_action,
+            thread_id=thread_id
+        )
+        
+        # Mettre à jour l'état
+        workflow_data["state"] = result
+        
+        # Récupérer le snapshot LangGraph pour déterminer le vrai statut
+        config = {"configurable": {"thread_id": thread_id}}
+        snapshot = workflow.graph.get_state(config)
+        
+        if snapshot and snapshot.next:
+            next_nodes = list(snapshot.next) if isinstance(snapshot.next, (list, tuple)) else [snapshot.next]
+            
+            if any(node in next_nodes for node in ["validate_teams", "validate_activities", "validate_friction_points"]):
+                workflow_data["status"] = "paused"
+            elif len(next_nodes) == 0:
+                workflow_data["status"] = "completed"
+            else:
+                workflow_data["status"] = "running"
+        else:
+            if result.get("success"):
+                workflow_data["status"] = "completed"
+            else:
+                workflow_data["status"] = "paused"
+        
+        return {
+            "status": "resumed",
+            "thread_id": thread_id,
+            "workflow_status": workflow_data["status"],
+            "result": result
+        }
+    
+    except Exception as e:
+        print(f"❌ [API] Erreur: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Erreur reprise workflow: {str(e)}")
+
+
 @app.delete("/threads/{thread_id}")
 async def delete_thread(thread_id: str):
     """
@@ -887,6 +1082,10 @@ async def delete_thread(thread_id: str):
 
     if thread_id in atouts_workflows:
         del atouts_workflows[thread_id]
+        deleted = True
+
+    if thread_id in value_chain_workflows:
+        del value_chain_workflows[thread_id]
         deleted = True
 
     if deleted:

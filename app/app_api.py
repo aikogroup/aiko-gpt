@@ -364,6 +364,22 @@ def init_session_state():
     
     # Initialiser les données DEBUG si le mode est activé
     init_debug_data()
+    
+    # Value Chain workflow
+    if 'value_chain_thread_id' not in st.session_state:
+        st.session_state.value_chain_thread_id = None
+    if 'value_chain_workflow_status' not in st.session_state:
+        st.session_state.value_chain_workflow_status = None
+    if 'value_chain_workflow_state' not in st.session_state:
+        st.session_state.value_chain_workflow_state = {}
+    if 'value_chain_workflow_completed' not in st.session_state:
+        st.session_state.value_chain_workflow_completed = False
+    if 'value_chain_data' not in st.session_state:
+        st.session_state.value_chain_data = {}
+    if 'value_chain_markdown' not in st.session_state:
+        st.session_state.value_chain_markdown = ""
+    if 'value_chain_json' not in st.session_state:
+        st.session_state.value_chain_json = ""
 
 def get_transcript_file_paths(transcripts: List[Any]) -> List[str]:
     """
@@ -1095,8 +1111,8 @@ def main():
         st.markdown("**Génération du rapport**")
         page_diag = st.radio(
             "Navigation Génération du rapport",
-            ["Génération des Enjeux et Recommandations", "Rappel de la mission", "Atouts de l'entreprise"],
-            index=0 if st.session_state.current_page == "Génération des Enjeux et Recommandations" else (1 if st.session_state.current_page == "Rappel de la mission" else (2 if st.session_state.current_page == "Atouts de l'entreprise" else None)),
+            ["Génération des Enjeux et Recommandations", "Rappel de la mission", "Atouts de l'entreprise", "Chaîne de valeur"],
+            index=0 if st.session_state.current_page == "Génération des Enjeux et Recommandations" else (1 if st.session_state.current_page == "Rappel de la mission" else (2 if st.session_state.current_page == "Atouts de l'entreprise" else (3 if st.session_state.current_page == "Chaîne de valeur" else None))),
             key="nav_diag",
             label_visibility="collapsed"
         )
@@ -1191,6 +1207,8 @@ def main():
         display_rappel_mission()
     elif page == "Atouts de l'entreprise":
         display_atouts_entreprise()
+    elif page == "Chaîne de valeur":
+        display_value_chain_page()
 
 def display_diagnostic_section():
     """Affiche la section de génération du diagnostic (utilise fichiers depuis session_state)"""
@@ -4412,7 +4430,6 @@ def display_atouts_workflow_progress():
         workflow_state = st.session_state.get("atouts_workflow_state", {})
         final_atouts = workflow_state.get("final_atouts", [])
         atouts_markdown = workflow_state.get("atouts_markdown", "")
-        web_search_results = workflow_state.get("web_search_results", [])
         
         if final_atouts:
             st.session_state.atouts_data = {"atouts": final_atouts}
@@ -4430,16 +4447,6 @@ def display_atouts_workflow_progress():
                         data={"atouts": final_atouts},
                         status="validated"
                     )
-                    
-                    # Sauvegarder les résultats de recherche web si disponibles
-                    if web_search_results:
-                        save_agent_result(
-                            project_id=st.session_state.current_project_id,
-                            workflow_type="atouts",
-                            result_type="web_search_results",
-                            data={"results": web_search_results},
-                            status="validated"
-                        )
                 except Exception as e:
                     st.warning(f"⚠️ Erreur lors de la sauvegarde en base de données: {str(e)}")
             
@@ -4711,6 +4718,1145 @@ def display_atouts_entreprise():
         except Exception as e:
             st.error(f"❌ Erreur lors du démarrage du workflow : {str(e)}")
             st.session_state.atouts_thread_id = None
+
+
+# ==================== FONCTIONS CHAÎNE DE VALEUR ====================
+
+def poll_value_chain_workflow_status():
+    """
+    Poll le statut du workflow chaîne de valeur.
+    
+    Returns:
+        "running", "waiting_validation", "completed", "error"
+    """
+    if not st.session_state.get("value_chain_thread_id"):
+        return "no_thread"
+    
+    try:
+        response = requests.get(
+            f"{API_URL}/value-chain/threads/{st.session_state.value_chain_thread_id}/state",
+            timeout=60
+        )
+        response.raise_for_status()
+        
+        state = response.json()
+        workflow_state = state["values"]
+        
+        # Déterminer le statut
+        next_nodes = list(state["next"]) if state["next"] else []
+        
+        print(f"🔍 [DEBUG] poll_value_chain_workflow_status - next_nodes: {next_nodes}")
+        
+        # Déterminer le validation_type depuis les next_nodes si nécessaire
+        if any(node in next_nodes for node in ["validate_teams", "validate_activities", "validate_friction_points"]):
+            # Extraire le validation_type depuis les next_nodes
+            if "validate_teams" in next_nodes:
+                workflow_state["validation_type"] = "teams"
+            elif "validate_activities" in next_nodes:
+                workflow_state["validation_type"] = "activities"
+            elif "validate_friction_points" in next_nodes:
+                workflow_state["validation_type"] = "friction_points"
+        
+        st.session_state.value_chain_workflow_state = workflow_state
+        
+        if any(node in next_nodes for node in ["validate_teams", "validate_activities", "validate_friction_points"]):
+            return "waiting_validation"
+        elif len(next_nodes) == 0:
+            return "completed"
+        else:
+            return "running"
+    
+    except Exception as e:
+        st.error(f"❌ Erreur lors du polling: {str(e)}")
+        return "error"
+
+
+def send_value_chain_validation_api_call(thread_id: str, validation_result: Dict[str, Any], result_queue: queue.Queue):
+    """
+    Envoie le résultat de validation à l'API dans un thread séparé.
+    """
+    try:
+        response = requests.post(
+            f"{API_URL}/value-chain/threads/{thread_id}/validate",
+            json=validation_result,
+            timeout=600
+        )
+        response.raise_for_status()
+        result = response.json()
+        workflow_status = result.get("workflow_status", "running")
+        st.session_state.value_chain_workflow_status = workflow_status
+        result_queue.put((True, None))
+    except Exception as e:
+        result_queue.put((False, str(e)))
+
+
+def _on_checkbox_change():
+    """Callback pour les changements de checkbox - force un rerun"""
+    pass
+
+
+def display_value_chain_validation_interface():
+    """Affiche l'interface de validation de la chaîne de valeur"""
+    workflow_state = st.session_state.get("value_chain_workflow_state", {})
+    validation_type = workflow_state.get("validation_type", "")
+    
+    if validation_type == "teams":
+        proposed_items = workflow_state.get("proposed_teams", [])
+        validated_items = workflow_state.get("validated_teams", [])
+        item_type = "équipe"
+        item_type_plural = "équipes"
+    elif validation_type == "activities":
+        proposed_items = workflow_state.get("proposed_activities", [])
+        validated_items = workflow_state.get("validated_activities", [])
+        item_type = "activité"
+        item_type_plural = "activités"
+    elif validation_type == "friction_points":
+        proposed_items = workflow_state.get("proposed_friction_points", [])
+        validated_items = workflow_state.get("validated_friction_points", [])
+        item_type = "point de friction"
+        item_type_plural = "points de friction"
+    else:
+        st.warning("⚠️ Type de validation inconnu.")
+        return
+    
+    if not proposed_items:
+        st.warning(f"⚠️ Aucune {item_type} proposée. Veuillez relancer le workflow.")
+        return
+    
+    # Utiliser un suffixe basé sur la longueur des items proposés
+    key_suffix = str(len(proposed_items))
+    
+    st.markdown(f"### Validation des {item_type_plural.capitalize()}")
+    st.info(f"📊 {len(validated_items)} {item_type_plural} déjà validées")
+    st.markdown("---")
+    
+    # Interface de validation selon le type
+    if validation_type == "teams":
+        # Séparer les équipes métier et support
+        teams_metier = [item for item in proposed_items if item.get('type') == 'equipe_metier']
+        teams_support = [item for item in proposed_items if item.get('type') == 'equipe_support']
+        
+        # Afficher d'abord les équipes métier, puis les équipes support (2 par ligne)
+        all_teams_ordered = teams_metier + teams_support
+        
+        # Afficher les équipes avec champs éditables (2 par ligne)
+        for i in range(0, len(all_teams_ordered), 2):
+            col1, col2 = st.columns(2, gap="large")
+            
+            # Première équipe de la ligne
+            with col1:
+                team = all_teams_ordered[i]
+                original_nom = team.get('nom', '')
+                original_description = team.get('description', '')
+                original_type = team.get('type', 'equipe_metier')
+                
+                # Clés pour les widgets
+                nom_key = f"team_nom_{i}_{key_suffix}"
+                desc_key = f"team_description_{i}_{key_suffix}"
+                type_key = f"team_type_{i}_{key_suffix}"
+                
+                # Champs éditables - Streamlit gère la valeur via key=
+                modified_nom = st.text_input(
+                    "**Nom**",
+                    value=original_nom,
+                    key=nom_key,
+                    label_visibility="visible"
+                )
+                
+                modified_type = st.selectbox(
+                    "**Type**",
+                    options=["equipe_metier", "equipe_support"],
+                    index=0 if original_type == "equipe_metier" else 1,
+                    format_func=lambda x: "Equipe métier" if x == "equipe_metier" else "Equipe support",
+                    key=type_key
+                )
+                
+                modified_description = st.text_input(
+                    "**Description**",
+                    value=original_description,
+                    key=desc_key,
+                    label_visibility="visible"
+                )
+                
+                # Checkbox pour valider
+                checkbox_key = f"validate_team_{i+1}_{key_suffix}"
+                if checkbox_key not in st.session_state:
+                    st.session_state[checkbox_key] = False
+                is_selected = st.checkbox(f"Valider cette équipe", key=checkbox_key, on_change=_on_checkbox_change)
+            
+            # Deuxième équipe de la ligne (si existante)
+            if i + 1 < len(all_teams_ordered):
+                with col2:
+                    team = all_teams_ordered[i + 1]
+                    original_nom = team.get('nom', '')
+                    original_description = team.get('description', '')
+                    original_type = team.get('type', 'equipe_metier')
+                    
+                    # Clés pour les widgets
+                    nom_key = f"team_nom_{i+1}_{key_suffix}"
+                    desc_key = f"team_description_{i+1}_{key_suffix}"
+                    type_key = f"team_type_{i+1}_{key_suffix}"
+                    
+                    # Champs éditables - Streamlit gère la valeur via key=
+                    modified_nom = st.text_input(
+                        "**Nom**",
+                        value=original_nom,
+                        key=nom_key,
+                        label_visibility="visible"
+                    )
+                    
+                    modified_type = st.selectbox(
+                        "**Type**",
+                        options=["equipe_metier", "equipe_support"],
+                        index=0 if original_type == "equipe_metier" else 1,
+                        format_func=lambda x: "Equipe métier" if x == "equipe_metier" else "Equipe support",
+                        key=type_key
+                    )
+                    
+                    modified_description = st.text_input(
+                        "**Description**",
+                        value=original_description,
+                        key=desc_key,
+                        label_visibility="visible"
+                    )
+                    
+                    # Checkbox pour valider
+                    checkbox_key = f"validate_team_{i+2}_{key_suffix}"
+                    if checkbox_key not in st.session_state:
+                        st.session_state[checkbox_key] = False
+                    is_selected = st.checkbox(f"Valider cette équipe", key=checkbox_key, on_change=_on_checkbox_change)
+            
+            # Ligne de séparation
+            st.markdown("---")
+        
+        # Calculer le nombre d'équipes sélectionnées
+        selected_count = 0
+        for i in range(1, len(all_teams_ordered) + 1):
+            checkbox_key = f"validate_team_{i}_{key_suffix}"
+            if st.session_state.get(checkbox_key, False):
+                selected_count += 1
+        
+        if selected_count > 0:
+            st.info(f"{selected_count} équipe(s) sélectionnée(s)")
+    
+    elif validation_type == "activities":
+        # Afficher les activités avec champs éditables (2 par ligne)
+        validated_teams = workflow_state.get("validated_teams", [])
+        team_options = {t.get("id"): t.get("nom") for t in validated_teams}
+        # Mapping inverse : nom -> id pour trouver l'ID à partir du nom
+        team_nom_to_id = {t.get("nom"): t.get("id") for t in validated_teams}
+        
+        for i in range(0, len(proposed_items), 2):
+            col1, col2 = st.columns(2, gap="large")
+            
+            # Première activité de la ligne
+            with col1:
+                activity = proposed_items[i]
+                original_resume = activity.get('resume', '')
+                # Utiliser team_nom au lieu de team_id (car le modèle Activity utilise team_nom)
+                original_team_nom = activity.get('team_nom', '')
+                original_team_id = team_nom_to_id.get(original_team_nom, '')
+                
+                # Clés pour les widgets
+                resume_key = f"activity_resume_{i}_{key_suffix}"
+                team_key = f"activity_team_{i}_{key_suffix}"
+                
+                # Initialiser team_key si nécessaire pour le selectbox
+                if team_key not in st.session_state:
+                    st.session_state[team_key] = original_team_id if original_team_id in team_options else (list(team_options.keys())[0] if team_options else '')
+                
+                # Champs éditables
+                modified_resume = st.text_input(
+                    "**Résumé**",
+                    value=original_resume,
+                    key=resume_key,
+                    label_visibility="visible"
+                )
+                
+                if team_options:
+                    # S'assurer que la valeur initiale est valide
+                    if st.session_state[team_key] not in team_options:
+                        st.session_state[team_key] = list(team_options.keys())[0]
+                    modified_team_id = st.selectbox(
+                        "**Équipe**",
+                        options=list(team_options.keys()),
+                        format_func=lambda x: team_options[x],
+                        key=team_key
+                    )
+                else:
+                    st.info("Aucune équipe validée")
+                
+                # Checkbox pour valider
+                checkbox_key = f"validate_activity_{i+1}_{key_suffix}"
+                if checkbox_key not in st.session_state:
+                    st.session_state[checkbox_key] = False
+                is_selected = st.checkbox(f"Valider cette activité", key=checkbox_key, on_change=_on_checkbox_change)
+            
+            # Deuxième activité de la ligne (si existante)
+            if i + 1 < len(proposed_items):
+                with col2:
+                    activity = proposed_items[i + 1]
+                    original_resume = activity.get('resume', '')
+                    # Utiliser team_nom au lieu de team_id (car le modèle Activity utilise team_nom)
+                    original_team_nom = activity.get('team_nom', '')
+                    original_team_id = team_nom_to_id.get(original_team_nom, '')
+                    
+                    # Clés pour les widgets
+                    resume_key = f"activity_resume_{i+1}_{key_suffix}"
+                    team_key = f"activity_team_{i+1}_{key_suffix}"
+                    
+                    # Initialiser team_key si nécessaire pour le selectbox
+                    if team_key not in st.session_state:
+                        st.session_state[team_key] = original_team_id if original_team_id in team_options else (list(team_options.keys())[0] if team_options else '')
+                    
+                    # Champs éditables
+                    modified_resume = st.text_input(
+                        "**Résumé**",
+                        value=original_resume,
+                        key=resume_key,
+                        label_visibility="visible"
+                    )
+                    
+                    if team_options:
+                        # S'assurer que la valeur initiale est valide
+                        if st.session_state[team_key] not in team_options:
+                            st.session_state[team_key] = list(team_options.keys())[0]
+                        modified_team_id = st.selectbox(
+                            "**Équipe**",
+                            options=list(team_options.keys()),
+                            format_func=lambda x: team_options[x],
+                            key=team_key
+                        )
+                    else:
+                        st.info("Aucune équipe validée")
+                    
+                    # Checkbox pour valider
+                    checkbox_key = f"validate_activity_{i+2}_{key_suffix}"
+                    if checkbox_key not in st.session_state:
+                        st.session_state[checkbox_key] = False
+                    is_selected = st.checkbox(f"Valider cette activité", key=checkbox_key, on_change=_on_checkbox_change)
+            
+            # Ligne de séparation
+            st.markdown("---")
+        
+        # Calculer le nombre d'activités sélectionnées
+        selected_count = 0
+        for i in range(1, len(proposed_items) + 1):
+            checkbox_key = f"validate_activity_{i}_{key_suffix}"
+            if st.session_state.get(checkbox_key, False):
+                selected_count += 1
+        
+        if selected_count > 0:
+            st.info(f"{selected_count} activité(s) sélectionnée(s)")
+    
+    elif validation_type == "friction_points":
+        # Regrouper les points de friction par équipe
+        validated_teams = workflow_state.get("validated_teams", [])
+        if not validated_teams:
+            st.info("💡 Validez d'abord des équipes pour voir les points de friction.")
+            return
+        
+        # Créer un mapping team_nom -> liste des noms d'équipes pour les listes déroulantes
+        team_names = [t.get('nom', '') for t in validated_teams]
+        team_names = [n for n in team_names if n]  # Filtrer les noms vides
+        
+        # Grouper les points de friction par team_nom (au lieu de team_id)
+        friction_by_team = {}
+        for friction in proposed_items:
+            team_nom = friction.get('team_nom', '')
+            if team_nom not in friction_by_team:
+                friction_by_team[team_nom] = []
+            friction_by_team[team_nom].append(friction)
+        
+        # Séparer les équipes métier et support
+        teams_metier = [t for t in validated_teams if t.get('type') == 'equipe_metier']
+        teams_support = [t for t in validated_teams if t.get('type') == 'equipe_support']
+        
+        # Afficher d'abord les équipes métier, puis les équipes support
+        all_teams_ordered = teams_metier + teams_support
+        
+        selected_count = 0
+        friction_index = 0  # Index global pour les checkboxes
+        
+        # Équipes métier
+        if teams_metier:
+            st.markdown("## Équipes métier")
+            for team in teams_metier:
+                team_nom = team.get('nom', 'N/A')
+                team_frictions = friction_by_team.get(team_nom, [])
+                
+                if team_frictions:
+                    st.markdown(f"### {team_nom}")
+                    
+                    # Afficher les citations côte à côte (2 colonnes)
+                    num_frictions = len(team_frictions)
+                    cols_per_row = 2
+                    
+                    for row_start in range(0, num_frictions, cols_per_row):
+                        cols = st.columns(cols_per_row)
+                        
+                        for col_idx, col in enumerate(cols):
+                            friction_idx = row_start + col_idx
+                            if friction_idx < num_frictions:
+                                friction = team_frictions[friction_idx]
+                                friction_index += 1
+                                original_citation = friction.get('citation', '')
+                                original_description = friction.get('description', '')
+                                original_team_nom = friction.get('team_nom', '')
+                                
+                                with col:
+                                    # Container pour chaque citation
+                                    with st.container():
+                                        # Citation
+                                        st.markdown("**Citation :**")
+                                        st.markdown(f"*\"{original_citation}\"*")
+                                        
+                                        # Description à la ligne
+                                        st.markdown("**Description :**")
+                                        st.markdown(f"{original_description}")
+                                        
+                                        # Liste déroulante pour modifier l'équipe
+                                        team_select_key = f"friction_team_{friction_index}_{key_suffix}"
+                                        
+                                        # Trouver l'index de l'équipe actuelle
+                                        current_index = 0
+                                        if original_team_nom in team_names:
+                                            current_index = team_names.index(original_team_nom)
+                                        
+                                        # Ne pas définir st.session_state avant le selectbox
+                                        # Le selectbox gère sa propre valeur via l'index
+                                        selected_team_nom = st.selectbox(
+                                            "**Équipe**",
+                                            options=team_names,
+                                            index=current_index,
+                                            key=team_select_key
+                                        )
+                                        
+                                        # Checkbox pour valider
+                                        checkbox_key = f"validate_friction_{friction_index}_{key_suffix}"
+                                        if checkbox_key not in st.session_state:
+                                            st.session_state[checkbox_key] = False
+                                        
+                                        # Stocker l'index du friction dans le proposed_items pour la soumission
+                                        friction['_friction_index'] = friction_index
+                                        
+                                        is_selected = st.checkbox(
+                                            "✅ Valider ce point de friction",
+                                            key=checkbox_key,
+                                            on_change=_on_checkbox_change
+                                        )
+                                        
+                                        if is_selected:
+                                            selected_count += 1
+                                        
+                                        st.markdown("---")
+                    
+                    st.markdown("---")
+        
+        # Équipes support
+        if teams_support:
+            st.markdown("## Équipes support")
+            for team in teams_support:
+                team_nom = team.get('nom', 'N/A')
+                team_frictions = friction_by_team.get(team_nom, [])
+                
+                if team_frictions:
+                    st.markdown(f"### {team_nom}")
+                    
+                    # Afficher les citations côte à côte (2 colonnes)
+                    num_frictions = len(team_frictions)
+                    cols_per_row = 2
+                    
+                    for row_start in range(0, num_frictions, cols_per_row):
+                        cols = st.columns(cols_per_row)
+                        
+                        for col_idx, col in enumerate(cols):
+                            friction_idx = row_start + col_idx
+                            if friction_idx < num_frictions:
+                                friction = team_frictions[friction_idx]
+                                friction_index += 1
+                                original_citation = friction.get('citation', '')
+                                original_description = friction.get('description', '')
+                                original_team_nom = friction.get('team_nom', '')
+                                
+                                with col:
+                                    # Container pour chaque citation
+                                    with st.container():
+                                        # Citation
+                                        st.markdown("**Citation :**")
+                                        st.markdown(f"*\"{original_citation}\"*")
+                                        
+                                        # Description à la ligne
+                                        st.markdown("**Description :**")
+                                        st.markdown(f"{original_description}")
+                                        
+                                        # Liste déroulante pour modifier l'équipe
+                                        team_select_key = f"friction_team_{friction_index}_{key_suffix}"
+                                        
+                                        # Trouver l'index de l'équipe actuelle
+                                        current_index = 0
+                                        if original_team_nom in team_names:
+                                            current_index = team_names.index(original_team_nom)
+                                        
+                                        # Ne pas définir st.session_state avant le selectbox
+                                        # Le selectbox gère sa propre valeur via l'index
+                                        selected_team_nom = st.selectbox(
+                                            "**Équipe**",
+                                            options=team_names,
+                                            index=current_index,
+                                            key=team_select_key
+                                        )
+                                        
+                                        # Checkbox pour valider
+                                        checkbox_key = f"validate_friction_{friction_index}_{key_suffix}"
+                                        if checkbox_key not in st.session_state:
+                                            st.session_state[checkbox_key] = False
+                                        
+                                        # Stocker l'index du friction dans le proposed_items pour la soumission
+                                        friction['_friction_index'] = friction_index
+                                        
+                                        is_selected = st.checkbox(
+                                            "✅ Valider ce point de friction",
+                                            key=checkbox_key,
+                                            on_change=_on_checkbox_change
+                                        )
+                                        
+                                        if is_selected:
+                                            selected_count += 1
+                                        
+                                        st.markdown("---")
+                    
+                    st.markdown("---")
+        
+        if selected_count > 0:
+            st.info(f"{selected_count} point(s) de friction sélectionné(s)")
+    
+    # Section pour ajouter manuellement
+    st.markdown("---")
+    st.markdown(f"### Ajouter une {item_type} manuellement")
+    
+    if validation_type == "teams":
+        with st.form(f"add_team_form"):
+            new_team_nom = st.text_input("Nom de l'équipe")
+            new_team_type = st.selectbox(
+                "Type",
+                options=["equipe_metier", "equipe_support"],
+                format_func=lambda x: "Equipe métier" if x == "equipe_metier" else "Equipe support"
+            )
+            new_team_description = st.text_area("Description")
+            if st.form_submit_button("Ajouter"):
+                if new_team_nom:
+                    import uuid
+                    new_team = {
+                        "id": f"E{len(validated_items) + len(proposed_items) + 1}",
+                        "nom": new_team_nom,
+                        "type": new_team_type,
+                        "description": new_team_description
+                    }
+                    # Stocker dans session_state pour récupération lors de la soumission
+                    manual_items_key = f"manual_{validation_type}_{key_suffix}"
+                    if manual_items_key not in st.session_state:
+                        st.session_state[manual_items_key] = []
+                    st.session_state[manual_items_key].append(new_team)
+                    st.success(f"✅ {item_type.capitalize()} ajoutée !")
+                    st.rerun()
+    elif validation_type == "activities":
+        # Récupérer les équipes validées pour le selectbox
+        validated_teams = workflow_state.get("validated_teams", [])
+        if validated_teams:
+            with st.form(f"add_activity_form"):
+                team_options = {t.get("id"): t.get("nom") for t in validated_teams}
+                selected_team_id = st.selectbox("Équipe", options=list(team_options.keys()), format_func=lambda x: team_options[x])
+                new_activity_resume = st.text_area("Résumé des activités")
+                if st.form_submit_button("Ajouter"):
+                    if new_activity_resume:
+                        import uuid
+                        new_activity = {
+                            "id": f"A{len(validated_items) + len(proposed_items) + 1}",
+                            "team_id": selected_team_id,
+                            "resume": new_activity_resume
+                        }
+                        # Stocker dans session_state pour récupération lors de la soumission
+                        manual_items_key = f"manual_{validation_type}_{key_suffix}"
+                        if manual_items_key not in st.session_state:
+                            st.session_state[manual_items_key] = []
+                        st.session_state[manual_items_key].append(new_activity)
+                        st.success(f"✅ {item_type.capitalize()} ajoutée !")
+                        st.rerun()
+        else:
+            st.info("💡 Validez d'abord des équipes pour pouvoir ajouter des activités.")
+    elif validation_type == "friction_points":
+        validated_teams = workflow_state.get("validated_teams", [])
+        if validated_teams:
+            with st.form(f"add_friction_form"):
+                team_names = [t.get("nom", "") for t in validated_teams if t.get("nom")]
+                selected_team_nom = st.selectbox("Équipe", options=team_names)
+                new_friction_citation = st.text_area("Citation")
+                new_friction_description = st.text_area("Description")
+                if st.form_submit_button("Ajouter"):
+                    if new_friction_citation and new_friction_description:
+                        import uuid
+                        new_friction = {
+                            "id": f"F{len(validated_items) + len(proposed_items) + 1}",
+                            "team_nom": selected_team_nom,
+                            "citation": new_friction_citation,
+                            "description": new_friction_description
+                        }
+                        # Stocker dans session_state pour récupération lors de la soumission
+                        manual_items_key = f"manual_{validation_type}_{key_suffix}"
+                        if manual_items_key not in st.session_state:
+                            st.session_state[manual_items_key] = []
+                        st.session_state[manual_items_key].append(new_friction)
+                        st.success(f"✅ {item_type.capitalize()} ajouté !")
+                        st.rerun()
+        else:
+            st.info("💡 Validez d'abord des équipes pour pouvoir ajouter des points de friction.")
+    
+    # Boutons d'action
+    st.markdown("---")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if validation_type == "teams":
+            continue_action = "continue_to_activities"
+            continue_label = "Continuer vers les activités"
+        elif validation_type == "activities":
+            continue_action = "continue_to_friction"
+            continue_label = "Continuer vers les points de friction"
+        else:
+            continue_action = "finalize"
+            continue_label = "Finaliser"
+        
+        if st.button(continue_label, type="primary", use_container_width=True):
+            # Construire les items validés depuis les checkboxes et les valeurs modifiées
+            validated = []
+            rejected = []
+            
+            if validation_type == "teams":
+                # Séparer les équipes métier et support
+                teams_metier = [item for item in proposed_items if item.get('type') == 'equipe_metier']
+                teams_support = [item for item in proposed_items if item.get('type') == 'equipe_support']
+                all_teams_ordered = teams_metier + teams_support
+                
+                # Lire les valeurs modifiées depuis session_state
+                for i in range(len(all_teams_ordered)):
+                    checkbox_key = f"validate_team_{i+1}_{key_suffix}"
+                    if st.session_state.get(checkbox_key, False):
+                        # Récupérer les valeurs modifiées
+                        nom_key = f"team_nom_{i}_{key_suffix}"
+                        desc_key = f"team_description_{i}_{key_suffix}"
+                        type_key = f"team_type_{i}_{key_suffix}"
+                        
+                        validated_team = {
+                            **all_teams_ordered[i],  # Conserver les autres champs (id, etc.)
+                            "nom": st.session_state.get(nom_key, all_teams_ordered[i].get('nom', '')),
+                            "description": st.session_state.get(desc_key, all_teams_ordered[i].get('description', '')),
+                            "type": st.session_state.get(type_key, all_teams_ordered[i].get('type', 'equipe_metier'))
+                        }
+                        validated.append(validated_team)
+            
+            elif validation_type == "activities":
+                # Récupérer les équipes validées pour le mapping id -> nom
+                validated_teams = workflow_state.get("validated_teams", [])
+                team_id_to_nom = {t.get("id"): t.get("nom") for t in validated_teams}
+                
+                # Lire les valeurs modifiées depuis session_state
+                for i in range(len(proposed_items)):
+                    checkbox_key = f"validate_activity_{i+1}_{key_suffix}"
+                    if st.session_state.get(checkbox_key, False):
+                        # Récupérer les valeurs modifiées
+                        resume_key = f"activity_resume_{i}_{key_suffix}"
+                        team_key = f"activity_team_{i}_{key_suffix}"
+                        
+                        # Récupérer le team_id sélectionné et le convertir en team_nom
+                        selected_team_id = st.session_state.get(team_key, proposed_items[i].get('team_id', ''))
+                        selected_team_nom = team_id_to_nom.get(selected_team_id, proposed_items[i].get('team_nom', ''))
+                        
+                        validated_activity = {
+                            **proposed_items[i],  # Conserver les autres champs (id, etc.)
+                            "resume": st.session_state.get(resume_key, proposed_items[i].get('resume', '')),
+                            "team_nom": selected_team_nom  # Utiliser team_nom au lieu de team_id
+                        }
+                        validated.append(validated_activity)
+            
+            elif validation_type == "friction_points":
+                # Lire les valeurs depuis les checkboxes (utiliser _friction_index stocké)
+                for friction in proposed_items:
+                    friction_index = friction.get('_friction_index', 0)
+                    if friction_index > 0:
+                        checkbox_key = f"validate_friction_{friction_index}_{key_suffix}"
+                        if st.session_state.get(checkbox_key, False):
+                            # Récupérer l'équipe modifiée si elle a été changée
+                            team_select_key = f"friction_team_{friction_index}_{key_suffix}"
+                            modified_team_nom = st.session_state.get(team_select_key, friction.get('team_nom', ''))
+                            
+                            # Ajouter le friction avec l'équipe modifiée
+                            validated_friction = {
+                                **friction,
+                                "team_nom": modified_team_nom  # Utiliser l'équipe modifiée
+                            }
+                            # Retirer le champ temporaire
+                            validated_friction.pop('_friction_index', None)
+                            validated.append(validated_friction)
+            
+            # Ajouter les items ajoutés manuellement
+            manual_items_key = f"manual_{validation_type}_{key_suffix}"
+            if manual_items_key in st.session_state:
+                validated.extend(st.session_state[manual_items_key])
+            
+            if validated or rejected:
+                # Préparer les données pour l'API
+                api_payload = {
+                    "validation_type": validation_type,
+                    "validated_items": validated,
+                    "rejected_items": rejected,
+                    "user_action": continue_action
+                }
+                
+                # Créer une queue pour la communication entre threads
+                result_queue = queue.Queue()
+                
+                # Lancer l'appel API dans un thread séparé
+                api_thread = threading.Thread(
+                    target=send_value_chain_validation_api_call,
+                    args=(st.session_state.value_chain_thread_id, api_payload, result_queue)
+                )
+                api_thread.start()
+                
+                # Afficher un spinner pendant l'appel API
+                status_placeholder = st.empty()
+                messages = [
+                    "⚙️ Envoi de la validation...",
+                    "🔄 Traitement en cours...",
+                    "✨ Génération en cours..." if continue_action != "finalize" else "✅ Finalisation..."
+                ]
+                
+                message_index = 0
+                while api_thread.is_alive():
+                    status_placeholder.info(messages[message_index % len(messages)])
+                    time.sleep(2)
+                    message_index += 1
+                
+                # Récupérer le résultat
+                try:
+                    success, error_msg = result_queue.get(timeout=1)
+                    
+                    if success:
+                        status_placeholder.success("✅ Validation envoyée ! Le workflow reprend...")
+                        time.sleep(2)
+                        st.rerun()
+                    else:
+                        status_placeholder.error(f"❌ Erreur: {error_msg}")
+                
+                except queue.Empty:
+                    status_placeholder.error("❌ Timeout lors de la validation")
+            else:
+                st.warning("⚠️ Veuillez valider ou rejeter au moins une item, ou ajouter une item manuellement.")
+    
+    with col2:
+        if validation_type != "friction_points":
+            if validation_type == "teams":
+                regenerate_action = "continue_teams"
+            else:
+                regenerate_action = "continue_activities"
+            
+            if st.button("🔄 Régénérer", use_container_width=True):
+                # Construire les items validés depuis les checkboxes et les valeurs modifiées
+                validated = []
+                rejected = []
+                
+                if validation_type == "teams":
+                    # Séparer les équipes métier et support
+                    teams_metier = [item for item in proposed_items if item.get('type') == 'equipe_metier']
+                    teams_support = [item for item in proposed_items if item.get('type') == 'equipe_support']
+                    all_teams_ordered = teams_metier + teams_support
+                    
+                    # Lire les valeurs modifiées depuis session_state
+                    for i in range(len(all_teams_ordered)):
+                        checkbox_key = f"validate_team_{i+1}_{key_suffix}"
+                        if st.session_state.get(checkbox_key, False):
+                            # Récupérer les valeurs modifiées
+                            nom_key = f"team_nom_{i}_{key_suffix}"
+                            desc_key = f"team_description_{i}_{key_suffix}"
+                            type_key = f"team_type_{i}_{key_suffix}"
+                            
+                            validated_team = {
+                                **all_teams_ordered[i],  # Conserver les autres champs (id, etc.)
+                                "nom": st.session_state.get(nom_key, all_teams_ordered[i].get('nom', '')),
+                                "description": st.session_state.get(desc_key, all_teams_ordered[i].get('description', '')),
+                                "type": st.session_state.get(type_key, all_teams_ordered[i].get('type', 'equipe_metier'))
+                            }
+                            validated.append(validated_team)
+                
+                elif validation_type == "activities":
+                    # Récupérer les équipes validées pour le mapping id -> nom
+                    validated_teams = workflow_state.get("validated_teams", [])
+                    team_id_to_nom = {t.get("id"): t.get("nom") for t in validated_teams}
+                    
+                    # Lire les valeurs modifiées depuis session_state
+                    for i in range(len(proposed_items)):
+                        checkbox_key = f"validate_activity_{i+1}_{key_suffix}"
+                        if st.session_state.get(checkbox_key, False):
+                            # Récupérer les valeurs modifiées
+                            resume_key = f"activity_resume_{i}_{key_suffix}"
+                            team_key = f"activity_team_{i}_{key_suffix}"
+                            
+                            # Récupérer le team_id sélectionné et le convertir en team_nom
+                            selected_team_id = st.session_state.get(team_key, proposed_items[i].get('team_id', ''))
+                            selected_team_nom = team_id_to_nom.get(selected_team_id, proposed_items[i].get('team_nom', ''))
+                            
+                            validated_activity = {
+                                **proposed_items[i],  # Conserver les autres champs (id, etc.)
+                                "resume": st.session_state.get(resume_key, proposed_items[i].get('resume', '')),
+                                "team_nom": selected_team_nom  # Utiliser team_nom au lieu de team_id
+                            }
+                            validated.append(validated_activity)
+                
+                # Ajouter les items ajoutés manuellement
+                manual_items_key = f"manual_{validation_type}_{key_suffix}"
+                if manual_items_key in st.session_state:
+                    validated.extend(st.session_state[manual_items_key])
+                
+                if validated or rejected:
+                    api_payload = {
+                        "validation_type": validation_type,
+                        "validated_items": validated,
+                        "rejected_items": rejected,
+                        "user_action": regenerate_action
+                    }
+                    
+                    result_queue = queue.Queue()
+                    api_thread = threading.Thread(
+                        target=send_value_chain_validation_api_call,
+                        args=(st.session_state.value_chain_thread_id, api_payload, result_queue)
+                    )
+                    api_thread.start()
+                    
+                    status_placeholder = st.empty()
+                    message_index = 0
+                    while api_thread.is_alive():
+                        status_placeholder.info(["⚙️ Envoi...", "🔄 Régénération..."][message_index % 2])
+                        time.sleep(2)
+                        message_index += 1
+                    
+                    try:
+                        success, error_msg = result_queue.get(timeout=1)
+                        if success:
+                            status_placeholder.success("✅ Régénération lancée !")
+                            time.sleep(2)
+                            st.rerun()
+                        else:
+                            status_placeholder.error(f"❌ Erreur: {error_msg}")
+                    except queue.Empty:
+                        status_placeholder.error("❌ Timeout")
+
+
+def display_value_chain_workflow_progress():
+    """Affiche la progression du workflow Chaîne de valeur et gère les validations"""
+    
+    st.markdown("---")
+    st.header("🔄 Progression du Workflow Chaîne de valeur")
+    
+    # Si le workflow est déjà terminé dans session_state, afficher les résultats
+    if st.session_state.get("value_chain_workflow_completed"):
+        display_value_chain_final_results()
+        return
+    
+    # Poll le statut
+    status = poll_value_chain_workflow_status()
+    
+    if status == "running":
+        st.info("⚙️ Le workflow est en cours d'exécution...")
+        st.markdown("#### Étapes en cours :")
+        st.markdown("""
+        - 📝 Chargement des interventions
+        - 👥 Extraction des équipes
+        - 📋 Extraction des activités
+        - ⚠️ Extraction des points de friction
+        """)
+        
+        # Auto-refresh toutes les 3 secondes
+        time.sleep(3)
+        st.rerun()
+    
+    elif status == "waiting_validation":
+        workflow_state = st.session_state.get("value_chain_workflow_state", {})
+        validation_type = workflow_state.get("validation_type", "")
+        
+        if validation_type == "teams":
+            st.warning("⏸️ **Validation des équipes requise !**")
+        elif validation_type == "activities":
+            st.warning("⏸️ **Validation des activités requise !**")
+        elif validation_type == "friction_points":
+            st.warning("⏸️ **Validation des points de friction requise !**")
+        
+        display_value_chain_validation_interface()
+    
+    elif status == "completed":
+        # Récupérer l'état final
+        workflow_state = st.session_state.get("value_chain_workflow_state", {})
+        final_value_chain = workflow_state.get("final_value_chain", {})
+        value_chain_markdown = workflow_state.get("value_chain_markdown", "")
+        value_chain_json = workflow_state.get("value_chain_json", "")
+        
+        if final_value_chain:
+            st.session_state.value_chain_data = final_value_chain
+            st.session_state.value_chain_markdown = value_chain_markdown
+            st.session_state.value_chain_json = value_chain_json
+            st.session_state.value_chain_workflow_completed = True
+            
+            # Sauvegarder dans la base de données
+            if st.session_state.current_project_id:
+                try:
+                    save_agent_result(
+                        project_id=st.session_state.current_project_id,
+                        workflow_type="value_chain",
+                        result_type="value_chain",
+                        data=final_value_chain,
+                        status="validated"
+                    )
+                except Exception as e:
+                    st.warning(f"⚠️ Erreur lors de la sauvegarde en base de données: {str(e)}")
+            
+            st.success("✅ Workflow terminé avec succès !")
+            time.sleep(1)
+            st.rerun()
+        else:
+            st.warning("⚠️ Workflow terminé mais aucune donnée validée.")
+    
+    elif status == "error":
+        st.error("❌ Une erreur s'est produite dans le workflow.")
+    
+    elif status == "no_thread":
+        st.info("💡 Cliquez sur 'Lancer l'extraction de la chaîne de valeur' pour démarrer.")
+
+
+def display_value_chain_final_results():
+    """Affiche les résultats finaux de la chaîne de valeur"""
+    value_chain_markdown = st.session_state.get("value_chain_markdown", "")
+    value_chain_data = st.session_state.get("value_chain_data", {})
+    value_chain_json = st.session_state.get("value_chain_json", "")
+    validated_company_info = st.session_state.get("validated_company_info", {})
+    company_name = validated_company_info.get("nom", "l'entreprise")
+    
+    if value_chain_markdown:
+        st.markdown("---")
+        st.markdown(value_chain_markdown)
+        
+        # Boutons de téléchargement
+        if value_chain_data:
+            st.markdown("---")
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                # Télécharger en JSON
+                if value_chain_json:
+                    st.download_button(
+                        label="📥 Télécharger (JSON)",
+                        data=value_chain_json,
+                        file_name=f"chaine_valeur_{company_name.replace(' ', '_')}_{date.today().strftime('%Y%m%d')}.json",
+                        mime="application/json"
+                    )
+            
+            with col2:
+                # Télécharger en Markdown
+                st.download_button(
+                    label="📥 Télécharger (Markdown)",
+                    data=value_chain_markdown,
+                    file_name=f"chaine_valeur_{company_name.replace(' ', '_')}_{date.today().strftime('%Y%m%d')}.md",
+                    mime="text/markdown"
+                )
+            
+            with col3:
+                # Bouton pour recommencer
+                if st.button("🔄 Nouvelle analyse", type="secondary"):
+                    # Nettoyer les états
+                    st.session_state.value_chain_workflow_completed = False
+                    st.session_state.value_chain_thread_id = None
+                    st.session_state.value_chain_workflow_state = {}
+                    st.session_state.value_chain_markdown = ""
+                    st.session_state.value_chain_data = {}
+                    st.rerun()
+
+
+def display_value_chain_page():
+    """Affiche la page d'extraction de la chaîne de valeur"""
+    st.header("Chaîne de valeur")
+    
+    # Vérifier si des résultats validés existent déjà
+    if st.session_state.current_project_id:
+        has_value_chain = has_validated_results(
+            st.session_state.current_project_id,
+            "value_chain",
+            "value_chain"
+        )
+        
+        if has_value_chain:
+            # Afficher directement les résultats
+            value_chain_data = load_agent_results(
+                st.session_state.current_project_id,
+                "value_chain",
+                "value_chain",
+                "validated"
+            )
+            
+            if value_chain_data:
+                st.success(f"✅ **Chaîne de valeur identifiée**")
+                st.markdown("---")
+                
+                # Afficher le markdown si disponible
+                if "value_chain_markdown" in value_chain_data:
+                    st.markdown(value_chain_data["value_chain_markdown"])
+                else:
+                    # Afficher les données structurées
+                    teams = value_chain_data.get("teams", [])
+                    activities = value_chain_data.get("activities", [])
+                    friction_points = value_chain_data.get("friction_points", [])
+                    
+                    if teams:
+                        # Séparer les équipes métier et support
+                        teams_metier = [t for t in teams if t.get('type') == 'equipe_metier']
+                        teams_support = [t for t in teams if t.get('type') == 'equipe_support']
+                        
+                        # Grouper les friction_points par team_nom
+                        friction_by_team = {}
+                        for fp in friction_points:
+                            team_nom = fp.get('team_nom', '')
+                            if team_nom not in friction_by_team:
+                                friction_by_team[team_nom] = []
+                            friction_by_team[team_nom].append(fp)
+                        
+                        # Afficher les équipes métier
+                        if teams_metier:
+                            st.markdown("## Équipes métier")
+                            for team in teams_metier:
+                                team_nom = team.get('nom', 'N/A')
+                                team_name = team.get('nom', 'N/A')
+                                team_type = team.get('type', 'equipe_metier')
+                                team_desc = team.get('description', '')
+                                
+                                st.markdown(f"### {team_name}")
+                                st.markdown(f"*Equipe Métier*")
+                                st.markdown(team_desc)
+                                
+                                # Afficher les citations associées
+                                team_frictions = friction_by_team.get(team_nom, [])
+                                if team_frictions:
+                                    st.markdown("**Citations** :")
+                                    for fp in team_frictions:
+                                        citation = fp.get('citation', '')
+                                        description = fp.get('description', '')
+                                        st.markdown(f"- *\"{citation}\"* - {description}")
+                                
+                                st.markdown("---")
+                        
+                        # Afficher les équipes support
+                        if teams_support:
+                            st.markdown("## Équipes support")
+                            for team in teams_support:
+                                team_nom = team.get('nom', 'N/A')
+                                team_name = team.get('nom', 'N/A')
+                                team_type = team.get('type', 'equipe_support')
+                                team_desc = team.get('description', '')
+                                
+                                st.markdown(f"### {team_name}")
+                                st.markdown(f"*Equipe Support*")
+                                st.markdown(team_desc)
+                                
+                                # Afficher les citations associées
+                                team_frictions = friction_by_team.get(team_nom, [])
+                                if team_frictions:
+                                    st.markdown("**Citations** :")
+                                    for fp in team_frictions:
+                                        citation = fp.get('citation', '')
+                                        description = fp.get('description', '')
+                                        st.markdown(f"- *\"{citation}\"* - {description}")
+                                
+                                st.markdown("---")
+                
+                st.markdown("---")
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("✏️ Modifier", use_container_width=True):
+                        reject_agent_results(
+                            st.session_state.current_project_id,
+                            "value_chain",
+                            "value_chain"
+                        )
+                        st.session_state.value_chain_workflow_completed = False
+                        st.session_state.value_chain_thread_id = None
+                        st.rerun()
+                with col2:
+                    if st.button("📥 Télécharger", use_container_width=True):
+                        st.info("Utilisez les boutons de téléchargement ci-dessus")
+                
+                return
+    
+    # Vérifier si un workflow est en cours
+    if st.session_state.get("value_chain_thread_id"):
+        # Un workflow est en cours, afficher la progression
+        display_value_chain_workflow_progress()
+        return
+    
+    # Afficher le formulaire de démarrage
+    st.info("💡 Cette fonctionnalité extrait la chaîne de valeur de l'entreprise à partir des transcripts de réunions.")
+    
+    # Extraire les transcript_document_ids depuis uploaded_transcripts (chargés depuis la DB)
+    uploaded_transcripts = st.session_state.get("uploaded_transcripts", [])
+    transcript_document_ids = []
+    for t in uploaded_transcripts:
+        doc_id = t.get("document_id")
+        if doc_id is not None:
+            try:
+                transcript_document_ids.append(int(doc_id))
+            except (ValueError, TypeError):
+                st.error(f"❌ Document ID invalide: {doc_id}")
+                return
+    
+    # Sélection des documents
+    if not transcript_document_ids:
+        st.warning("⚠️ Veuillez d'abord uploader des documents transcripts.")
+        return
+    validated_company_info = st.session_state.get("validated_company_info", {})
+    
+    if not validated_company_info:
+        st.warning("⚠️ Veuillez d'abord configurer le contexte de l'entreprise.")
+        return
+    
+    # Afficher les informations
+    st.markdown("### Paramètres")
+    st.write(f"📁 **Documents transcripts**: {len(transcript_document_ids)}")
+    st.write(f"🏢 **Entreprise**: {validated_company_info.get('nom', 'N/A')}")
+    
+    # Bouton pour lancer le workflow
+    if st.button("🚀 Lancer l'extraction de la chaîne de valeur", type="primary"):
+        # Générer un thread_id
+        import uuid
+        thread_id = str(uuid.uuid4())
+        st.session_state.value_chain_thread_id = thread_id
+        
+        try:
+            # Appel API pour démarrer le workflow
+            response = requests.post(
+                f"{API_URL}/value-chain/threads/{thread_id}/runs",
+                json={
+                    "transcript_document_ids": transcript_document_ids,
+                    "company_info": validated_company_info
+                },
+                timeout=120
+            )
+            response.raise_for_status()
+            
+            st.success("✅ Workflow lancé !")
+            st.rerun()
+        
+        except Exception as e:
+            st.error(f"❌ Erreur lors du démarrage du workflow : {str(e)}")
+            st.session_state.value_chain_thread_id = None
+    
+    # Afficher la progression si un workflow est en cours
+    if st.session_state.get("value_chain_thread_id"):
+        display_value_chain_workflow_progress()
 
 
 if __name__ == "__main__":
