@@ -30,7 +30,6 @@ class ExecutiveSummaryState(TypedDict):
     workshop_document_ids: List[int]
     company_name: str
     interviewer_note: str
-    validated_speakers: List[Dict]  # Speakers validés par l'utilisateur
     # Données validées (depuis "Validation des besoins et use cases")
     extracted_needs: List[Dict]  # Besoins validés depuis la BDD
     extracted_use_cases: List[Dict]  # Use cases validés depuis la BDD
@@ -181,8 +180,7 @@ class ExecutiveSummaryWorkflow:
         interviewer_note: str = "",
         thread_id: str = None,
         validated_needs: Optional[List[Dict[str, Any]]] = None,
-        validated_use_cases: Optional[List[Dict[str, Any]]] = None,
-        validated_speakers: Optional[List[Dict[str, str]]] = None
+        validated_use_cases: Optional[List[Dict[str, Any]]] = None
     ) -> Dict[str, Any]:
         """
         Exécute le workflow.
@@ -195,7 +193,6 @@ class ExecutiveSummaryWorkflow:
             thread_id: ID du thread pour la persistance
             validated_needs: Besoins validés par l'utilisateur (depuis "Validation des besoins et use cases")
             validated_use_cases: Cas d'usage validés par l'utilisateur (depuis "Validation des besoins et use cases")
-            validated_speakers: Speakers validés par l'utilisateur (optionnel)
             
         Returns:
             État final du workflow
@@ -206,7 +203,6 @@ class ExecutiveSummaryWorkflow:
             "workshop_document_ids": workshop_document_ids or [],
             "company_name": company_name,
             "interviewer_note": interviewer_note,
-            "validated_speakers": validated_speakers or [],
             "extracted_needs": validated_needs or [],
             "extracted_use_cases": validated_use_cases or [],
             "transcript_enjeux_citations": [],
@@ -336,12 +332,11 @@ class ExecutiveSummaryWorkflow:
         print(f"\n📝 [EXECUTIVE] transcript_enjeux_node - DÉBUT")
         try:
             transcript_document_ids = state.get("transcript_document_ids", [])
-            validated_speakers = state.get("validated_speakers", [])
             if not transcript_document_ids:
                 print("⚠️ Aucun document transcript")
                 return {"transcript_enjeux_citations": []}
             
-            citations = self.transcript_enjeux_agent.extract_citations(transcript_document_ids, validated_speakers=validated_speakers)
+            citations = self.transcript_enjeux_agent.extract_citations(transcript_document_ids)
             print(f"✅ {len(citations)} citations d'enjeux extraites")
             
             return {"transcript_enjeux_citations": citations}
@@ -373,12 +368,11 @@ class ExecutiveSummaryWorkflow:
         print(f"\n📝 [EXECUTIVE] transcript_maturite_node - DÉBUT")
         try:
             transcript_document_ids = state.get("transcript_document_ids", [])
-            validated_speakers = state.get("validated_speakers", [])
             if not transcript_document_ids:
                 print("⚠️ Aucun document transcript")
                 return {"transcript_maturite_citations": []}
             
-            citations = self.transcript_maturite_agent.extract_citations(transcript_document_ids, validated_speakers=validated_speakers)
+            citations = self.transcript_maturite_agent.extract_citations(transcript_document_ids)
             print(f"✅ {len(citations)} citations de maturité extraites")
             
             return {"transcript_maturite_citations": citations}
@@ -750,17 +744,14 @@ class ExecutiveSummaryWorkflow:
             return "continue_recommendations"
     
     def _format_citations(self, citations: List[Dict[str, Any]]) -> str:
-        """Formate les citations pour le prompt, triées par timestamp puis par speaker"""
+        """Formate les citations pour le prompt, triées par speaker"""
         if not citations:
             return "Aucune citation disponible"
         
-        # Trier les citations : d'abord par timestamp (si disponible), puis par speaker
+        # Trier les citations par speaker
         sorted_citations = sorted(
             citations,
-            key=lambda c: (
-                c.get("timestamp", "") or "",  # Timestamp en premier
-                c.get("speaker", "").lower()  # Puis speaker alphabétique
-            )
+            key=lambda c: c.get("speaker", "").lower()
         )
         
         formatted = []
@@ -795,16 +786,15 @@ class ExecutiveSummaryWorkflow:
         return "\n".join(formatted)
     
     def _format_maturite_citations(self, citations: List[Dict[str, Any]]) -> str:
-        """Formate les citations de maturité pour le prompt, triées par type_info puis par timestamp"""
+        """Formate les citations de maturité pour le prompt, triées par type_info puis par speaker"""
         if not citations:
             return "Aucune citation de maturité disponible"
         
-        # Trier les citations : d'abord par type_info, puis par timestamp, puis par speaker
+        # Trier les citations : d'abord par type_info, puis par speaker
         sorted_citations = sorted(
             citations,
             key=lambda c: (
                 c.get("type_info", "").lower(),  # Type d'info en premier
-                c.get("timestamp", "") or "",  # Puis timestamp
                 c.get("speaker", "").lower()  # Puis speaker
             )
         )

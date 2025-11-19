@@ -316,7 +316,7 @@ INSTRUCTIONS :
 1. Identifie les interventions qui mentionnent des enjeux stratégiques, des défis organisationnels, des transformations nécessaires
 2. Focus sur : vision stratégique, défis majeurs, enjeux de transformation, besoins stratégiques
 3. Exclut les citations purement opérationnelles ou techniques sans dimension stratégique
-4. Pour chaque citation, indique le speaker, le contexte et l'horodatage si disponible
+4. Pour chaque citation, indique le speaker
 
 Extrait uniquement les citations qui sont pertinentes pour identifier les ENJEUX STRATÉGIQUES de l'IA.
 """
@@ -338,7 +338,7 @@ INSTRUCTIONS :
    - 'processus_automatises' : processus déjà automatisés
    - 'gestion_donnees' : qualité, centralisation, formats des données
    - 'culture_numérique' : compétences, formation, ouverture au changement
-3. Indique le speaker, le contexte et l'horodatage si disponible
+3. Indique le speaker
 
 Extrait uniquement les citations qui sont pertinentes pour évaluer la MATURITÉ IA.
 """

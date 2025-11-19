@@ -66,8 +66,6 @@ class CitationEnjeux(BaseModel):
     """Modèle pour une citation liée aux enjeux stratégiques"""
     citation: str = Field(description="Citation textuelle")
     speaker: str = Field(description="Auteur de la citation")
-    timestamp: Optional[str] = Field(description="Horodatage si disponible", default=None)
-    contexte: str = Field(description="Contexte de la citation", default="")
 
 
 class CitationsEnjeuxResponse(BaseModel):
@@ -79,9 +77,7 @@ class CitationMaturite(BaseModel):
     """Modèle pour une citation liée à la maturité IA"""
     citation: str = Field(description="Citation textuelle")
     speaker: str = Field(description="Auteur de la citation")
-    timestamp: Optional[str] = Field(description="Horodatage si disponible", default=None)
     type_info: str = Field(description="Type d'information: 'outils_digitaux', 'processus_automatises', 'gestion_donnees', 'culture_numérique'")
-    contexte: str = Field(description="Contexte de la citation", default="")
 
 
 class CitationsMaturiteResponse(BaseModel):

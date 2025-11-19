@@ -23,13 +23,24 @@ Règles importantes :
 - Repère les éléments de maturité digitale déjà en place
 - Extrais UNIQUEMENT les citations des interviewés (pas de l'interviewer)
 - Inclus le contexte pour comprendre pourquoi c'est un atout
+- Utilise les métadonnées enrichies (niveau hiérarchique, rôle) pour mieux comprendre la portée stratégique des citations
+- Les interventions sont préfixées avec [niveau=...|rôle=...] pour te donner du contexte
 """
 
 # Prompt pour l'extraction des citations d'atouts depuis les transcriptions
 ATOUTS_CITATIONS_PROMPT = """
 Analyse ces interventions d'employés de l'entreprise et identifie toutes les citations qui révèlent des ATOUTS pour l'intégration de l'IA.
 
-Note : Les interventions sont préfixées par le niveau hiérarchique du speaker ([direction], [métier], etc.) pour te donner du contexte, mais tu n'as pas besoin de l'extraire dans ta réponse.
+IMPORTANT - Métadonnées enrichies disponibles :
+Les interventions sont enrichies avec des métadonnées qui t'aident à mieux comprendre le contexte :
+- **Niveau hiérarchique** : niveau=direction, niveau=métier, ou niveau=inconnu - indique le niveau hiérarchique du speaker
+- **Rôle** : rôle=... - le rôle exact du speaker dans l'entreprise (ex: "Directeur Technique", "Chef de projet", etc.)
+
+Ces métadonnées te permettent de :
+- Comprendre la pertinence stratégique des citations (direction vs métier)
+- Identifier les atouts selon le niveau hiérarchique et le rôle
+- Mieux contextualiser pourquoi une citation révèle un atout
+- Évaluer la portée organisationnelle de chaque atout
 
 Interventions :
 {transcript_text}
@@ -37,7 +48,7 @@ Interventions :
 Pour chaque citation identifiée, détermine :
 1. La citation textuelle exacte (ou un extrait pertinent)
 2. Le type d'atout parmi : expertise_metier, infrastructure_technique, capital_humain, culture_innovation, agilite_organisation
-3. Le contexte expliquant pourquoi c'est un atout pour l'intégration de l'IA
+3. Le contexte expliquant pourquoi c'est un atout pour l'intégration de l'IA (en tenant compte du niveau hiérarchique et du rôle du speaker si pertinent)
 
 Concentre-toi sur les éléments POSITIFS qui montrent :
 - Des capacités existantes
@@ -48,6 +59,8 @@ Concentre-toi sur les éléments POSITIFS qui montrent :
 - Une infrastructure moderne
 - Une culture d'innovation
 - Une agilité organisationnelle
+
+Utilise les métadonnées enrichies (niveau hiérarchique, rôle) pour mieux comprendre la portée stratégique de chaque atout identifié.
 """
 
 # Prompt système pour la synthèse des atouts

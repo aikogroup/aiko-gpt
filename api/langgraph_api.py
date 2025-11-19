@@ -93,7 +93,6 @@ class ExecutiveSummaryInput(BaseModel):
     interviewer_note: str = ""
     validated_needs: Optional[List[Dict[str, Any]]] = None
     validated_use_cases: Optional[List[Dict[str, Any]]] = None
-    validated_speakers: Optional[List[Dict[str, str]]] = None
 
 
 class RappelMissionInput(BaseModel):
@@ -936,8 +935,7 @@ async def create_executive_run(thread_id: str, workflow_input: ExecutiveSummaryI
             interviewer_note=workflow_input.interviewer_note,
             thread_id=thread_id,
             validated_needs=workflow_input.validated_needs,
-            validated_use_cases=workflow_input.validated_use_cases,
-            validated_speakers=workflow_input.validated_speakers
+            validated_use_cases=workflow_input.validated_use_cases
         )
         
         # Mettre à jour l'état

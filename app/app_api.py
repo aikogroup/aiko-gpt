@@ -2942,6 +2942,9 @@ def display_recommendations_section():
         return
     
     # Vérifier si des besoins/use cases validés existent dans "Validation des besoins et use cases"
+    has_word_validation_needs = False
+    has_word_validation_use_cases = False
+    
     if st.session_state.current_project_id:
         has_word_validation_needs = has_validated_results(
             st.session_state.current_project_id,
@@ -2967,127 +2970,40 @@ def display_recommendations_section():
         st.warning("⚠️ Veuillez d'abord saisir le nom de l'entreprise dans la section 'Upload de documents'.")
         return
     
-    # Upload fichier Word
-    st.subheader("📄 Rapport Word (Généré précédemment)")
-    word_file = st.file_uploader(
-        "Uploadez le rapport Word généré (fichier .docx)",
-        type=["docx"],
-        key="word_report_upload"
-    )
+    # Charger les besoins et use cases validés depuis la base de données
+    validated_needs = []
+    validated_use_cases = []
     
-    if not word_file:
-        st.warning("⚠️ Veuillez uploader le fichier Word du rapport généré précédemment.")
-        return
-    
-    # Vérifier si le fichier a changé
-    current_file_name = word_file.name if word_file else None
-    previous_file_name = st.session_state.get("word_file_name")
-    
-    if current_file_name != previous_file_name:
-        # Le fichier a changé, réinitialiser l'extraction
-        st.session_state.word_extraction_validated = False
-        st.session_state.word_extraction_data = None
-        st.session_state.word_path = None
-        st.session_state.word_file_name = current_file_name
-    
-    # Vérifier si l'extraction a déjà été faite et validée
-    if st.session_state.get("word_extraction_validated") and st.session_state.get("word_extraction_data"):
-        st.success("✅ Extraction validée")
-        if st.button("🔄 Ré-extraire le fichier Word", type="secondary"):
-            st.session_state.word_extraction_validated = False
-            st.session_state.word_extraction_data = None
-            st.session_state.word_path = None
-            st.rerun()
-    else:
-        # Upload et extraction du fichier Word
-        if st.session_state.get("word_path") is None:
-            with st.spinner("📤 Upload du fichier Word..."):
-                try:
-                    word_paths = upload_files_to_api([word_file])
-                    # Le fichier Word sera dans file_paths (tous les fichiers uploadés)
-                    all_paths = word_paths.get("file_paths", [])
-                    if all_paths:
-                        word_path = all_paths[0]  # Prendre le premier fichier uploadé
-                    else:
-                        # Fallback: chercher dans workshop (car l'API met les .docx dans workshop)
-                        workshop_paths = word_paths.get("workshop", [])
-                        if workshop_paths:
-                            word_path = workshop_paths[0]
-                        else:
-                            word_path = None
-                    
-                    if not word_path:
-                        st.error("❌ Erreur lors de l'upload du fichier Word")
-                        return
-                    
-                    st.session_state.word_path = word_path
-                    st.session_state.word_file_name = current_file_name
-                except Exception as e:
-                    st.error(f"❌ Erreur lors de l'upload du fichier Word: {str(e)}")
-                    return
-        else:
-            word_path = st.session_state.word_path
-        
-        # Extraction des données du Word via l'API
-        if st.session_state.get("word_extraction_data") is None:
-            # Option pour forcer l'extraction LLM
-            force_llm = st.session_state.get("force_llm_extraction", False)
-            
-            with st.spinner("🔍 Extraction des données du rapport Word..."):
-                try:
-                    # Appeler l'API pour extraire les données (le fichier est sur le serveur API)
-                    response = requests.post(
-                        f"{API_URL}/word/extract",
-                        json={
-                            "word_path": word_path,
-                            "force_llm": force_llm
-                        },
-                        timeout=300  # 5 minutes max pour l'extraction
-                    )
-                    response.raise_for_status()
-                    extracted_data = response.json()
-                    st.session_state.word_extraction_data = extracted_data
-                    
-                    # Afficher la méthode d'extraction utilisée
-                    extraction_method = extracted_data.get("extraction_method", "unknown")
-                    if extraction_method == "structured":
-                        st.success("✅ Extraction réussie via parsing structuré")
-                    elif extraction_method == "llm_fallback":
-                        st.info("ℹ️ Extraction réussie via LLM (fallback automatique)")
-                    elif extraction_method == "llm_forced":
-                        st.info("🤖 Extraction réussie via LLM (forcé par l'utilisateur)")
-                    
-                except Exception as e:
-                    st.error(f"❌ Erreur lors de l'extraction: {str(e)}")
-                    return
-        
-        # Afficher l'interface de validation
-        executive_validation = StreamlitExecutiveValidation()
-        
-        validation_result = executive_validation.display_word_extraction_for_validation(
-            st.session_state.word_extraction_data,
-            key_suffix="word_extraction"
+    if st.session_state.current_project_id and has_word_validation_needs:
+        needs_data = load_agent_results(
+            st.session_state.current_project_id,
+            "word_validation",
+            "needs",
+            "validated"
         )
-        
-        # Bouton pour ré-extraire avec LLM si l'extraction structurée n'a pas donné de bons résultats
-        extraction_method = st.session_state.word_extraction_data.get("extraction_method", "unknown")
-        if extraction_method == "structured":
-            st.markdown("---")
-            col1, col2 = st.columns([3, 1])
-            with col2:
-                if st.button("🤖 Ré-extraire avec LLM", help="Force l'extraction via LLM si les résultats ne sont pas satisfaisants"):
-                    st.session_state.force_llm_extraction = True
-                    st.session_state.word_extraction_data = None
-                    st.rerun()
-        
-        if validation_result:
-            # Stocker les données validées
-            st.session_state.word_extraction_validated = True
-            st.session_state.validated_word_extraction = validation_result
-            st.rerun()
-        
-        # Ne pas afficher le reste tant que l'extraction n'est pas validée
-        return
+        if needs_data:
+            validated_needs = needs_data.get("needs", [])
+    
+    if has_word_validation_use_cases:
+        use_cases_data = load_agent_results(
+            st.session_state.current_project_id,
+            "word_validation",
+            "use_cases",
+            "validated"
+        )
+        if use_cases_data:
+            validated_use_cases = use_cases_data.get("use_cases", [])
+    
+    # Afficher un résumé des données chargées
+    st.success("✅ Besoins et use cases validés chargés depuis 'Validation des besoins et use cases'")
+    st.markdown("---")
+    
+    if validated_needs:
+        st.info(f"📋 {len(validated_needs)} besoins validés")
+    if validated_use_cases:
+        st.info(f"💼 {len(validated_use_cases)} use cases validés")
+    
+    st.markdown("---")
     
     # Note de l'intervieweur
     st.subheader("📝 Note de l'Intervieweur")
@@ -3101,15 +3017,7 @@ def display_recommendations_section():
 
     # Bouton de démarrage
     st.markdown("---")
-    if st.button("🚀 Démarrer la Génération Executive Summary", type="primary", width="stretch"):
-        # Récupérer les données validées (depuis word_validation ou depuis validated_word_extraction)
-        if validated_needs is None or validated_use_cases is None:
-            validated_data = st.session_state.get("validated_word_extraction", {})
-            if not validated_needs:
-                validated_needs = validated_data.get("validated_needs", [])
-            if not validated_use_cases:
-                validated_use_cases = validated_data.get("validated_use_cases", [])
-        
+    if st.button("🚀 Démarrer la Génération Executive Summary", type="primary", use_container_width=True):
         # Vérifier que les données validées sont présentes
         if not validated_needs and not validated_use_cases:
             st.error("❌ Erreur : Aucune donnée validée trouvée. Veuillez d'abord valider les besoins et use cases dans 'Validation des besoins et use cases'.")
@@ -3141,11 +3049,6 @@ def display_recommendations_section():
                 thread_id = str(uuid.uuid4())
                 st.session_state.executive_thread_id = thread_id
                 
-                # Préparer les speakers validés depuis uploaded_transcripts
-                validated_speakers = []
-                for transcript in st.session_state.get("uploaded_transcripts", []):
-                    validated_speakers.extend(transcript.get("speakers", []))
-                
                 # Appel API pour démarrer le workflow avec les données validées
                 response = requests.post(
                     f"{API_URL}/executive-summary/threads/{thread_id}/runs",
@@ -3155,8 +3058,7 @@ def display_recommendations_section():
                         "company_name": st.session_state.company_name,
                         "interviewer_note": interviewer_note or "",
                         "validated_needs": validated_needs,
-                        "validated_use_cases": validated_use_cases,
-                        "validated_speakers": validated_speakers
+                        "validated_use_cases": validated_use_cases
                     }
                 )
                 
@@ -4723,10 +4625,17 @@ def display_atouts_entreprise():
         try:
             with st.spinner("Démarrage du workflow... Extraction et analyse en cours..."):
                 # Récupérer les document_ids depuis uploaded_transcripts
-                transcript_document_ids = [
-                    t.get("document_id") for t in uploaded_transcripts 
-                    if t.get("document_id") is not None
-                ]
+                # S'assurer qu'ils sont des entiers
+                transcript_document_ids = []
+                for t in uploaded_transcripts:
+                    doc_id = t.get("document_id")
+                    if doc_id is not None:
+                        # Convertir en int si c'est une string ou un autre type
+                        try:
+                            transcript_document_ids.append(int(doc_id))
+                        except (ValueError, TypeError):
+                            st.error(f"❌ Document ID invalide: {doc_id}")
+                            return
                 
                 if not transcript_document_ids:
                     st.error("❌ Aucun document transcript trouvé dans la base de données. Veuillez d'abord uploader et valider les transcripts.")
@@ -4734,11 +4643,32 @@ def display_atouts_entreprise():
                 
                 # Récupérer les noms des interviewers
                 interviewer_names = load_interviewers()
+                if interviewer_names is None:
+                    interviewer_names = []
                 
                 # Préparer les speakers validés depuis uploaded_transcripts
                 validated_speakers = []
                 for transcript in uploaded_transcripts:
-                    validated_speakers.extend(transcript.get("speakers", []))
+                    speakers = transcript.get("speakers", [])
+                    if speakers:
+                        # S'assurer que chaque speaker est un dict avec des strings
+                        for speaker in speakers:
+                            if isinstance(speaker, dict):
+                                validated_speakers.append({
+                                    "name": str(speaker.get("name", "")),
+                                    "role": str(speaker.get("role", ""))
+                                })
+                
+                # S'assurer que additional_context est une string et non None
+                if additional_context is None:
+                    additional_context = ""
+                else:
+                    additional_context = str(additional_context)
+                
+                # S'assurer que validated_company_info est un dictionnaire
+                if not isinstance(validated_company_info, dict):
+                    st.error("❌ Les informations de l'entreprise ne sont pas valides. Veuillez les valider à nouveau dans 'Contexte de l'entreprise'.")
+                    return
                 
                 # Appeler l'API pour démarrer le workflow avec le contexte
                 response = requests.post(
@@ -4746,9 +4676,9 @@ def display_atouts_entreprise():
                     json={
                         "transcript_document_ids": transcript_document_ids,
                         "company_info": validated_company_info,
-                        "interviewer_names": interviewer_names,
+                        "interviewer_names": interviewer_names if interviewer_names else None,
                         "atouts_additional_context": additional_context,
-                        "validated_speakers": validated_speakers
+                        "validated_speakers": validated_speakers if validated_speakers else None
                     },
                     timeout=600
                 )
@@ -4758,6 +4688,23 @@ def display_atouts_entreprise():
                 time.sleep(1)
                 st.rerun()
                     
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 422:
+                # Erreur de validation - afficher les détails
+                try:
+                    error_details = e.response.json()
+                    detail_msg = error_details.get("detail", "Erreur de validation")
+                    if isinstance(detail_msg, list):
+                        # Format FastAPI pour les erreurs de validation
+                        errors = "\n".join([f"- {err.get('loc', [])}: {err.get('msg', '')}" for err in detail_msg])
+                        st.error(f"❌ Erreur de validation des données :\n{errors}")
+                    else:
+                        st.error(f"❌ Erreur de validation : {detail_msg}")
+                except:
+                    st.error(f"❌ Erreur 422 : Les données envoyées ne sont pas valides. Détails : {str(e)}")
+            else:
+                st.error(f"❌ Erreur HTTP {e.response.status_code} : {str(e)}")
+            st.session_state.atouts_thread_id = None
         except requests.exceptions.Timeout:
             st.error("❌ La requête a expiré. Le traitement prend trop de temps. Veuillez réessayer.")
             st.session_state.atouts_thread_id = None

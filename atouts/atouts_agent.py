@@ -214,17 +214,24 @@ class AtoutsAgent:
             return AtoutsResponse(atouts=[])
     
     def _format_interventions(self, interventions: List[Dict[str, Any]]) -> str:
-        """Formate les interventions pour l'analyse LLM avec contexte hiérarchique"""
+        """Formate les interventions pour l'analyse LLM avec métadonnées enrichies (role et level)"""
         formatted = []
         
         for intervention in interventions:
             text = intervention.get("text", "")
             speaker_level = intervention.get("speaker_level", "")
+            speaker_role = intervention.get("speaker_role", "")
             
-            # Donner le contexte hiérarchique au LLM pour qu'il comprenne mieux
-            # mais sans lui demander de ré-extraire cette info
+            # Construire un préfixe informatif avec role et level (sans timestamp ni nom)
+            metadata_parts = []
             if speaker_level:
-                formatted.append(f"[{speaker_level}] {text}")
+                metadata_parts.append(f"niveau={speaker_level}")
+            if speaker_role:
+                metadata_parts.append(f"rôle={speaker_role}")
+            
+            if metadata_parts:
+                prefix = "[" + "|".join(metadata_parts) + "]"
+                formatted.append(f"{prefix} {text}")
             else:
                 formatted.append(text)
         

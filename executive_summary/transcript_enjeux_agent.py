@@ -38,13 +38,12 @@ class TranscriptEnjeuxAgent:
         # Réutiliser TranscriptAgent pour le parsing de base
         self.transcript_agent = TranscriptAgent(openai_api_key=api_key, interviewer_names=interviewer_names)
     
-    def extract_citations(self, document_ids: List[int], validated_speakers: Optional[List[Dict[str, str]]] = None) -> List[Dict[str, Any]]:
+    def extract_citations(self, document_ids: List[int]) -> List[Dict[str, Any]]:
         """
         Extrait les citations liées aux enjeux stratégiques depuis plusieurs documents transcript dans la BDD.
         
         Args:
             document_ids: Liste des IDs de documents transcript dans la base de données
-            validated_speakers: Liste optionnelle des speakers validés par l'utilisateur
             
         Returns:
             Liste des citations extraites avec métadonnées
@@ -58,7 +57,6 @@ class TranscriptEnjeuxAgent:
                 # Utiliser TranscriptAgent pour charger depuis la BDD et filtrer (SANS analyse sémantique)
                 result = self.transcript_agent.process_from_db(
                     document_id=document_id,
-                    validated_speakers=validated_speakers,
                     filter_interviewers=True
                 )
                 
@@ -96,15 +94,12 @@ class TranscriptEnjeuxAgent:
         
         for i, intervention in enumerate(interventions):
             speaker = intervention.get("speaker", "Unknown")
-            timestamp = intervention.get("timestamp", "")
             text = intervention.get("text", "")
             speaker_type = intervention.get("speaker_type", "")
             
             metadata = f"[{i}]"
             if speaker_type:
                 metadata += f" type={speaker_type}"
-            if timestamp:
-                metadata += f" {timestamp}"
             
             text_parts.append(f"{metadata} {speaker}: {text}")
         
@@ -147,8 +142,6 @@ class TranscriptEnjeuxAgent:
                     enriched_citation = {
                         "citation": citation_data.get("citation", ""),
                         "speaker": citation_data.get("speaker", matching_intervention.get("speaker", "") if matching_intervention else ""),
-                        "timestamp": citation_data.get("timestamp", matching_intervention.get("timestamp", "") if matching_intervention else ""),
-                        "contexte": citation_data.get("contexte", ""),
                         "speaker_type": matching_intervention.get("speaker_type", "") if matching_intervention else "",
                         "speaker_level": matching_intervention.get("speaker_level", "") if matching_intervention else ""
                     }
