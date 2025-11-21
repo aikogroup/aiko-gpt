@@ -47,7 +47,26 @@ def load_project_list() -> List[Dict[str, Any]]:
                 for p in projects
             ]
     except Exception as e:
-        st.error(f"❌ Erreur lors du chargement des projets: {str(e)}")
+        error_str = str(e)
+        # Détecter les erreurs de connexion réseau/DNS
+        if "could not translate host name" in error_str or "Name or service not known" in error_str:
+            st.error("❌ **Erreur de connexion à la base de données**")
+            st.warning("""
+            **Problème de résolution DNS/Connexion réseau détecté**
+            
+            Causes possibles :
+            - Problème de connexion Internet
+            - URL de base de données Supabase incorrecte ou expirée
+            - Problème DNS temporaire
+            
+            **Solutions :**
+            1. Vérifiez votre connexion Internet
+            2. Vérifiez la variable d'environnement `DATABASE_URL` dans votre fichier `.env`
+            3. Si vous utilisez Supabase, vérifiez que l'URL est correcte et que le projet est actif
+            4. Pour utiliser une base de données locale, utilisez : `postgresql://aiko_user:aiko_password@localhost:5432/aiko_db`
+            """)
+        else:
+            st.error(f"❌ Erreur lors du chargement des projets: {error_str}")
         return []
 
 

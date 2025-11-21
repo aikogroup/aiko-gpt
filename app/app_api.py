@@ -84,9 +84,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Chemin vers le fichier de configuration des intervieweurs
-CONFIG_DIR = Path(__file__).parent.parent / "config"
-INTERVIEWERS_CONFIG_FILE = CONFIG_DIR / "interviewers.json"
+# Interviewers par défaut (utilisés si la BDD est vide)
 DEFAULT_INTERVIEWERS = ["Christella Umuhoza", "Adrien Fabry"]
 
 # ==================== AUTHENTIFICATION ====================
@@ -196,33 +194,43 @@ def display_login_page():
 
 def load_interviewers() -> List[str]:
     """
-    Charge la liste des intervieweurs depuis le fichier JSON.
+    Charge la liste des intervieweurs depuis la base de données.
     
     Returns:
         Liste des noms d'intervieweurs
     """
     try:
-        if INTERVIEWERS_CONFIG_FILE.exists():
-            with open(INTERVIEWERS_CONFIG_FILE, 'r', encoding='utf-8') as f:
-                config = json.load(f)
-                interviewers = config.get("interviewers", DEFAULT_INTERVIEWERS)
-                # Si la liste est vide, utiliser les valeurs par défaut
-                if not interviewers:
-                    interviewers = DEFAULT_INTERVIEWERS
-                    save_interviewers(interviewers)
-                return interviewers
-        else:
-            # Créer le fichier avec les valeurs par défaut
-            CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-            save_interviewers(DEFAULT_INTERVIEWERS)
-            return DEFAULT_INTERVIEWERS
+        from database.repository import SpeakerRepository
+        from database.db import get_db_context
+        
+        with get_db_context() as db:
+            # Récupérer tous les interviewers globaux (project_id = NULL)
+            global_interviewers = SpeakerRepository.get_interviewers(db)
+            
+            if global_interviewers:
+                # Retourner les noms des interviewers depuis la BDD
+                return [speaker.name for speaker in global_interviewers]
+            else:
+                # Si aucun interviewer en BDD, créer les interviewers par défaut
+                default_interviewers = []
+                for name in DEFAULT_INTERVIEWERS:
+                    SpeakerRepository.get_or_create_speaker(
+                        db=db,
+                        name=name,
+                        role=None,
+                        level=None,
+                        speaker_type="interviewer",
+                        project_id=None  # NULL pour interviewers globaux
+                    )
+                    default_interviewers.append(name)
+                return default_interviewers
     except Exception as e:
         st.error(f"❌ Erreur lors du chargement des intervieweurs : {str(e)}")
         return DEFAULT_INTERVIEWERS
 
 def save_interviewers(interviewers: List[str]) -> bool:
     """
-    Sauvegarde la liste des intervieweurs dans le fichier JSON.
+    Sauvegarde la liste des intervieweurs dans la base de données.
     
     Args:
         interviewers: Liste des noms d'intervieweurs à sauvegarder
@@ -231,11 +239,45 @@ def save_interviewers(interviewers: List[str]) -> bool:
         True si la sauvegarde a réussi, False sinon
     """
     try:
-        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-        config = {"interviewers": interviewers}
-        with open(INTERVIEWERS_CONFIG_FILE, 'w', encoding='utf-8') as f:
-            json.dump(config, f, ensure_ascii=False, indent=2)
-        return True
+        from database.repository import SpeakerRepository
+        from database.db import get_db_context
+        from database.models import Transcript
+        
+        with get_db_context() as db:
+            # Normaliser les noms (strip)
+            interviewers_normalized = [name.strip() for name in interviewers if name.strip()]
+            
+            # Récupérer les interviewers existants
+            existing_interviewers = SpeakerRepository.get_interviewers(db)
+            existing_names = {speaker.name for speaker in existing_interviewers}
+            
+            # Créer ou mettre à jour les interviewers de la liste
+            for name in interviewers_normalized:
+                SpeakerRepository.get_or_create_speaker(
+                    db=db,
+                    name=name,
+                    role=None,
+                    level=None,
+                    speaker_type="interviewer",
+                    project_id=None  # NULL pour interviewers globaux
+                )
+            
+            # Supprimer les interviewers qui ne sont plus dans la liste
+            # (mais seulement s'ils n'ont pas de transcripts associés)
+            for speaker in existing_interviewers:
+                if speaker.name not in interviewers_normalized:
+                    # Vérifier si le speaker a des transcripts associés
+                    transcript_count = db.query(Transcript).filter(
+                        Transcript.speaker_id == speaker.id
+                    ).count()
+                    
+                    if transcript_count == 0:
+                        # Pas de transcripts, on peut le supprimer
+                        db.delete(speaker)
+                    # Sinon, on le garde (il a des transcripts historiques)
+            
+            db.commit()
+            return True
     except Exception as e:
         st.error(f"❌ Erreur lors de la sauvegarde des intervieweurs : {str(e)}")
         return False
@@ -1177,6 +1219,135 @@ def main():
         
         st.markdown("------")
         
+        # Bouton de suppression de projet (si un projet est sélectionné)
+        if st.session_state.current_project_id:
+            projects = load_project_list()
+            current_project = next(
+                (p for p in projects if p['id'] == st.session_state.current_project_id),
+                None
+            )
+            
+            if current_project:
+                project_name = current_project['company_name']
+                
+                # Gérer l'état de confirmation
+                if 'confirm_delete_project' not in st.session_state:
+                    st.session_state.confirm_delete_project = False
+                
+                if not st.session_state.confirm_delete_project:
+                    # Premier clic : afficher le bouton de suppression
+                    if st.button("🗑️ Supprimer les données du projet", use_container_width=True, key="delete_project_button"):
+                        st.session_state.confirm_delete_project = True
+                        st.rerun()
+                else:
+                    # Mode confirmation
+                    st.warning(f"⚠️ Vous allez supprimer le projet '{project_name}' et toutes ses données")
+                    st.warning("⚠️ Cette action est irréversible !")
+                    
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        if st.button("✅ Confirmer", key="confirm_delete_yes", use_container_width=True, type="primary"):
+                            try:
+                                from database.repository import ProjectRepository
+                                from database.db import get_db_context
+                                
+                                project_id = st.session_state.current_project_id
+                                
+                                with get_db_context() as db:
+                                    success = ProjectRepository.delete(db, project_id)
+                                    
+                                    if success:
+                                        # Réinitialiser TOUTES les variables de session liées au projet
+                                        st.session_state.current_project_id = None
+                                        st.session_state.current_project = None
+                                        st.session_state.project_loaded = False
+                                        
+                                        # Réinitialiser les uploads
+                                        if 'uploaded_transcripts' in st.session_state:
+                                            st.session_state.uploaded_transcripts = []
+                                        if 'uploaded_workshops' in st.session_state:
+                                            st.session_state.uploaded_workshops = []
+                                        
+                                        # Réinitialiser les informations de l'entreprise
+                                        if 'validated_company_info' in st.session_state:
+                                            st.session_state.validated_company_info = None
+                                        if 'company_name' in st.session_state:
+                                            st.session_state.company_name = ""
+                                        if 'company_url' in st.session_state:
+                                            st.session_state.company_url = ""
+                                        if 'company_description' in st.session_state:
+                                            st.session_state.company_description = ""
+                                        
+                                        # Réinitialiser les workflows
+                                        if 'thread_id' in st.session_state:
+                                            st.session_state.thread_id = None
+                                        if 'workflow_status' in st.session_state:
+                                            st.session_state.workflow_status = None
+                                        if 'workflow_state' in st.session_state:
+                                            st.session_state.workflow_state = {}
+                                        
+                                        # Réinitialiser les workflows Executive Summary
+                                        if 'executive_thread_id' in st.session_state:
+                                            st.session_state.executive_thread_id = None
+                                        if 'executive_workflow_status' in st.session_state:
+                                            st.session_state.executive_workflow_status = None
+                                        if 'executive_workflow_state' in st.session_state:
+                                            st.session_state.executive_workflow_state = {}
+                                        if 'executive_final_results' in st.session_state:
+                                            st.session_state.executive_final_results = None
+                                        if 'executive_final_results_cached' in st.session_state:
+                                            st.session_state.executive_final_results_cached = False
+                                        
+                                        # Réinitialiser les workflows Value Chain
+                                        if 'value_chain_thread_id' in st.session_state:
+                                            st.session_state.value_chain_thread_id = None
+                                        if 'value_chain_workflow_status' in st.session_state:
+                                            st.session_state.value_chain_workflow_status = None
+                                        if 'value_chain_workflow_state' in st.session_state:
+                                            st.session_state.value_chain_workflow_state = {}
+                                        
+                                        # Réinitialiser les workflows Atouts
+                                        if 'atouts_thread_id' in st.session_state:
+                                            st.session_state.atouts_thread_id = None
+                                        if 'atouts_workflow_status' in st.session_state:
+                                            st.session_state.atouts_workflow_status = None
+                                        if 'atouts_workflow_state' in st.session_state:
+                                            st.session_state.atouts_workflow_state = {}
+                                        
+                                        # Réinitialiser les résultats de recherche web
+                                        if 'web_search_results' in st.session_state:
+                                            st.session_state.web_search_results = None
+                                        if 'trigger_web_search' in st.session_state:
+                                            st.session_state.trigger_web_search = False
+                                        
+                                        # Réinitialiser les données validées
+                                        if 'validated_needs' in st.session_state:
+                                            st.session_state.validated_needs = []
+                                        if 'validated_use_cases' in st.session_state:
+                                            st.session_state.validated_use_cases = []
+                                        if 'validated_challenges' in st.session_state:
+                                            st.session_state.validated_challenges = []
+                                        if 'validated_recommendations' in st.session_state:
+                                            st.session_state.validated_recommendations = []
+                                        
+                                        # Retourner à la page d'accueil
+                                        st.session_state.current_page = "Accueil"
+                                        
+                                        st.session_state.confirm_delete_project = False
+                                        st.success(f"✅ Projet '{project_name}' supprimé avec succès")
+                                        time.sleep(1)
+                                        st.rerun()
+                                    else:
+                                        st.error("❌ Erreur lors de la suppression du projet")
+                                        st.session_state.confirm_delete_project = False
+                            except Exception as e:
+                                st.error(f"❌ Erreur lors de la suppression: {str(e)}")
+                                st.session_state.confirm_delete_project = False
+                    with col2:
+                        if st.button("❌ Annuler", key="cancel_delete_project", use_container_width=True):
+                            st.session_state.confirm_delete_project = False
+                            st.rerun()
+        
         # Bouton de déconnexion
         if st.button("🚪 Se déconnecter", use_container_width=True, key="logout_button"):
             # Réinitialiser toutes les variables de session
@@ -1214,8 +1385,16 @@ def display_diagnostic_section():
     """Affiche la section de génération du diagnostic (utilise fichiers depuis session_state)"""
     st.header("🔍 Générer les Use Cases")
     
-    # Vérifier si des résultats validés existent déjà
-    if st.session_state.current_project_id:
+    # Vérifier d'abord si workflow_state contient des résultats finaux (workflow en cours terminé)
+    workflow_state = st.session_state.get("workflow_state", {})
+    final_needs = workflow_state.get("final_needs", [])
+    final_use_cases = workflow_state.get("final_use_cases", [])
+    
+    # Variables pour suivre si les résultats viennent de la BDD
+    results_from_db = False
+    
+    # Si pas de résultats dans workflow_state, vérifier dans la BDD
+    if not final_needs and not final_use_cases and st.session_state.current_project_id:
         has_needs = has_validated_results(
             st.session_state.current_project_id,
             "need_analysis",
@@ -1228,11 +1407,8 @@ def display_diagnostic_section():
         )
         
         if has_needs or has_use_cases:
-            # Afficher directement les résultats finaux
-            st.success("✅ **Workflow terminé - Résultats disponibles**")
-            st.markdown("---")
-            
-            # Charger les résultats validés
+            results_from_db = True
+            # Charger les résultats validés depuis la BDD
             validated_needs = load_agent_results(
                 st.session_state.current_project_id,
                 "need_analysis",
@@ -1247,35 +1423,70 @@ def display_diagnostic_section():
             )
             
             if validated_needs:
-                needs_list = validated_needs.get("needs", [])
-                st.subheader(f"📋 Besoins identifiés ({len(needs_list)})")
-                with st.expander("Voir les besoins", expanded=True):
-                    for i, need in enumerate(needs_list, 1):
-                        st.markdown(f"### {i}. {need.get('theme', 'N/A')}")
-                        quotes = need.get('quotes', [])
-                        if quotes:
-                            st.markdown("**Citations clés :**")
-                            for quote in quotes:
-                                st.markdown(f"• {quote}")
-                        st.markdown("---")
-            
+                final_needs = validated_needs.get("needs", [])
             if validated_use_cases:
-                use_cases_list = validated_use_cases.get("use_cases", [])
-                st.subheader(f"💼 Use Cases générés ({len(use_cases_list)})")
-                with st.expander("Voir les use cases", expanded=True):
-                    for i, uc in enumerate(use_cases_list, 1):
-                        st.markdown(f"### {i}. {uc.get('titre', 'N/A')}")
-                        st.markdown(f"**Description :** {uc.get('description', 'N/A')}")
-                        famille = uc.get('famille', '')
-                        if famille:
-                            st.markdown(f"**Famille :** {famille}")
-                        st.markdown("---")
-            
-            st.markdown("---")
-            col1, col2 = st.columns(2)
-            with col1:
-                if st.button("✏️ Modifier", use_container_width=True):
-                    # Rejeter les résultats pour permettre la modification
+                final_use_cases = validated_use_cases.get("use_cases", [])
+    
+    # Vérifier le statut du workflow avant d'afficher les résultats finaux
+    # Ne pas afficher les résultats si le workflow est en cours ou en attente de contexte
+    workflow_status = None
+    if st.session_state.get("thread_id"):
+        try:
+            workflow_status = poll_workflow_status()
+        except Exception as e:
+            print(f"⚠️ [DEBUG] Erreur lors de la vérification du statut: {e}")
+            workflow_status = None
+    
+    # Afficher les résultats finaux uniquement si le workflow est terminé
+    # ou si les résultats proviennent de la BDD (workflow précédent terminé)
+    should_display_final_results = False
+    if workflow_status == "completed":
+        should_display_final_results = True
+    elif workflow_status is None and (final_needs or final_use_cases):
+        # Si pas de thread_id actif mais résultats présents, c'est probablement un workflow terminé précédemment
+        # Vérifier si les résultats viennent de la BDD
+        if results_from_db:
+            should_display_final_results = True
+    
+    # Ne pas afficher les résultats si le workflow est en attente de contexte ou validation
+    if workflow_status in ["waiting_pre_use_case_context", "waiting_use_case_validation", "waiting_validation"]:
+        should_display_final_results = False
+    
+    # Afficher les résultats si disponibles et workflow terminé
+    if should_display_final_results and (final_needs or final_use_cases):
+        # Afficher directement les résultats finaux
+        st.success("✅ **Workflow terminé - Résultats disponibles**")
+        st.markdown("---")
+        
+        if final_needs:
+            st.subheader(f"📋 Besoins identifiés ({len(final_needs)})")
+            with st.expander("Voir les besoins", expanded=True):
+                for i, need in enumerate(final_needs, 1):
+                    st.markdown(f"### {i}. {need.get('theme', 'N/A')}")
+                    quotes = need.get('quotes', [])
+                    if quotes:
+                        st.markdown("**Citations clés :**")
+                        for quote in quotes:
+                            st.markdown(f"• {quote}")
+                    st.markdown("---")
+        
+        if final_use_cases:
+            st.subheader(f"💼 Use Cases générés ({len(final_use_cases)})")
+            with st.expander("Voir les use cases", expanded=True):
+                for i, uc in enumerate(final_use_cases, 1):
+                    st.markdown(f"### {i}. {uc.get('titre', 'N/A')}")
+                    st.markdown(f"**Description :** {uc.get('description', 'N/A')}")
+                    famille = uc.get('famille', '')
+                    if famille:
+                        st.markdown(f"**Famille :** {famille}")
+                    st.markdown("---")
+        
+        st.markdown("---")
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("✏️ Modifier", use_container_width=True):
+                # Rejeter les résultats pour permettre la modification
+                if st.session_state.current_project_id:
                     reject_agent_results(
                         st.session_state.current_project_id,
                         "need_analysis",
@@ -1286,13 +1497,16 @@ def display_diagnostic_section():
                         "need_analysis",
                         "use_cases"
                     )
-                    # Réinitialiser le workflow
-                    st.session_state.thread_id = None
-                    st.session_state.workflow_status = None
-                    st.rerun()
-            with col2:
-                if st.button("🔄 Régénérer", use_container_width=True):
-                    # Rejeter les résultats existants
+                # Réinitialiser le workflow
+                st.session_state.thread_id = None
+                st.session_state.workflow_status = None
+                if 'workflow_state' in st.session_state:
+                    st.session_state.workflow_state = {}
+                st.rerun()
+        with col2:
+            if st.button("🔄 Régénérer", use_container_width=True):
+                # Rejeter les résultats existants
+                if st.session_state.current_project_id:
                     reject_agent_results(
                         st.session_state.current_project_id,
                         "need_analysis",
@@ -1303,12 +1517,43 @@ def display_diagnostic_section():
                         "need_analysis",
                         "use_cases"
                     )
-                    # Réinitialiser le workflow
-                    st.session_state.thread_id = None
-                    st.session_state.workflow_status = None
-                    st.rerun()
-            
-            return
+                # Réinitialiser le workflow
+                st.session_state.thread_id = None
+                st.session_state.workflow_status = None
+                if 'workflow_state' in st.session_state:
+                    st.session_state.workflow_state = {}
+                st.rerun()
+        
+        # Boutons de téléchargement (JSON et Word)
+        st.markdown("---")
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Bouton de téléchargement JSON
+            results_json = {
+                "final_needs": final_needs,
+                "final_use_cases": final_use_cases
+            }
+            st.download_button(
+                label="📥 Télécharger les résultats (JSON)",
+                data=json.dumps(results_json, indent=2, ensure_ascii=False),
+                file_name="aiko_results.json",
+                mime="application/json",
+                use_container_width=True
+            )
+        
+        with col2:
+            # Bouton de génération de rapport Word
+            if st.button("📄 Générer le rapport Word", type="primary", use_container_width=True):
+                # Préparer les données au format attendu par generate_word_report
+                if 'workflow_state' not in st.session_state:
+                    st.session_state.workflow_state = {}
+                st.session_state.workflow_state['final_needs'] = final_needs
+                st.session_state.workflow_state['final_use_cases'] = final_use_cases
+                
+                generate_word_report()
+        
+        return
     
     # Si le workflow est en cours, afficher la progression
     if st.session_state.thread_id and st.session_state.workflow_status is not None:
@@ -1562,7 +1807,7 @@ def display_workflow_progress():
     
     elif status == "completed":
         st.success("✅ **Workflow terminé avec succès !**")
-        display_final_results()
+        # Les résultats seront affichés par display_diagnostic_section() qui est appelée automatiquement
     
     elif status == "error":
         st.error("❌ Une erreur s'est produite")
@@ -2050,80 +2295,6 @@ def generate_word_report():
         except Exception as e:
             st.error(f"❌ Erreur lors de la génération du rapport : {str(e)}")
             st.exception(e)
-
-def display_final_results():
-    """Affiche les résultats finaux"""
-    
-    st.markdown("### Résultats Finaux")
-    
-    final_needs = st.session_state.workflow_state.get("final_needs", [])
-    final_use_cases = st.session_state.workflow_state.get("final_use_cases", [])
-    
-    # Affichage des métriques
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.metric("📋 Besoins Validés", len(final_needs))
-    
-    with col2:
-        st.metric("🎯 Cas d'Usage Validés", len(final_use_cases))
-    
-    # Afficher les besoins validés
-    if final_needs:
-        with st.expander("📋 Voir les besoins validés", expanded=True):
-            for i, need in enumerate(final_needs, 1):
-                st.markdown(f"### {i}. {need.get('theme', 'N/A')}")
-                quotes = need.get('quotes', [])
-                if quotes:
-                    st.markdown("**Citations clés :**")
-                    for quote in quotes:
-                        st.markdown(f"• {quote}")
-                st.markdown("---")
-    
-    # Afficher les cas d'usage validés
-    if final_use_cases:
-        with st.expander("🎯 Voir les cas d'usage validés", expanded=True):
-            for i, uc in enumerate(final_use_cases, 1):
-                st.markdown(f"### {i}. {uc.get('titre', 'N/A')}")
-                st.markdown(f"**Description :** {uc.get('description', 'N/A')}")
-                # Afficher la famille si elle existe
-                famille = uc.get('famille', '')
-                if famille:
-                    st.markdown(f"**Famille :** {famille}")
-                st.markdown("---")
-    
-    # Boutons de téléchargement
-    if final_needs or final_use_cases:
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            # Bouton de téléchargement JSON
-            results_json = {
-                "final_needs": final_needs,
-                "final_use_cases": final_use_cases
-            }
-            st.download_button(
-                label="📥 Télécharger les résultats (JSON)",
-                data=json.dumps(results_json, indent=2, ensure_ascii=False),
-                file_name="aiko_results.json",
-                mime="application/json",
-                width="stretch"
-            )
-        
-        with col2:
-            # Bouton de génération de rapport Word
-            if st.button("📄 Générer le rapport Word", type="primary", width="stretch"):
-                generate_word_report()
-    
-    st.markdown("---")
-    
-    # Bouton pour recommencer
-    if st.button("Nouvelle Analyse", width="stretch"):
-        st.session_state.thread_id = None
-        st.session_state.workflow_status = None
-        st.session_state.uploaded_files = {}
-        st.session_state.workflow_state = {}
-        st.rerun()
 
 def display_upload_documents_section():
     """Section pour uploader et gérer les documents de manière persistante (session)"""
@@ -4572,6 +4743,17 @@ def display_atouts_entreprise():
                 
                 return
     
+    # Si un workflow est en cours, afficher la progression
+    if st.session_state.get("atouts_thread_id"):
+        display_atouts_workflow_progress()
+        return
+    
+    # Afficher les résultats finaux s'ils existent
+    if st.session_state.get("atouts_workflow_completed"):
+        display_atouts_final_results()
+        return
+    
+    # Afficher le texte d'introduction uniquement si aucun workflow n'est en cours
     st.markdown("""
     Cette section identifie les **atouts** de l'entreprise qui facilitent l'intégration de l'intelligence artificielle.
     
@@ -4601,16 +4783,6 @@ def display_atouts_entreprise():
     
     # Afficher le nombre de transcriptions
     st.info(f"📄 {len(uploaded_transcripts)} transcription(s) disponible(s)")
-    
-    # Si un workflow est en cours, afficher la progression
-    if st.session_state.get("atouts_thread_id"):
-        display_atouts_workflow_progress()
-        return
-    
-    # Afficher les résultats finaux s'ils existent
-    if st.session_state.get("atouts_workflow_completed"):
-        display_atouts_final_results()
-        return
     
     # Sinon, afficher le formulaire de démarrage avec contexte additionnel
     st.markdown("---")
@@ -4942,9 +5114,8 @@ def display_value_chain_validation_interface():
     elif validation_type == "activities":
         # Afficher les activités avec champs éditables (2 par ligne)
         validated_teams = workflow_state.get("validated_teams", [])
-        team_options = {t.get("id"): t.get("nom") for t in validated_teams}
-        # Mapping inverse : nom -> id pour trouver l'ID à partir du nom
-        team_nom_to_id = {t.get("nom"): t.get("id") for t in validated_teams}
+        # Utiliser directement les noms d'équipes au lieu de team_id
+        team_names = [t.get("nom") for t in validated_teams if t.get("nom")]
         
         for i in range(0, len(proposed_items), 2):
             col1, col2 = st.columns(2, gap="large")
@@ -4953,9 +5124,7 @@ def display_value_chain_validation_interface():
             with col1:
                 activity = proposed_items[i]
                 original_resume = activity.get('resume', '')
-                # Utiliser team_nom au lieu de team_id (car le modèle Activity utilise team_nom)
                 original_team_nom = activity.get('team_nom', '')
-                original_team_id = team_nom_to_id.get(original_team_nom, '')
                 
                 # Clés pour les widgets
                 resume_key = f"activity_resume_{i}_{key_suffix}"
@@ -4963,7 +5132,8 @@ def display_value_chain_validation_interface():
                 
                 # Initialiser team_key si nécessaire pour le selectbox
                 if team_key not in st.session_state:
-                    st.session_state[team_key] = original_team_id if original_team_id in team_options else (list(team_options.keys())[0] if team_options else '')
+                    # Utiliser le nom directement
+                    st.session_state[team_key] = original_team_nom if original_team_nom in team_names else (team_names[0] if team_names else '')
                 
                 # Champs éditables
                 modified_resume = st.text_input(
@@ -4973,14 +5143,13 @@ def display_value_chain_validation_interface():
                     label_visibility="visible"
                 )
                 
-                if team_options:
-                    # S'assurer que la valeur initiale est valide
-                    if st.session_state[team_key] not in team_options:
-                        st.session_state[team_key] = list(team_options.keys())[0]
-                    modified_team_id = st.selectbox(
+                if team_names:
+                    # Utiliser directement les noms d'équipes
+                    current_index = team_names.index(st.session_state[team_key]) if st.session_state[team_key] in team_names else 0
+                    modified_team_nom = st.selectbox(
                         "**Équipe**",
-                        options=list(team_options.keys()),
-                        format_func=lambda x: team_options[x],
+                        options=team_names,
+                        index=current_index,
                         key=team_key
                     )
                 else:
@@ -4997,17 +5166,15 @@ def display_value_chain_validation_interface():
                 with col2:
                     activity = proposed_items[i + 1]
                     original_resume = activity.get('resume', '')
-                    # Utiliser team_nom au lieu de team_id (car le modèle Activity utilise team_nom)
                     original_team_nom = activity.get('team_nom', '')
-                    original_team_id = team_nom_to_id.get(original_team_nom, '')
                     
                     # Clés pour les widgets
                     resume_key = f"activity_resume_{i+1}_{key_suffix}"
                     team_key = f"activity_team_{i+1}_{key_suffix}"
                     
-                    # Initialiser team_key si nécessaire pour le selectbox
+                    # Initialiser team_key si nécessaire
                     if team_key not in st.session_state:
-                        st.session_state[team_key] = original_team_id if original_team_id in team_options else (list(team_options.keys())[0] if team_options else '')
+                        st.session_state[team_key] = original_team_nom if original_team_nom in team_names else (team_names[0] if team_names else '')
                     
                     # Champs éditables
                     modified_resume = st.text_input(
@@ -5017,14 +5184,12 @@ def display_value_chain_validation_interface():
                         label_visibility="visible"
                     )
                     
-                    if team_options:
-                        # S'assurer que la valeur initiale est valide
-                        if st.session_state[team_key] not in team_options:
-                            st.session_state[team_key] = list(team_options.keys())[0]
-                        modified_team_id = st.selectbox(
+                    if team_names:
+                        current_index = team_names.index(st.session_state[team_key]) if st.session_state[team_key] in team_names else 0
+                        modified_team_nom = st.selectbox(
                             "**Équipe**",
-                            options=list(team_options.keys()),
-                            format_func=lambda x: team_options[x],
+                            options=team_names,
+                            index=current_index,
                             key=team_key
                         )
                     else:
@@ -5056,17 +5221,40 @@ def display_value_chain_validation_interface():
             st.info("💡 Validez d'abord des équipes pour voir les points de friction.")
             return
         
+        # Fonction de normalisation pour le matching (enlève espaces autour de &, normalise espaces)
+        def normalize_for_matching(name: str) -> str:
+            """Normalise un nom pour le matching uniquement (sans modifier la valeur originale)"""
+            if not name:
+                return ""
+            # Enlever espaces autour de &
+            normalized = name.replace(" & ", "&").replace(" &", "&").replace("& ", "&")
+            # Normaliser espaces multiples
+            normalized = " ".join(normalized.split())
+            return normalized.strip().lower()
+        
         # Créer un mapping team_nom -> liste des noms d'équipes pour les listes déroulantes
         team_names = [t.get('nom', '') for t in validated_teams]
         team_names = [n for n in team_names if n]  # Filtrer les noms vides
         
-        # Grouper les points de friction par team_nom (au lieu de team_id)
+        # Grouper les points de friction par team_nom normalisé
         friction_by_team = {}
         for friction in proposed_items:
             team_nom = friction.get('team_nom', '')
-            if team_nom not in friction_by_team:
-                friction_by_team[team_nom] = []
-            friction_by_team[team_nom].append(friction)
+            # Normaliser pour le matching
+            normalized_team_nom = normalize_for_matching(team_nom)
+            
+            # Trouver l'équipe validée correspondante par nom normalisé
+            matching_team_nom = None
+            for validated_team in validated_teams:
+                if normalize_for_matching(validated_team.get('nom', '')) == normalized_team_nom:
+                    matching_team_nom = validated_team.get('nom', '')
+                    break
+            
+            # Utiliser le nom exact de l'équipe validée pour le groupement
+            key_team_nom = matching_team_nom if matching_team_nom else team_nom
+            if key_team_nom not in friction_by_team:
+                friction_by_team[key_team_nom] = []
+            friction_by_team[key_team_nom].append(friction)
         
         # Séparer les équipes métier et support
         teams_metier = [t for t in validated_teams if t.get('type') == 'equipe_metier']
@@ -5265,15 +5453,16 @@ def display_value_chain_validation_interface():
         validated_teams = workflow_state.get("validated_teams", [])
         if validated_teams:
             with st.form(f"add_activity_form"):
-                team_options = {t.get("id"): t.get("nom") for t in validated_teams}
-                selected_team_id = st.selectbox("Équipe", options=list(team_options.keys()), format_func=lambda x: team_options[x])
+                # Utiliser directement les noms d'équipes
+                team_names = [t.get("nom", "") for t in validated_teams if t.get("nom")]
+                selected_team_nom = st.selectbox("Équipe", options=team_names)
                 new_activity_resume = st.text_area("Résumé des activités")
                 if st.form_submit_button("Ajouter"):
                     if new_activity_resume:
                         import uuid
                         new_activity = {
                             "id": f"A{len(validated_items) + len(proposed_items) + 1}",
-                            "team_id": selected_team_id,
+                            "team_nom": selected_team_nom,
                             "resume": new_activity_resume
                         }
                         # Stocker dans session_state pour récupération lors de la soumission
@@ -5356,10 +5545,6 @@ def display_value_chain_validation_interface():
                         validated.append(validated_team)
             
             elif validation_type == "activities":
-                # Récupérer les équipes validées pour le mapping id -> nom
-                validated_teams = workflow_state.get("validated_teams", [])
-                team_id_to_nom = {t.get("id"): t.get("nom") for t in validated_teams}
-                
                 # Lire les valeurs modifiées depuis session_state
                 for i in range(len(proposed_items)):
                     checkbox_key = f"validate_activity_{i+1}_{key_suffix}"
@@ -5368,14 +5553,13 @@ def display_value_chain_validation_interface():
                         resume_key = f"activity_resume_{i}_{key_suffix}"
                         team_key = f"activity_team_{i}_{key_suffix}"
                         
-                        # Récupérer le team_id sélectionné et le convertir en team_nom
-                        selected_team_id = st.session_state.get(team_key, proposed_items[i].get('team_id', ''))
-                        selected_team_nom = team_id_to_nom.get(selected_team_id, proposed_items[i].get('team_nom', ''))
+                        # Récupérer directement le team_nom sélectionné
+                        selected_team_nom = st.session_state.get(team_key, proposed_items[i].get('team_nom', ''))
                         
                         validated_activity = {
                             **proposed_items[i],  # Conserver les autres champs (id, etc.)
                             "resume": st.session_state.get(resume_key, proposed_items[i].get('resume', '')),
-                            "team_nom": selected_team_nom  # Utiliser team_nom au lieu de team_id
+                            "team_nom": selected_team_nom  # Utiliser directement team_nom
                         }
                         validated.append(validated_activity)
             
@@ -5489,10 +5673,6 @@ def display_value_chain_validation_interface():
                             validated.append(validated_team)
                 
                 elif validation_type == "activities":
-                    # Récupérer les équipes validées pour le mapping id -> nom
-                    validated_teams = workflow_state.get("validated_teams", [])
-                    team_id_to_nom = {t.get("id"): t.get("nom") for t in validated_teams}
-                    
                     # Lire les valeurs modifiées depuis session_state
                     for i in range(len(proposed_items)):
                         checkbox_key = f"validate_activity_{i+1}_{key_suffix}"
@@ -5501,14 +5681,13 @@ def display_value_chain_validation_interface():
                             resume_key = f"activity_resume_{i}_{key_suffix}"
                             team_key = f"activity_team_{i}_{key_suffix}"
                             
-                            # Récupérer le team_id sélectionné et le convertir en team_nom
-                            selected_team_id = st.session_state.get(team_key, proposed_items[i].get('team_id', ''))
-                            selected_team_nom = team_id_to_nom.get(selected_team_id, proposed_items[i].get('team_nom', ''))
+                            # Récupérer directement le team_nom sélectionné
+                            selected_team_nom = st.session_state.get(team_key, proposed_items[i].get('team_nom', ''))
                             
                             validated_activity = {
                                 **proposed_items[i],  # Conserver les autres champs (id, etc.)
                                 "resume": st.session_state.get(resume_key, proposed_items[i].get('resume', '')),
-                                "team_nom": selected_team_nom  # Utiliser team_nom au lieu de team_id
+                                "team_nom": selected_team_nom  # Utiliser directement team_nom
                             }
                             validated.append(validated_activity)
                 

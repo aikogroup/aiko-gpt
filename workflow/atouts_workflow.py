@@ -103,8 +103,71 @@ class AtoutsWorkflow:
             interrupt_before=["validate_atouts"]
         )
     
+    def _extract_citations_from_document(self, doc_id: int, validated_speakers: List[Dict[str, str]]) -> List[Dict[str, Any]]:
+        """
+        Extrait les citations d'atouts depuis un seul document.
+        
+        Args:
+            doc_id: ID du document transcript dans la DB
+            validated_speakers: Liste des speakers validés par l'utilisateur (non utilisé, conservé pour compatibilité)
+            
+        Returns:
+            Liste des citations extraites (liste de CitationAtout converties en dict)
+        """
+        try:
+            from database.db import get_db_context
+            from database.repository import TranscriptRepository
+            
+            with get_db_context() as db:
+                logger.info(f"Traitement transcript pour atouts: document_id={doc_id}")
+                
+                # Récupérer directement les interventions enrichies depuis la DB
+                enriched_interventions = TranscriptRepository.get_enriched_by_document(
+                    db, doc_id, filter_interviewers=False
+                )
+                
+                logger.info(f"✓ Document {doc_id}: {len(enriched_interventions)} interventions enrichies")
+                
+                # Formater les interventions (sans timestamp, avec role et level)
+                # On envoie TOUTES les interventions maintenant qu'on traite document par document
+                formatted_interventions = []
+                for interv in enriched_interventions:
+                    speaker_role = interv.get("speaker_role")
+                    speaker_type = interv.get("speaker_type")
+                    
+                    # Si c'est un interviewer sans rôle défini, lui attribuer un rôle par défaut
+                    # (utile si on décide d'inclure les interviewers plus tard)
+                    if speaker_type == "interviewer" and not speaker_role:
+                        speaker_role = "Intervieweur"
+                    
+                    formatted_interv = {
+                        "text": interv.get("text"),
+                        "speaker_level": interv.get("speaker_level"),  # direction/métier/inconnu
+                        "speaker_role": speaker_role,    # Rôle exact (ou "Intervieweur" par défaut)
+                        "speaker_type": speaker_type,    # interviewé/interviewer
+                    }
+                    formatted_interventions.append(formatted_interv)
+                
+                if not formatted_interventions:
+                    logger.warning(f"Aucune intervention à analyser pour document_id={doc_id}")
+                    return []
+                
+                # Extraire les citations pour ce document
+                citations_response = self.atouts_agent.extract_citations_from_transcript(
+                    formatted_interventions
+                )
+                
+                # Convertir les citations en liste de dicts
+                citations_list = [citation.model_dump() for citation in citations_response.citations]
+                logger.info(f"✅ Document {doc_id} terminé: {len(citations_list)} citations")
+                return citations_list
+                
+        except Exception as e:
+            logger.error(f"❌ Erreur lors du traitement du document_id {doc_id}: {e}", exc_info=True)
+            return []
+    
     def _extract_citations_node(self, state: AtoutsState) -> AtoutsState:
-        """Extrait les citations révélant les atouts directement depuis la DB (PARALLÉLISÉ)"""
+        """Extrait les citations révélant les atouts directement depuis la DB (PARALLÉLISÉ document par document)"""
         transcript_document_ids = state.get("transcript_document_ids", [])
         validated_speakers = state.get("validated_speakers", [])
         
@@ -114,102 +177,43 @@ class AtoutsWorkflow:
             return state
         
         try:
-            from database.db import get_db_context
-            from database.repository import TranscriptRepository
             from concurrent.futures import ThreadPoolExecutor, as_completed
+            from models.atouts_models import CitationsAtoutsResponse
             
-            all_interventions = []
+            all_citations = []
             
-            def load_document_interventions(document_id: int) -> List[Dict[str, Any]]:
-                """Charge les interventions d'un document (fonction pour parallélisation)"""
-                try:
-                    with get_db_context() as db:
-                        logger.info(f"Chargement du document {document_id}")
-                        
-                        # Récupérer directement les interventions enrichies depuis la DB
-                        enriched_interventions = TranscriptRepository.get_enriched_by_document(
-                            db, document_id, filter_interviewers=True
-                        )
-                        
-                        logger.info(f"✓ Document {document_id}: {len(enriched_interventions)} interventions enrichies")
-                        
-                        # Formater les interventions (sans timestamp, avec role et level)
-                        formatted_interventions = []
-                        for interv in enriched_interventions:
-                            formatted_interv = {
-                                "text": interv.get("text"),
-                                "speaker_level": interv.get("speaker_level"),  # direction/métier/inconnu
-                                "speaker_role": interv.get("speaker_role"),    # Rôle exact
-                                "speaker_type": interv.get("speaker_type"),    # interviewé/interviewer
-                            }
-                            formatted_interventions.append(formatted_interv)
-                        
-                        # Filtrer UNIQUEMENT les speakers validés par l'utilisateur (si fourni)
-                        if validated_speakers:
-                            # Utiliser le nom validé pour filtrer
-                            validated_names = {s["name"] for s in validated_speakers}
-                            logger.info(f"🔍 Document {document_id}: Filtrage sur {len(validated_names)} speakers validés")
-                            
-                            # On doit garder le speaker_name pour le filtrage, mais ne pas l'inclure dans le formatage final
-                            filtered_interventions = []
-                            for interv in enriched_interventions:
-                                speaker_name = interv.get("speaker_name") or interv.get("speaker")
-                                if speaker_name in validated_names:
-                                    filtered_interventions.append({
-                                        "text": interv.get("text"),
-                                        "speaker_level": interv.get("speaker_level"),
-                                        "speaker_role": interv.get("speaker_role"),
-                                        "speaker_type": interv.get("speaker_type"),
-                                    })
-                            
-                            logger.info(f"✓ Document {document_id}: {len(filtered_interventions)} interventions après filtrage")
-                            return filtered_interventions
-                        
-                        return formatted_interventions
-                        
-                except Exception as e:
-                    logger.error(f"❌ Erreur lors du chargement du document {document_id}: {e}")
-                    return []
-            
-            # 🚀 PARALLÉLISATION : Charger tous les documents en parallèle
+            # 🚀 PARALLÉLISATION : Traiter tous les documents en même temps
             if len(transcript_document_ids) > 1:
-                logger.info(f"🚀 Chargement parallèle de {len(transcript_document_ids)} documents")
-                max_workers = min(len(transcript_document_ids), 10)  # Max 10 threads
+                logger.info(f"🚀 Extraction parallèle de citations depuis {len(transcript_document_ids)} documents")
+                max_workers = min(len(transcript_document_ids), 10)
                 
                 with ThreadPoolExecutor(max_workers=max_workers) as executor:
                     future_to_doc = {
-                        executor.submit(load_document_interventions, doc_id): doc_id
+                        executor.submit(self._extract_citations_from_document, doc_id, validated_speakers): doc_id
                         for doc_id in transcript_document_ids
                     }
                     
                     for future in as_completed(future_to_doc):
                         doc_id = future_to_doc[future]
                         try:
-                            interventions = future.result()
-                            all_interventions.extend(interventions)
-                            logger.info(f"✓ Document {doc_id} terminé: {len(interventions)} interventions")
+                            citations = future.result()
+                            if citations:
+                                all_citations.extend(citations)
+                                logger.info(f"✅ Document {doc_id} terminé: {len(citations)} citations")
                         except Exception as e:
                             logger.error(f"❌ Erreur document {doc_id}: {e}")
             else:
                 # Traitement séquentiel si un seul document
                 for doc_id in transcript_document_ids:
-                    interventions = load_document_interventions(doc_id)
-                    all_interventions.extend(interventions)
+                    citations = self._extract_citations_from_document(doc_id, validated_speakers)
+                    if citations:
+                        all_citations.extend(citations)
             
-            if not all_interventions:
-                logger.warning("Aucune intervention à analyser")
-                state["citations_atouts"] = {"citations": []}
-                return state
-            
-            logger.info(f"Total: {len(all_interventions)} interventions à analyser pour les atouts")
-            
-            # Extraire les citations directement (le LLM filtrera ce qui est pertinent)
-            citations_response = self.atouts_agent.extract_citations_from_transcript(
-                all_interventions
-            )
+            # Agréger toutes les citations
+            citations_response = CitationsAtoutsResponse(citations=all_citations)
             
             state["citations_atouts"] = citations_response.model_dump()
-            logger.info(f"Extrait {len(citations_response.citations)} citations d'atouts")
+            logger.info(f"Extrait {len(all_citations)} citations d'atouts au total")
             return state
             
         except Exception as e:

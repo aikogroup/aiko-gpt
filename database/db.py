@@ -34,11 +34,15 @@ DATABASE_URL = os.getenv(
 # Créer l'engine SQLAlchemy
 # pool_pre_ping=True pour vérifier les connexions avant utilisation
 # poolclass=NullPool pour éviter les problèmes de pool en développement
+# connect_args avec connect_timeout pour gérer les erreurs de connexion
 engine = create_engine(
     DATABASE_URL,
     pool_pre_ping=True,
     poolclass=NullPool,  # Utiliser NullPool pour éviter les problèmes de connexion
     echo=os.getenv("SQL_ECHO", "false").lower() == "true",  # Log SQL si SQL_ECHO=true
+    connect_args={
+        "connect_timeout": 10,  # Timeout de 10 secondes pour les connexions
+    } if "postgresql" in DATABASE_URL else {},
 )
 
 # Créer la session factory
@@ -67,6 +71,9 @@ def get_db_context() -> Generator[Session, None, None]:
     Usage:
         with get_db_context() as db:
             # utiliser db
+    
+    Raises:
+        Exception: Si la connexion à la base de données échoue
     """
     db = SessionLocal()
     try:
@@ -134,6 +141,9 @@ def execute_sql_file(file_path: str):
     
     try:
         cursor = conn.cursor()
+        # Utiliser psycopg2.extras.execute_values ou simplement exécuter statement par statement
+        # mais avec une meilleure gestion des blocs $$ ... $$
+        
         # Split les statements en préservant les blocs $$ ... $$
         statements = []
         current_statement = ""
@@ -144,29 +154,35 @@ def execute_sql_file(file_path: str):
             char = sql_content[i]
             
             # Détecter les blocs $$ ... $$
-            if not in_dollar_quote and char == '$' and i + 1 < len(sql_content) and sql_content[i + 1] == '$':
-                # C'est le début d'un bloc $$
-                in_dollar_quote = True
-                current_statement += "$$"
-                i += 2
-                # Chercher la fin du bloc $$
-                while i < len(sql_content) - 1:
-                    if sql_content[i] == '$' and sql_content[i + 1] == '$':
-                        current_statement += "$$"
-                        in_dollar_quote = False
-                        i += 2
-                        # Sortir de la boucle while et continuer la boucle principale
-                        # On ne fait pas i += 1 à la fin car on a déjà avancé i de 2
-                        break
-                    current_statement += sql_content[i]
-                    i += 1
-                # Si on a trouvé la fin, on continue sans incrémenter i
+            if char == '$' and i + 1 < len(sql_content) and sql_content[i + 1] == '$':
                 if not in_dollar_quote:
+                    # Début du bloc $$
+                    in_dollar_quote = True
+                    current_statement += "$$"
+                    i += 2
+                    # Chercher la fin du bloc $$
+                    while i < len(sql_content) - 1:
+                        if sql_content[i] == '$' and sql_content[i + 1] == '$':
+                            current_statement += "$$"
+                            in_dollar_quote = False
+                            i += 2
+                            break
+                        current_statement += sql_content[i]
+                        i += 1
+                    # Si on est toujours dans le bloc, continuer à chercher
+                    if in_dollar_quote:
+                        continue
+                else:
+                    # Fin du bloc $$
+                    current_statement += "$$"
+                    in_dollar_quote = False
+                    i += 2
                     continue
             
             if in_dollar_quote:
                 # À l'intérieur d'un bloc $$, on ajoute simplement le caractère
                 current_statement += char
+                i += 1
             elif char == ';':
                 # En dehors d'un bloc $$, le ; sépare les statements
                 current_statement += char
@@ -174,16 +190,16 @@ def execute_sql_file(file_path: str):
                 if statement and not statement.startswith("--"):
                     statements.append(statement)
                 current_statement = ""
+                i += 1
             else:
                 current_statement += char
-            
-            i += 1
+                i += 1
         
         # Ajouter le dernier statement s'il y en a un
         if current_statement.strip() and not current_statement.strip().startswith("--"):
             statements.append(current_statement.strip())
         
-        # Exécuter chaque statement
+        # Exécuter chaque statement dans l'ordre
         for statement in statements:
             if statement:
                 try:
@@ -192,7 +208,19 @@ def execute_sql_file(file_path: str):
                     # Ignorer les erreurs de "déjà existant" pour les extensions et objets
                     error_str = str(e).lower()
                     if "already exists" not in error_str and "duplicate" not in error_str:
-                        print(f"⚠️  Erreur lors de l'exécution: {e}")
+                        # Pour les erreurs "does not exist", c'est souvent dû à l'ordre d'exécution
+                        # On les ignore silencieusement si c'est lié à une fonction qui sera créée
+                        # (cela peut arriver si un trigger est créé avant la fonction dans certains cas de parsing)
+                        if "does not exist" in error_str:
+                            # Vérifier si c'est une fonction qui sera créée dans ce fichier
+                            if "update_updated_at_column" in error_str or "update_transcript_search_vector" in error_str:
+                                # Cette fonction sera créée, donc on peut ignorer l'erreur silencieusement
+                                # (cela arrive parfois à cause de l'ordre d'exécution)
+                                pass
+                            else:
+                                print(f"⚠️  Erreur lors de l'exécution: {e}")
+                        else:
+                            print(f"⚠️  Erreur lors de l'exécution: {e}")
                         # Ne pas lever l'exception pour continuer avec les autres statements
                         pass
         

@@ -5,6 +5,7 @@ Agent spécialisé pour extraire les citations liées aux enjeux stratégiques d
 import logging
 from typing import List, Dict, Any, Optional
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from openai import OpenAI
 import os
 from dotenv import load_dotenv
@@ -41,6 +42,7 @@ class TranscriptEnjeuxAgent:
     def extract_citations(self, document_ids: List[int]) -> List[Dict[str, Any]]:
         """
         Extrait les citations liées aux enjeux stratégiques depuis plusieurs documents transcript dans la BDD.
+        PARALLÉLISÉ : Traite tous les documents en même temps pour gagner du temps.
         
         Args:
             document_ids: Liste des IDs de documents transcript dans la base de données
@@ -48,45 +50,80 @@ class TranscriptEnjeuxAgent:
         Returns:
             Liste des citations extraites avec métadonnées
         """
+        if not document_ids:
+            return []
+        
         all_citations = []
         
-        for document_id in document_ids:
-            try:
-                logger.info(f"Traitement transcript pour enjeux: document_id={document_id}")
-                
-                # Utiliser TranscriptAgent pour charger depuis la BDD et filtrer (SANS analyse sémantique)
-                result = self.transcript_agent.process_from_db(
-                    document_id=document_id,
-                    filter_interviewers=True
-                )
-                
-                # Extraire les interventions intéressantes depuis le résultat
-                # process_from_db retourne un dict avec les interventions enrichies
-                if result.get("status") == "error":
-                    logger.warning(f"Erreur lors du traitement du document {document_id}: {result.get('error')}")
-                    continue
-                
-                # Les interventions sont dans le résultat directement
-                interventions = result.get("interventions", [])
-                
-                if not interventions:
-                    logger.warning(f"Aucune intervention trouvée pour document_id={document_id}")
-                    continue
-                
-                # Préparer le texte pour l'extraction
-                transcript_text = self._prepare_transcript_text(interventions)
-                
-                # Extraire les citations avec LLM
-                citations = self._extract_citations_with_llm(transcript_text, interventions)
-                
-                all_citations.extend(citations)
-                
-            except Exception as e:
-                logger.error(f"Erreur lors du traitement du document_id {document_id}: {e}", exc_info=True)
-                continue
+        # 🚀 PARALLÉLISATION : Traiter tous les documents en même temps
+        max_workers = min(len(document_ids), 10)  # Maximum 10 threads en parallèle
+        logger.info(f"🚀 Parallélisation avec {max_workers} workers pour {len(document_ids)} transcripts (enjeux)")
+        
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Soumettre tous les documents pour traitement parallèle
+            future_to_doc = {
+                executor.submit(self._process_single_document, document_id): document_id
+                for document_id in document_ids
+            }
+            
+            # Récupérer les résultats au fur et à mesure
+            for future in as_completed(future_to_doc):
+                document_id = future_to_doc[future]
+                try:
+                    citations = future.result()
+                    if citations:
+                        all_citations.extend(citations)
+                        logger.info(f"✅ Transcript document_id={document_id} terminé: {len(citations)} citations")
+                except Exception as e:
+                    logger.error(f"❌ Erreur lors du traitement du transcript document_id={document_id}: {e}", exc_info=True)
         
         logger.info(f"✅ {len(all_citations)} citations d'enjeux extraites au total")
         return all_citations
+    
+    def _process_single_document(self, document_id: int) -> List[Dict[str, Any]]:
+        """
+        Traite un seul document transcript pour extraire les citations d'enjeux.
+        
+        Args:
+            document_id: ID du document transcript dans la base de données
+            
+        Returns:
+            Liste des citations extraites pour ce document
+        """
+        try:
+            logger.info(f"Traitement transcript pour enjeux: document_id={document_id}")
+            
+            # Utiliser TranscriptAgent pour charger depuis la BDD et filtrer (SANS analyse sémantique)
+            result = self.transcript_agent.process_from_db(
+                document_id=document_id,
+                filter_interviewers=True
+            )
+            
+            # Extraire les interventions depuis le résultat
+            # process_from_db retourne un dict avec les interventions enrichies
+            if result.get("status") == "error":
+                logger.warning(f"Erreur lors du traitement du document {document_id}: {result.get('error')}")
+                return []
+            
+            # Utiliser TOUTES les interventions depuis parsing.interventions
+            # Le LLM filtrera ensuite pour extraire uniquement les citations pertinentes
+            interventions = result.get("parsing", {}).get("interventions", [])
+            
+            if not interventions:
+                logger.warning(f"Aucune intervention trouvée pour document_id={document_id}")
+                return []
+            
+            # Préparer le texte pour l'extraction
+            transcript_text = self._prepare_transcript_text(interventions)
+            
+            # Extraire les citations avec LLM
+            citations = self._extract_citations_with_llm(transcript_text, interventions)
+            
+            return citations
+            
+        except Exception as e:
+            logger.error(f"Erreur lors du traitement du document_id {document_id}: {e}", exc_info=True)
+            return []
     
     def _prepare_transcript_text(self, interventions: List[Dict[str, Any]]) -> str:
         """Prépare le texte du transcript pour l'analyse"""

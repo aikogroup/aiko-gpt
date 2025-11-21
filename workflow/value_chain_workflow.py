@@ -354,13 +354,13 @@ class ValueChainWorkflow:
             proposed_activities = [activity.model_dump() for activity in activities_response.activities]
             logger.info(f"🔍 [DEBUG] Extrait {len(proposed_activities)} activités brutes depuis le LLM")
             
-            # DEBUG: Afficher les team_id des activités extraites
-            extracted_team_ids = {a.get("team_id", "") for a in proposed_activities}
-            logger.info(f"🔍 [DEBUG] Team IDs dans activités extraites: {extracted_team_ids}")
+            # DEBUG: Afficher les team_nom des activités extraites
+            extracted_team_noms = {a.get("team_nom", "") for a in proposed_activities}
+            logger.info(f"🔍 [DEBUG] Team noms dans activités extraites: {extracted_team_noms}")
             if proposed_activities:
                 logger.info(f"🔍 [DEBUG] Détail des activités extraites:")
                 for act in proposed_activities:
-                    logger.info(f"   - team_id: '{act.get('team_id', '')}', resume: '{act.get('resume', '')[:50]}...'")
+                    logger.info(f"   - team_nom: '{act.get('team_nom', '')}', resume: '{act.get('resume', '')[:50]}...'")
             
             # Filtrer les activités déjà validées/rejetées
             validated_team_noms = {a.get("team_nom", "") for a in validated_activities}
@@ -406,10 +406,36 @@ class ValueChainWorkflow:
                 for team in validated_teams:
                     logger.info(f"   - nom: '{team.get('nom', '')}', id: '{team.get('id', '')}'")
             
-            final_activities = [
-                activity for team_nom, activity in activities_by_team.items()
-                if team_nom in validated_teams_noms
-            ]
+            # Fonction de normalisation pour le matching (enlève espaces autour de &, normalise espaces)
+            def normalize_for_matching(name: str) -> str:
+                """Normalise un nom pour le matching uniquement (sans modifier la valeur originale)"""
+                if not name:
+                    return ""
+                # Enlever espaces autour de &
+                normalized = name.replace(" & ", "&").replace(" &", "&").replace("& ", "&")
+                # Normaliser espaces multiples
+                normalized = " ".join(normalized.split())
+                return normalized.strip().lower()
+            
+            # Normaliser les noms des équipes validées pour le matching
+            validated_teams_noms_normalized = {normalize_for_matching(nom) for nom in validated_teams_noms}
+            
+            # Matcher avec normalisation, mais garder le nom exact de l'équipe validée
+            final_activities = []
+            for team_nom, activity in activities_by_team.items():
+                team_nom_normalized = normalize_for_matching(team_nom)
+                if team_nom_normalized in validated_teams_noms_normalized:
+                    # Trouver l'équipe validée correspondante pour utiliser son nom exact
+                    matching_team = None
+                    for team in validated_teams:
+                        if normalize_for_matching(team.get("nom", "")) == team_nom_normalized:
+                            matching_team = team
+                            break
+                    
+                    if matching_team:
+                        # Utiliser le nom exact de l'équipe validée
+                        activity["team_nom"] = matching_team.get("nom", "")
+                        final_activities.append(activity)
             
             logger.info(f"🔍 [DEBUG] Activités finales après filtrage par équipes validées: {len(final_activities)}")
             if len(final_activities) == 0 and len(activities_by_team) > 0:
@@ -499,12 +525,58 @@ class ValueChainWorkflow:
             # Convertir en dict pour le state
             proposed_friction_points = [fp.model_dump() for fp in friction_points_response.friction_points]
             
+            # Fonction de normalisation pour le matching (enlève espaces autour de &, normalise espaces)
+            def normalize_for_matching(name: str) -> str:
+                """Normalise un nom pour le matching uniquement (sans modifier la valeur originale)"""
+                if not name:
+                    return ""
+                # Enlever espaces autour de &
+                normalized = name.replace(" & ", "&").replace(" &", "&").replace("& ", "&")
+                # Normaliser espaces multiples
+                normalized = " ".join(normalized.split())
+                return normalized.strip().lower()
+            
+            # Créer un mapping ID -> équipe et nom -> équipe pour le matching
+            teams_by_id = {t.get("id", ""): t for t in validated_teams}
+            teams_by_nom = {t.get("nom", ""): t for t in validated_teams}
+            teams_by_nom_normalized = {normalize_for_matching(nom): t for nom, t in teams_by_nom.items()}
+            
+            # Normaliser les team_nom des points de friction et les matcher avec les équipes validées
+            for fp in proposed_friction_points:
+                fp_team_nom = fp.get("team_nom", "")
+                fp_team_nom_normalized = normalize_for_matching(fp_team_nom)
+                
+                # Trouver l'équipe validée correspondante
+                # Essayer d'abord par ID (au cas où le LLM aurait utilisé l'ID)
+                matching_team = teams_by_id.get(fp_team_nom)
+                
+                # Si pas trouvé par ID, essayer par nom normalisé
+                if not matching_team:
+                    matching_team = teams_by_nom_normalized.get(fp_team_nom_normalized)
+                
+                # Si toujours pas trouvé, essayer par nom exact
+                if not matching_team:
+                    matching_team = teams_by_nom.get(fp_team_nom)
+                
+                if matching_team:
+                    # Utiliser le nom exact de l'équipe validée
+                    fp["team_nom"] = matching_team.get("nom", "")
+                    logger.debug(f"🔍 [FRICTION] Point de friction '{fp_team_nom}' → équipe '{matching_team.get('nom', '')}'")
+                else:
+                    logger.warning(f"🔍 [FRICTION] Point de friction avec team_nom '{fp_team_nom}' ne correspond à aucune équipe validée")
+            
+            # Filtrer les points de friction sans équipe valide (ceux qui n'ont pas pu être matchés)
+            valid_friction_points = [
+                fp for fp in proposed_friction_points
+                if fp.get("team_nom", "") and fp.get("team_nom", "") in teams_by_nom
+            ]
+            
             # Filtrer les points de friction déjà validés/rejetés (basé sur team_nom et citation)
             validated_keys = {(fp.get("team_nom", ""), fp.get("citation", "")) for fp in validated_friction_points}
             rejected_keys = {(fp.get("team_nom", ""), fp.get("citation", "")) for fp in rejected_friction_points}
             
             filtered_friction_points = [
-                fp for fp in proposed_friction_points
+                fp for fp in valid_friction_points
                 if (fp.get("team_nom", ""), fp.get("citation", "")) not in validated_keys
                 and (fp.get("team_nom", ""), fp.get("citation", "")) not in rejected_keys
             ]

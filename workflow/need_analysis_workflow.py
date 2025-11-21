@@ -5,6 +5,7 @@ Workflow LangGraph pour l'analyse des besoins
 import os
 import json
 from typing import Dict, List, Any, TypedDict, Annotated
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
@@ -381,10 +382,35 @@ class NeedAnalysisWorkflow:
             
             if transcript_document_ids:
                 print(f"🔄 [PARALLÈLE-2/3] Traitement de {len(transcript_document_ids)} transcripts depuis la BDD...")
+                
+                # 🚀 PARALLÉLISATION : Traiter tous les transcripts en même temps
                 results = []
-                for document_id in transcript_document_ids:
-                    result = self.transcript_agent.process_from_db(document_id)
-                    results.append(result)
+                max_workers = min(len(transcript_document_ids), 10)  # Maximum 10 threads en parallèle
+                print(f"🚀 [PARALLÈLE-2/3] Parallélisation avec {max_workers} workers pour {len(transcript_document_ids)} transcripts")
+                
+                with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                    # Soumettre tous les transcripts pour traitement parallèle
+                    future_to_doc = {
+                        executor.submit(self.transcript_agent.process_from_db, document_id): document_id
+                        for document_id in transcript_document_ids
+                    }
+                    
+                    # Récupérer les résultats au fur et à mesure
+                    for future in as_completed(future_to_doc):
+                        document_id = future_to_doc[future]
+                        try:
+                            result = future.result()
+                            results.append(result)
+                            print(f"✅ [PARALLÈLE-2/3] Transcript document_id={document_id} terminé")
+                        except Exception as e:
+                            print(f"❌ [PARALLÈLE-2/3] Erreur lors du traitement du transcript document_id={document_id}: {e}")
+                            # Créer un résultat fallback pour éviter de bloquer le workflow
+                            results.append({
+                                "document_id": document_id,
+                                "status": "error",
+                                "error": str(e)
+                            })
+                
                 print(f"✅ [PARALLÈLE-2/3] {len(results)} transcripts traités")
                 print(f"✅ [PARALLÈLE-2/3] transcript_agent_node - FIN")
                 return {"transcript_results": {"results": results}}

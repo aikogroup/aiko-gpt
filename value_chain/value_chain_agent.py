@@ -40,7 +40,7 @@ class ValueChainAgent:
         else:
             openai.api_key = os.getenv("OPENAI_API_KEY")
         
-        self.model = os.getenv('OPENAI_MODEL', 'gpt-5-nano')
+        self.model = 'gpt-4.1-nano-2025-04-14'
     
     def extract_teams(
         self,
@@ -171,15 +171,48 @@ class ValueChainAgent:
             logger.warning("Aucune intervention ou équipe fournie")
             return FrictionPointsResponse(friction_points=[])
         
+        # LOGS DÉTAILLÉS - Début
+        logger.info(f"🔍 [FRICTION] Début extraction points de friction")
+        logger.info(f"🔍 [FRICTION] Nombre d'interventions: {len(interventions)}")
+        logger.info(f"🔍 [FRICTION] Nombre d'équipes validées: {len(teams)}")
+        
+        # Afficher les noms des équipes
+        team_names = [team.nom for team in teams]
+        logger.info(f"🔍 [FRICTION] Noms des équipes validées: {team_names}")
+        
+        # Statistiques sur les interventions
+        if interventions:
+            interventions_with_role = sum(1 for i in interventions if i.get("speaker_role"))
+            interventions_with_level = sum(1 for i in interventions if i.get("speaker_level"))
+            logger.info(f"🔍 [FRICTION] Interventions avec rôle: {interventions_with_role}/{len(interventions)}")
+            logger.info(f"🔍 [FRICTION] Interventions avec niveau: {interventions_with_level}/{len(interventions)}")
+            
+            # Aperçu des premières interventions
+            logger.info(f"🔍 [FRICTION] Aperçu des 3 premières interventions:")
+            for i, interv in enumerate(interventions[:3], 1):
+                text_preview = interv.get("text", "")[:100] + "..." if len(interv.get("text", "")) > 100 else interv.get("text", "")
+                role = interv.get("speaker_role", "N/A")
+                level = interv.get("speaker_level", "N/A")
+                logger.info(f"   {i}. [niveau={level}|rôle={role}] {text_preview}")
+        
         # Préparer le texte pour l'analyse
         transcript_text = self._format_interventions(interventions)
         teams_text = self._format_teams(teams)
+        
+        # Logs sur les données formatées
+        logger.info(f"🔍 [FRICTION] Longueur transcript_text formaté: {len(transcript_text)} caractères")
+        logger.info(f"🔍 [FRICTION] Aperçu transcript_text (premiers 500 caractères): {transcript_text[:500]}...")
+        logger.info(f"🔍 [FRICTION] Teams_text formaté:\n{teams_text}")
         
         # Appeler le LLM pour extraire les points de friction
         prompt = VALUE_CHAIN_FRICTION_POINTS_PROMPT.format(
             transcript_text=transcript_text,
             teams=teams_text
         )
+        
+        logger.info(f"🔍 [FRICTION] Longueur prompt final: {len(prompt)} caractères")
+        logger.info(f"🔍 [FRICTION] Modèle utilisé: {self.model}")
+        # LOGS DÉTAILLÉS - Fin
         
         try:
             response = openai.responses.parse(
@@ -201,10 +234,20 @@ class ValueChainAgent:
             
             friction_points_response = response.output_parsed
             logger.info(f"Extrait {len(friction_points_response.friction_points)} points de friction")
+            
+            # Log détaillé des points de friction extraits
+            if friction_points_response.friction_points:
+                logger.info(f"🔍 [FRICTION] Détail des points de friction extraits:")
+                for fp in friction_points_response.friction_points:
+                    logger.info(f"   - ID: {fp.id}, Team: {fp.team_nom}, Citation: {fp.citation[:100]}...")
+            else:
+                logger.warning(f"🔍 [FRICTION] ⚠️ Aucun point de friction extrait par le LLM")
+            
             return friction_points_response
             
         except Exception as e:
             logger.error(f"Erreur lors de l'extraction des points de friction: {e}")
+            logger.error(f"🔍 [FRICTION] ❌ Exception détaillée: {type(e).__name__}: {str(e)}")
             return FrictionPointsResponse(friction_points=[])
     
     def _format_interventions(self, interventions: List[Dict[str, Any]]) -> str:

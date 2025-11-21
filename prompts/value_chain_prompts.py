@@ -160,82 +160,83 @@ RAPPEL CRITIQUE :
 VALUE_CHAIN_FRICTION_POINTS_SYSTEM_PROMPT = """
 Tu es un expert en analyse organisationnelle et en gestion des données.
 
-Ta mission est d'identifier dans les transcriptions les points de friction liés à la gestion des données pour chaque équipe.
+Ta mission est d'identifier dans les transcriptions les points de friction liés à la gestion des données, à l'IA et à l'automatisation pour chaque équipe.
 
-Un point de friction lié aux données peut concerner :
-- Difficultés d'accès aux données
+Un point de friction peut concerner :
+- Difficultés d'accès aux données ou aux informations
 - Problèmes de qualité des données
-- Manque de données structurées
-- Silos de données
-- Problèmes de partage de données entre équipes
-- Manque de traçabilité
-- Données non centralisées
+- Manque de données structurées ou centralisées
+- Silos de données ou problèmes de partage entre équipes
+- Manque de traçabilité ou d'historique
 - Problèmes de synchronisation des données
-- Manque d'outils pour analyser les données
+- Manque d'outils pour analyser, visualiser ou exploiter les données
+- Processus manuels qui pourraient être automatisés
+- Manque d'intelligence artificielle ou d'aide à la décision
+- Problèmes d'intégration entre systèmes
+- Manque de prévisions ou d'analyses prédictives
 
 Règles importantes :
-- Identifie uniquement les points de friction liés à la gestion des données
+- Identifie les points de friction liés aux données, à l'IA et à l'automatisation
+- Cherche activement des points de friction pour TOUTES les équipes validées, pas seulement celles qui parlent le plus
 - Extrais la citation textuelle exacte qui révèle le point de friction
-- Explique clairement en quoi c'est un point de friction pour la gestion des données
-- Associe chaque point de friction à une équipe spécifique
-- Utilise le rôle du speaker (rôle=...) pour identifier l'équipe concernée par chaque citation
+- Explique clairement en quoi c'est un point de friction
+- Associe chaque point de friction à l'équipe CONCERNÉE par le problème (analyse le contenu de la citation, pas seulement le rôle du speaker)
 - Les interventions sont préfixées avec [niveau=...|rôle=...] pour te donner du contexte
 """
 
 # Prompt pour l'extraction des points de friction
 VALUE_CHAIN_FRICTION_POINTS_PROMPT = """
-Analyse ces interventions et identifie, pour chaque équipe validée, les points de friction liés à la gestion des données.
+Analyse ces interventions et identifie tous les points de friction liés à la gestion des données, à l'IA et à l'automatisation.
 
 Équipes validées :
 {teams}
 
 CRITIQUE - Règles d'extraction :
-1. Tu DOIS analyser CHAQUE équipe validée dans la liste ci-dessus pour identifier des points de friction
-2. Pour chaque équipe validée, cherche activement des citations qui révèlent des points de friction liés à la gestion des données
-3. Assure-toi de couvrir TOUTES les équipes validées, pas seulement celles qui parlent le plus ou qui ont le plus de citations
-4. Chaque point de friction DOIT utiliser le nom EXACT de l'équipe (team_nom) tel qu'il apparaît dans la liste des équipes validées
-
-IMPORTANT - Utilisation du rôle des speakers pour cibler les citations :
-Le rôle des speakers (rôle=...) est CRUCIAL pour identifier l'équipe concernée par chaque point de friction :
-- Si un "Directeur Production" ou "Responsable Production" mentionne un problème de données → point de friction pour l'équipe Production
-- Si un "Directeur IT" ou "Responsable Infrastructure" mentionne un problème → point de friction pour l'équipe Infra&IT
-- Si un "Directeur R&D" ou "Chef de projet R&D" mentionne un problème → point de friction pour l'équipe R&D
-- Si un "Directeur Commercial" ou "Responsable Ventes" mentionne un problème → point de friction pour l'équipe Vente&Distribution
-- Si un "Responsable Données" ou "Data Manager" mentionne un problème → point de friction pour l'équipe Données&Qualité
-- etc.
+1. Identifie TOUS les points de friction dans les transcriptions, sans te limiter à une équipe spécifique
+2. Assure-toi de chercher des points de friction pour TOUTES les équipes validées dans la liste {teams}, pas seulement celles qui parlent le plus
+3. Pour chaque point de friction identifié, détermine l'équipe concernée en analysant le CONTENU de la citation
+4. L'équipe concernée est celle qui SUBIT le problème, pas forcément celle du speaker
+5. Si une équipe est explicitement mentionnée dans la citation (ex: "mes équipes de production"), c'est cette équipe qui est concernée
+6. Si le speaker parle de son propre problème, utilise son rôle pour identifier l'équipe correspondante dans la liste des équipes validées
+7. Chaque point de friction DOIT utiliser le NOM EXACT de l'équipe (team_nom), PAS l'ID
+   - Dans la liste des équipes, tu vois "**ID: E4** - **Finance & Contrôle**" → utilise "Finance & Contrôle" (pas "E4")
+   - Dans la liste des équipes, tu vois "**ID: E1** - **R&D**" → utilise "R&D" (pas "E1")
+8. Si une équipe validée n'a pas de point de friction explicite, cherche des problèmes indirects ou transversaux qui pourraient la concerner
 
 Stratégie d'identification :
-1. Identifie d'abord l'équipe concernée en utilisant le rôle du speaker (rôle=...)
-2. Vérifie que cette équipe correspond à une équipe validée dans la liste {teams}
-3. Assure-toi que le team_id correspond bien à l'équipe identifiée
-4. Si le rôle n'est pas clair, utilise le contexte de la citation pour déterminer l'équipe
+1. Parcourt systématiquement les équipes validées dans {teams} et cherche des citations qui révèlent des problèmes pour chacune
+2. Pour chaque équipe validée, analyse les interventions des speakers de cette équipe (via leur rôle) ET les mentions de cette équipe par d'autres speakers
+3. Pour chaque citation problématique, détermine quelle équipe est concernée en analysant :
+   - Les mentions explicites d'équipes dans la citation
+   - Le contexte du problème décrit
+   - Le rôle du speaker (si le problème concerne son équipe)
+4. Vérifie que l'équipe identifiée correspond à une équipe validée dans la liste {teams}
+5. Si aucune équipe validée ne correspond, ignore ce point de friction
+6. Assure-toi d'avoir au moins cherché des points de friction pour chaque équipe validée, même si certaines n'en ont pas
 
 Interventions :
 {transcript_text}
 
-Pour chaque équipe validée, identifie les citations qui révèlent des points de friction liés à la gestion des données.
-
 Types de points de friction à identifier :
-- Difficultés d'accès aux données
+- Difficultés d'accès aux données ou aux informations
 - Problèmes de qualité des données
-- Manque de données structurées
-- Silos de données
-- Problèmes de partage de données entre équipes
-- Manque de traçabilité
-- Données non centralisées
+- Manque de données structurées ou centralisées
+- Silos de données ou problèmes de partage entre équipes
+- Manque de traçabilité ou d'historique
 - Problèmes de synchronisation des données
-- Manque d'outils pour analyser les données
+- Manque d'outils pour analyser, visualiser ou exploiter les données
+- Processus manuels qui pourraient être automatisés
+- Manque d'intelligence artificielle ou d'aide à la décision
+- Problèmes d'intégration entre systèmes
+- Manque de prévisions ou d'analyses prédictives
 
 Pour chaque point de friction identifié, détermine :
 1. La citation textuelle exacte extraite des transcriptions
-2. L'équipe concernée (team_nom) en utilisant le nom exact de l'équipe (ex: 'Production', 'R&D', 'Méthodes')
-3. Une description expliquant en quoi c'est un point de friction pour la gestion des données
+2. L'équipe concernée (team_nom) en utilisant le NOM EXACT de l'équipe (pas l'ID) dans la liste des équipes validées
+   - Exemple : Si l'équipe est "**ID: E4** - **Finance & Contrôle**", utilise "Finance & Contrôle" (pas "E4")
+   - Exemple : Si l'équipe est "**ID: E1** - **R&D**", utilise "R&D" (pas "E1")
+3. Une description expliquant en quoi c'est un point de friction
 
-Exemples de points de friction :
-- "Nous n'avons pas accès aux données de production en temps réel" → Point de friction sur l'accès aux données
-- "Les données sont dispersées dans plusieurs systèmes" → Point de friction sur la centralisation des données
-- "Il est difficile de partager les données entre les équipes" → Point de friction sur le partage de données
-
-Concentre-toi sur les citations qui révèlent des problèmes concrets liés à la gestion des données.
+Concentre-toi sur les citations qui révèlent des problèmes concrets liés aux données, à l'IA ou à l'automatisation.
 """
 
