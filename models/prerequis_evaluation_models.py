@@ -42,3 +42,19 @@ class PrerequisFinalResponse(BaseModel):
     evaluations: List[PrerequisEvaluation] = Field(description="Liste des 5 évaluations validées", min_length=5, max_length=5)
     synthese_globale: str = Field(description="Synthèse globale des 5 évaluations")
 
+
+class PrerequisComments(BaseModel):
+    """Modèle pour stocker les 6 commentaires (1 général + 5 spécifiques)"""
+    comment_general: str = Field(default="", description="Commentaire général appliqué à tous les prompts")
+    comment_1: str = Field(default="", description="Commentaire spécifique pour le prérequis 1")
+    comment_2: str = Field(default="", description="Commentaire spécifique pour le prérequis 2")
+    comment_3: str = Field(default="", description="Commentaire spécifique pour le prérequis 3")
+    comment_4: str = Field(default="", description="Commentaire spécifique pour le prérequis 4")
+    comment_5: str = Field(default="", description="Commentaire spécifique pour le prérequis 5")
+
+
+class PrerequisValidationFeedback(BaseModel):
+    """Modèle pour le feedback de validation des prérequis"""
+    validated_prerequis: List[int] = Field(description="Liste des IDs des prérequis validés (1 à 5)")
+    regeneration_comment: str = Field(default="", description="Commentaire pour la régénération des prérequis non validés")
+

@@ -24,6 +24,7 @@ class PrerequisEvaluationState(TypedDict, total=False):
     transcript_document_ids: List[int]  # IDs des documents transcripts dans la DB
     company_info: Dict[str, Any]
     validated_use_cases: List[Dict[str, Any]]  # Cas d'usage validés (obligatoire)
+    comments: Dict[str, str]  # Dictionnaire avec les 6 commentaires (comment_general, comment_1 à comment_5)
     
     # Interventions chargées (filtrées par speaker_level)
     interventions_direction: List[Dict[str, Any]]  # Interventions direction
@@ -43,6 +44,11 @@ class PrerequisEvaluationState(TypedDict, total=False):
     evaluation_prerequis_4: Optional[PrerequisEvaluation]
     evaluation_prerequis_5: Optional[PrerequisEvaluation]
     synthese_globale: str
+    
+    # Validation
+    validated_prerequis: List[int]  # Liste des IDs des prérequis validés (1 à 5)
+    regeneration_comment: str  # Commentaire pour la régénération des prérequis non validés
+    validation_pending: bool  # Flag pour savoir si on attend une validation
     
     # Résultats finaux
     final_evaluations: List[PrerequisEvaluation]
@@ -74,6 +80,8 @@ class PrerequisEvaluationWorkflow:
         workflow.add_node("evaluate_prerequis_5_docs", self._evaluate_prerequis_5_docs_node)
         workflow.add_node("synthesize_prerequis_5", self._synthesize_prerequis_5_node)
         workflow.add_node("synthesize_global", self._synthesize_global_node)
+        workflow.add_node("human_validation", self._human_validation_node)
+        workflow.add_node("regenerate_prerequis", self._regenerate_prerequis_node)
         workflow.add_node("format_output", self._format_output_node)
         
         # Définir les edges
@@ -116,11 +124,38 @@ class PrerequisEvaluationWorkflow:
         workflow.add_edge("synthesize_prerequis_4", "evaluate_prerequis_5_docs")
         workflow.add_edge("evaluate_prerequis_5_docs", "synthesize_prerequis_5")
         workflow.add_edge("synthesize_prerequis_5", "synthesize_global")
-        workflow.add_edge("synthesize_global", "format_output")
+        workflow.add_edge("synthesize_global", "human_validation")
+        
+        # Route conditionnelle après validation
+        def route_after_validation(state: PrerequisEvaluationState) -> str:
+            """Route après validation : régénérer ou finaliser"""
+            validated = state.get("validated_prerequis", [])
+            if len(validated) == 5:
+                # Tous validés, finaliser
+                return "format_output"
+            else:
+                # Certains non validés, régénérer
+                return "regenerate_prerequis"
+        
+        workflow.add_conditional_edges(
+            "human_validation",
+            route_after_validation,
+            {
+                "format_output": "format_output",
+                "regenerate_prerequis": "regenerate_prerequis"
+            }
+        )
+        
+        # Après régénération, retourner à la synthèse globale
+        workflow.add_edge("regenerate_prerequis", "synthesize_global")
+        
         workflow.add_edge("format_output", END)
         
-        # Compiler avec checkpointer
-        return workflow.compile(checkpointer=self.checkpointer)
+        # Compiler avec checkpointer et interrupt
+        return workflow.compile(
+            checkpointer=self.checkpointer,
+            interrupt_before=["human_validation"]
+        )
     
     def _load_interventions_node(self, state: PrerequisEvaluationState) -> PrerequisEvaluationState:
         """Charge les interventions depuis la DB avec filtrage par speaker_level"""
@@ -255,13 +290,16 @@ class PrerequisEvaluationWorkflow:
         interventions_direction = state.get("interventions_direction", [])
         company_info = state.get("company_info", {})
         transcript_document_ids = state.get("transcript_document_ids", [])
+        comments = state.get("comments", {})
         
         logger.info(f"📊 [PREREQUIS 1] Utilisation de {len(interventions_direction)} interventions direction depuis {len(transcript_document_ids)} transcript(s)")
         
         try:
             evaluation_response = self.agent.evaluate_prerequis_1(
                 interventions_direction,
-                company_info
+                company_info,
+                comment_general=comments.get("comment_general", ""),
+                comment_specific=comments.get("comment_1", "")
             )
             
             logger.info(f"✅ Prérequis 1 évalué : note {evaluation_response.evaluation.note}/5")
@@ -277,13 +315,16 @@ class PrerequisEvaluationWorkflow:
         interventions_metier = state.get("interventions_metier", [])
         company_info = state.get("company_info", {})
         transcript_document_ids = state.get("transcript_document_ids", [])
+        comments = state.get("comments", {})
         
         logger.info(f"📊 [PREREQUIS 2] Utilisation de {len(interventions_metier)} interventions métier depuis {len(transcript_document_ids)} transcript(s)")
         
         try:
             evaluation_response = self.agent.evaluate_prerequis_2(
                 interventions_metier,
-                company_info
+                company_info,
+                comment_general=comments.get("comment_general", ""),
+                comment_specific=comments.get("comment_2", "")
             )
             
             logger.info(f"✅ Prérequis 2 évalué : note {evaluation_response.evaluation.note}/5")
@@ -314,6 +355,7 @@ class PrerequisEvaluationWorkflow:
         """Évalue le prérequis 3 : Cas d'usage important"""
         validated_use_cases = state.get("validated_use_cases", [])
         company_info = state.get("company_info", {})
+        comments = state.get("comments", {})
         
         logger.info(f"📊 [PREREQUIS 3] Utilisation de {len(validated_use_cases)} cas d'usage validé(s) (pas de transcripts)")
         
@@ -332,7 +374,9 @@ class PrerequisEvaluationWorkflow:
         try:
             evaluation_response = self.agent.evaluate_prerequis_3(
                 validated_use_cases,
-                company_info
+                company_info,
+                comment_general=comments.get("comment_general", ""),
+                comment_specific=comments.get("comment_3", "")
             )
             
             logger.info(f"✅ Prérequis 3 évalué : note {evaluation_response.evaluation.note}/5")
@@ -348,6 +392,7 @@ class PrerequisEvaluationWorkflow:
         transcript_document_ids = state.get("transcript_document_ids", [])
         all_interventions = state.get("all_interventions", [])
         company_info = state.get("company_info", {})
+        comments = state.get("comments", {})
         
         logger.info(f"📊 [PREREQUIS 4] Évaluation de {len(transcript_document_ids)} transcript(s) document par document")
         
@@ -385,7 +430,9 @@ class PrerequisEvaluationWorkflow:
                         evaluation_response = self.agent.evaluate_prerequis_4_document(
                             document_id,
                             formatted_interventions,
-                            company_info
+                            company_info,
+                            comment_general=comments.get("comment_general", ""),
+                            comment_specific=comments.get("comment_4", "")
                         )
                         
                         return evaluation_response.evaluation
@@ -453,6 +500,7 @@ class PrerequisEvaluationWorkflow:
         """Évalue le prérequis 5 document par document (parallélisé)"""
         transcript_document_ids = state.get("transcript_document_ids", [])
         company_info = state.get("company_info", {})
+        comments = state.get("comments", {})
         
         logger.info(f"📊 [PREREQUIS 5] Évaluation de {len(transcript_document_ids)} transcript(s) document par document")
         
@@ -489,7 +537,9 @@ class PrerequisEvaluationWorkflow:
                         evaluation_response = self.agent.evaluate_prerequis_5_document(
                             document_id,
                             formatted_interventions,
-                            company_info
+                            company_info,
+                            comment_general=comments.get("comment_general", ""),
+                            comment_specific=comments.get("comment_5", "")
                         )
                         
                         return evaluation_response.evaluation
@@ -587,7 +637,8 @@ class PrerequisEvaluationWorkflow:
             logger.info("✅ Synthèse globale terminée")
             return {
                 "synthese_globale": synthesis_response.synthese_text,
-                "final_evaluations": evaluations
+                "final_evaluations": evaluations,
+                "validation_pending": True  # Marquer qu'on attend une validation
             }
             
         except Exception as e:
@@ -595,8 +646,256 @@ class PrerequisEvaluationWorkflow:
             return {
                 "error": str(e),
                 "synthese_globale": f"Erreur lors de la synthèse globale : {str(e)}",
-                "final_evaluations": evaluations
+                "final_evaluations": evaluations,
+                "validation_pending": True
             }
+    
+    def _human_validation_node(self, state: PrerequisEvaluationState) -> PrerequisEvaluationState:
+        """
+        Nœud de validation humaine.
+        
+        Le workflow s'arrête AVANT ce nœud (interrupt_before).
+        L'API/Streamlit détecte que le workflow est en pause.
+        Streamlit affiche l'interface de validation.
+        L'utilisateur valide et renvoie le feedback.
+        Le feedback est injecté dans l'état via l'API.
+        Le workflow reprend et ce nœud traite le feedback.
+        """
+        logger.info("🛑 [VALIDATION] human_validation_node - DÉBUT")
+        
+        # Vérifier si on a reçu le feedback (injecté par l'API via resume_workflow_with_validation)
+        validated_prerequis = state.get("validated_prerequis", [])
+        regeneration_comment = state.get("regeneration_comment", "")
+        
+        if not validated_prerequis:
+            # Première fois : le workflow va s'arrêter ici (interrupt_before)
+            logger.info("⏸️ [VALIDATION] En attente de validation utilisateur")
+            return {
+                "validation_pending": True
+            }
+        
+        # Le feedback a été injecté, on continue
+        logger.info(f"✅ [VALIDATION] Prérequis validés : {validated_prerequis}")
+        logger.info(f"💬 [VALIDATION] Commentaire de régénération : {regeneration_comment[:50]}..." if regeneration_comment else "💬 [VALIDATION] Pas de commentaire")
+        
+        # Retourner l'état mis à jour
+        return {
+            "validation_pending": False
+        }
+    
+    def _regenerate_prerequis_node(self, state: PrerequisEvaluationState) -> PrerequisEvaluationState:
+        """Régénère uniquement les prérequis non validés avec le commentaire de régénération"""
+        validated_prerequis = state.get("validated_prerequis", [])
+        regeneration_comment = state.get("regeneration_comment", "")
+        comments = state.get("comments", {})
+        company_info = state.get("company_info", {})
+        
+        logger.info(f"🔄 [RÉGÉNÉRATION] Régénération des prérequis non validés")
+        logger.info(f"✅ Prérequis validés : {validated_prerequis}")
+        
+        # Déterminer les prérequis à régénérer (1 à 5)
+        all_prerequis_ids = [1, 2, 3, 4, 5]
+        prerequis_to_regenerate = [pid for pid in all_prerequis_ids if pid not in validated_prerequis]
+        
+        if not prerequis_to_regenerate:
+            logger.info("✅ Tous les prérequis sont validés, pas de régénération nécessaire")
+            return {}
+        
+        logger.info(f"🔄 Prérequis à régénérer : {prerequis_to_regenerate}")
+        
+        # Construire le commentaire combiné (commentaire spécifique + commentaire de régénération)
+        combined_comments = comments.copy()
+        for prerequis_id in prerequis_to_regenerate:
+            comment_key = f"comment_{prerequis_id}"
+            original_comment = comments.get(comment_key, "")
+            if regeneration_comment:
+                if original_comment:
+                    combined_comments[comment_key] = f"{original_comment}\n\nCOMMENTAIRE POUR RÉGÉNÉRATION :\n{regeneration_comment}"
+                else:
+                    combined_comments[comment_key] = f"COMMENTAIRE POUR RÉGÉNÉRATION :\n{regeneration_comment}"
+        
+        # Régénérer chaque prérequis non validé
+        try:
+            # Prérequis 1
+            if 1 in prerequis_to_regenerate:
+                interventions_direction = state.get("interventions_direction", [])
+                evaluation_response = self.agent.evaluate_prerequis_1(
+                    interventions_direction,
+                    company_info,
+                    comment_general=combined_comments.get("comment_general", ""),
+                    comment_specific=combined_comments.get("comment_1", "")
+                )
+                state["evaluation_prerequis_1"] = evaluation_response.evaluation
+                logger.info(f"✅ Prérequis 1 régénéré : note {evaluation_response.evaluation.note}/5")
+            
+            # Prérequis 2
+            if 2 in prerequis_to_regenerate:
+                interventions_metier = state.get("interventions_metier", [])
+                evaluation_response = self.agent.evaluate_prerequis_2(
+                    interventions_metier,
+                    company_info,
+                    comment_general=combined_comments.get("comment_general", ""),
+                    comment_specific=combined_comments.get("comment_2", "")
+                )
+                state["evaluation_prerequis_2"] = evaluation_response.evaluation
+                logger.info(f"✅ Prérequis 2 régénéré : note {evaluation_response.evaluation.note}/5")
+            
+            # Prérequis 3
+            if 3 in prerequis_to_regenerate:
+                validated_use_cases = state.get("validated_use_cases", [])
+                evaluation_response = self.agent.evaluate_prerequis_3(
+                    validated_use_cases,
+                    company_info,
+                    comment_general=combined_comments.get("comment_general", ""),
+                    comment_specific=combined_comments.get("comment_3", "")
+                )
+                state["evaluation_prerequis_3"] = evaluation_response.evaluation
+                logger.info(f"✅ Prérequis 3 régénéré : note {evaluation_response.evaluation.note}/5")
+            
+            # Prérequis 4
+            if 4 in prerequis_to_regenerate:
+                transcript_document_ids = state.get("transcript_document_ids", [])
+                evaluations_by_doc = []
+                
+                def evaluate_document(document_id: int):
+                    try:
+                        from database.db import get_db_context
+                        from database.repository import TranscriptRepository
+                        
+                        with get_db_context() as db:
+                            enriched_interventions = TranscriptRepository.get_enriched_by_document(
+                                db, document_id, filter_interviewers=True
+                            )
+                            
+                            formatted_interventions = []
+                            for interv in enriched_interventions:
+                                formatted_interv = {
+                                    "text": interv.get("text"),
+                                    "speaker_level": interv.get("speaker_level"),
+                                    "speaker_role": interv.get("speaker_role"),
+                                    "speaker_type": interv.get("speaker_type"),
+                                }
+                                formatted_interventions.append(formatted_interv)
+                            
+                            evaluation_response = self.agent.evaluate_prerequis_4_document(
+                                document_id,
+                                formatted_interventions,
+                                company_info,
+                                comment_general=combined_comments.get("comment_general", ""),
+                                comment_specific=combined_comments.get("comment_4", "")
+                            )
+                            return evaluation_response.evaluation
+                    except Exception as e:
+                        logger.error(f"❌ Erreur lors de l'évaluation du document {document_id}: {e}")
+                        return None
+                
+                # Paralléliser si plusieurs documents
+                if len(transcript_document_ids) > 1:
+                    with ThreadPoolExecutor(max_workers=min(len(transcript_document_ids), 10)) as executor:
+                        future_to_doc = {
+                            executor.submit(evaluate_document, doc_id): doc_id
+                            for doc_id in transcript_document_ids
+                        }
+                        
+                        for future in as_completed(future_to_doc):
+                            doc_id = future_to_doc[future]
+                            try:
+                                evaluation = future.result()
+                                if evaluation:
+                                    evaluations_by_doc.append(evaluation)
+                            except Exception as e:
+                                logger.error(f"❌ Erreur document {doc_id}: {e}")
+                else:
+                    for doc_id in transcript_document_ids:
+                        evaluation = evaluate_document(doc_id)
+                        if evaluation:
+                            evaluations_by_doc.append(evaluation)
+                
+                # Synthétiser
+                if evaluations_by_doc:
+                    evaluation_response = self.agent.synthesize_prerequis_4(
+                        evaluations_by_doc,
+                        company_info
+                    )
+                    state["evaluation_prerequis_4"] = evaluation_response.evaluation
+                    state["evaluations_prerequis_4_by_doc"] = evaluations_by_doc
+                    logger.info(f"✅ Prérequis 4 régénéré : note {evaluation_response.evaluation.note}/5")
+            
+            # Prérequis 5
+            if 5 in prerequis_to_regenerate:
+                transcript_document_ids = state.get("transcript_document_ids", [])
+                evaluations_by_doc = []
+                
+                def evaluate_document(document_id: int):
+                    try:
+                        from database.db import get_db_context
+                        from database.repository import TranscriptRepository
+                        
+                        with get_db_context() as db:
+                            enriched_interventions = TranscriptRepository.get_enriched_by_document(
+                                db, document_id, filter_interviewers=True
+                            )
+                            
+                            formatted_interventions = []
+                            for interv in enriched_interventions:
+                                formatted_interv = {
+                                    "text": interv.get("text"),
+                                    "speaker_level": interv.get("speaker_level"),
+                                    "speaker_role": interv.get("speaker_role"),
+                                    "speaker_type": interv.get("speaker_type"),
+                                }
+                                formatted_interventions.append(formatted_interv)
+                            
+                            evaluation_response = self.agent.evaluate_prerequis_5_document(
+                                document_id,
+                                formatted_interventions,
+                                company_info,
+                                comment_general=combined_comments.get("comment_general", ""),
+                                comment_specific=combined_comments.get("comment_5", "")
+                            )
+                            return evaluation_response.evaluation
+                    except Exception as e:
+                        logger.error(f"❌ Erreur lors de l'évaluation du document {document_id}: {e}")
+                        return None
+                
+                # Paralléliser si plusieurs documents
+                if len(transcript_document_ids) > 1:
+                    with ThreadPoolExecutor(max_workers=min(len(transcript_document_ids), 10)) as executor:
+                        future_to_doc = {
+                            executor.submit(evaluate_document, doc_id): doc_id
+                            for doc_id in transcript_document_ids
+                        }
+                        
+                        for future in as_completed(future_to_doc):
+                            doc_id = future_to_doc[future]
+                            try:
+                                evaluation = future.result()
+                                if evaluation:
+                                    evaluations_by_doc.append(evaluation)
+                            except Exception as e:
+                                logger.error(f"❌ Erreur document {doc_id}: {e}")
+                else:
+                    for doc_id in transcript_document_ids:
+                        evaluation = evaluate_document(doc_id)
+                        if evaluation:
+                            evaluations_by_doc.append(evaluation)
+                
+                # Synthétiser
+                if evaluations_by_doc:
+                    evaluation_response = self.agent.synthesize_prerequis_5(
+                        evaluations_by_doc,
+                        company_info
+                    )
+                    state["evaluation_prerequis_5"] = evaluation_response.evaluation
+                    state["evaluations_prerequis_5_by_doc"] = evaluations_by_doc
+                    logger.info(f"✅ Prérequis 5 régénéré : note {evaluation_response.evaluation.note}/5")
+            
+            logger.info(f"✅ Régénération terminée pour les prérequis : {prerequis_to_regenerate}")
+            return {}
+            
+        except Exception as e:
+            logger.error(f"Erreur lors de la régénération : {e}")
+            return {"error": str(e)}
     
     def _format_output_node(self, state: PrerequisEvaluationState) -> PrerequisEvaluationState:
         """Formate la sortie en markdown"""
@@ -647,7 +946,8 @@ class PrerequisEvaluationWorkflow:
         transcript_document_ids: List[int],
         company_info: Dict[str, Any],
         validated_use_cases: List[Dict[str, Any]],
-        thread_id: Optional[str] = None
+        thread_id: Optional[str] = None,
+        comments: Optional[Dict[str, str]] = None
     ) -> Dict[str, Any]:
         """
         Exécute le workflow d'évaluation des prérequis
@@ -671,11 +971,15 @@ class PrerequisEvaluationWorkflow:
             "transcript_document_ids": transcript_document_ids,
             "company_info": company_info,
             "validated_use_cases": validated_use_cases,
+            "comments": comments or {},
             "interventions_direction": [],
             "interventions_metier": [],
             "all_interventions": [],
             "evaluations_prerequis_4_by_doc": [],
             "evaluations_prerequis_5_by_doc": [],
+            "validated_prerequis": [],
+            "regeneration_comment": "",
+            "validation_pending": False,
             "final_evaluations": [],
             "synthese_globale": ""
         }
@@ -701,9 +1005,93 @@ class PrerequisEvaluationWorkflow:
         snapshot = self.graph.get_state(config)
         state = snapshot.values
         
+        # Vérifier si le workflow est en attente de validation
+        if state.get("validation_pending", False):
+            logger.info("⏸️ Workflow en attente de validation")
+            return {
+                "success": True,
+                "validation_pending": True,
+                "final_evaluations": [eval.model_dump() if hasattr(eval, 'model_dump') else eval for eval in state.get("final_evaluations", [])],
+                "synthese_globale": state.get("synthese_globale", ""),
+                "prerequis_markdown": "",
+                "error": ""
+            }
+        
         logger.info(f"✅ Workflow terminé")
         return {
             "success": state.get("success", False),
+            "validation_pending": False,
+            "final_evaluations": [eval.model_dump() if hasattr(eval, 'model_dump') else eval for eval in state.get("final_evaluations", [])],
+            "synthese_globale": state.get("synthese_globale", ""),
+            "prerequis_markdown": state.get("prerequis_markdown", ""),
+            "error": state.get("error", "")
+        }
+    
+    def resume_workflow_with_validation(
+        self,
+        validated_prerequis: List[int],
+        regeneration_comment: str,
+        thread_id: str
+    ) -> Dict[str, Any]:
+        """
+        Reprend le workflow après validation utilisateur
+        
+        Args:
+            validated_prerequis: Liste des IDs des prérequis validés (1 à 5)
+            regeneration_comment: Commentaire pour la régénération des prérequis non validés
+            thread_id: ID du thread
+            
+        Returns:
+            État final du workflow
+        """
+        logger.info(f"🔄 Reprise du workflow avec validation pour thread {thread_id}")
+        logger.info(f"✅ Prérequis validés : {validated_prerequis}")
+        logger.info(f"💬 Commentaire de régénération : {regeneration_comment[:50]}..." if regeneration_comment else "💬 Pas de commentaire")
+        
+        config = {"configurable": {"thread_id": thread_id}}
+        
+        # Récupérer l'état actuel
+        snapshot = self.graph.get_state(config)
+        if not snapshot:
+            raise ValueError(f"Thread {thread_id} non trouvé")
+        
+        # Mettre à jour l'état avec le feedback
+        current_state = snapshot.values
+        current_state["validated_prerequis"] = validated_prerequis
+        current_state["regeneration_comment"] = regeneration_comment
+        current_state["validation_pending"] = False
+        
+        # Mettre à jour l'état dans le checkpointer
+        self.graph.update_state(config, current_state)
+        
+        # Reprendre l'exécution
+        final_state = None
+        for chunk in self.graph.stream(None, config):
+            logger.info(f"📊 Chunk reçu: {list(chunk.keys())}")
+            for node_name, node_state in chunk.items():
+                logger.info(f"  • Nœud '{node_name}' exécuté")
+                final_state = node_state
+        
+        # Récupérer l'état final
+        snapshot = self.graph.get_state(config)
+        state = snapshot.values
+        
+        # Vérifier si on est encore en attente de validation (nouvelle boucle)
+        if state.get("validation_pending", False):
+            logger.info("⏸️ Workflow en attente de validation (nouvelle boucle)")
+            return {
+                "success": True,
+                "validation_pending": True,
+                "final_evaluations": [eval.model_dump() if hasattr(eval, 'model_dump') else eval for eval in state.get("final_evaluations", [])],
+                "synthese_globale": state.get("synthese_globale", ""),
+                "prerequis_markdown": "",
+                "error": ""
+            }
+        
+        logger.info(f"✅ Workflow terminé après validation")
+        return {
+            "success": state.get("success", False),
+            "validation_pending": False,
             "final_evaluations": [eval.model_dump() if hasattr(eval, 'model_dump') else eval for eval in state.get("final_evaluations", [])],
             "synthese_globale": state.get("synthese_globale", ""),
             "prerequis_markdown": state.get("prerequis_markdown", ""),

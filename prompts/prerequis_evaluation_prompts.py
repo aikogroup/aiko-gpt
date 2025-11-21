@@ -25,6 +25,8 @@ RÈGLES CRITIQUES POUR LE TEXTE D'ÉVALUATION :
 PREREQUIS_1_PROMPT = """
 Évalue le prérequis suivant : Vision claire des leaders : Pourquoi l'IA ?
 
+{comment_general}
+
 Barème d'évaluation :
 
 Note 1 : Aucun leader ne comprend l'intérêt de l'IA, pas de vision communiquée.
@@ -53,12 +55,16 @@ RÈGLES POUR LE TEXTE D'ÉVALUATION :
 EXEMPLE DE TEXTE D'ÉVALUATION :
 La direction de Cousin Surgery démontre une ouverture à l'innovation et comprend les enjeux de transformation digitale dans le secteur des dispositifs médicaux. Cependant, la stratégie IA nécessite une formalisation plus précise avec des objectifs métier spécifiques.
 
+{comment_specific}
+
 Évalue ce prérequis en attribuant une note sur 5 (avec décimales possibles : 2.3, 4.1, etc.) et rédige un texte d'évaluation détaillé en respectant les règles ci-dessus.
 """
 
 # Prompt pour le prérequis 2 : Équipe projet complète
 PREREQUIS_2_PROMPT = """
 Évalue le prérequis suivant : Équipe projet complète, compétente et qui décide
+
+{comment_general}
 
 Barème d'évaluation :
 
@@ -88,12 +94,16 @@ RÈGLES POUR LE TEXTE D'ÉVALUATION :
 EXEMPLE DE TEXTE D'ÉVALUATION :
 Cousin Surgery dispose d'équipes techniques compétentes (IT, Qualité, Commercial) mais manque encore d'une gouvernance IA structurée. La sensibilisation aux enjeux environnementaux (RSE, consommation énergétique des solutions IA) est un atout différentiant. Il faut renforcer la coordination entre départements et définir les rôles décisionnels dans la gouvernance des projets IA.
 
+{comment_specific}
+
 Évalue ce prérequis en attribuant une note sur 5 (avec décimales possibles : 2.3, 4.1, etc.) et rédige un texte d'évaluation détaillé en respectant les règles ci-dessus.
 """
 
 # Prompt pour le prérequis 3 : Cas d'usage important
 PREREQUIS_3_PROMPT = """
 Évalue le prérequis suivant : Cas d'usage important pour le business
+
+{comment_general}
 
 Barème d'évaluation :
 
@@ -123,12 +133,16 @@ RÈGLES POUR LE TEXTE D'ÉVALUATION :
 EXEMPLE DE TEXTE D'ÉVALUATION :
 Les cas d'usage identifiés sont pertinents et apportent un impact business : optimisation commerciale (profiling clients, aide à la négociation), capitalisation du savoir-faire technique (formation produits, segmentation processus), exploitation des données historiques. Ces priorités s'alignent sur les priorités stratégiques de croissance et d'efficacité opérationnelle.
 
+{comment_specific}
+
 Évalue ce prérequis en attribuant une note sur 5 (avec décimales possibles : 2.3, 4.1, etc.) et rédige un texte d'évaluation détaillé en respectant les règles ci-dessus.
 """
 
 # Prompt pour le prérequis 4 : Données présentes (par document)
 PREREQUIS_4_PROMPT = """
 Évalue le prérequis suivant : Données présentes et faciles d'accès pour le document suivant.
+
+{comment_general}
 
 Barème d'évaluation :
 
@@ -158,12 +172,16 @@ RÈGLES POUR LE TEXTE D'ÉVALUATION :
 EXEMPLE DE TEXTE D'ÉVALUATION :
 L'entreprise possède un patrimoine de données riche mais fragmenté entre différents systèmes (Excel, CRM, systèmes de production, documentation technique). La centralisation cloud chez Webaxys facilite l'accès théorique, mais les données restent dispersées avec des nomenclatures hétérogènes. Une restructuration de l'architecture data est nécessaire avant l'implémentation IA.
 
+{comment_specific}
+
 Évalue ce prérequis pour ce document en attribuant une note sur 5 (avec décimales possibles : 2.3, 4.1, etc.) et rédige un texte d'évaluation détaillé en respectant les règles ci-dessus.
 """
 
 # Prompt pour le prérequis 5 : Entreprise en mouvement (par document)
 PREREQUIS_5_PROMPT = """
 Évalue le prérequis suivant : Entreprise en mouvement (digitalisation…) pour le document suivant.
+
+{comment_general}
 
 Barème d'évaluation :
 
@@ -192,6 +210,8 @@ RÈGLES POUR LE TEXTE D'ÉVALUATION :
 
 EXEMPLE DE TEXTE D'ÉVALUATION :
 Cousin Surgery montre une dynamique de transformation remarquable : déploiement CRM Sogema en cours, migration ERP de systèmes développés en interne vers Sylob (production), projets IA déjà initiés (analyse commandes par mail pour les services clients), infrastructure Office 365/SharePoint, et forte culture d'amélioration continue à une conscience RSE exemplaire. Cette transformation active constitue un terreau fertile pour l'adoption de solutions IA.
+
+{comment_specific}
 
 Évalue ce prérequis pour ce document en attribuant une note sur 5 (avec décimales possibles : 2.3, 4.1, etc.) et rédige un texte d'évaluation détaillé en respectant les règles ci-dessus.
 """

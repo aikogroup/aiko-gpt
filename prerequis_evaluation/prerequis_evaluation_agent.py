@@ -48,7 +48,9 @@ class PrerequisEvaluationAgent:
     def evaluate_prerequis_1(
         self,
         interventions: List[Dict[str, Any]],
-        company_info: Dict[str, Any]
+        company_info: Dict[str, Any],
+        comment_general: str = "",
+        comment_specific: str = ""
     ) -> PrerequisEvaluationResponse:
         """
         Évalue le prérequis 1 : Vision claire des leaders
@@ -75,8 +77,14 @@ class PrerequisEvaluationAgent:
         interventions_text = self._format_interventions(interventions)
         company_info_text = self._format_company_info(company_info)
         
+        # Formater les commentaires
+        comment_general_text = f"\nCONTEXTE GÉNÉRAL :\n{comment_general}\n" if comment_general else ""
+        comment_specific_text = f"\nINSTRUCTION SPÉCIFIQUE POUR CE PRÉREQUIS :\n{comment_specific}\n" if comment_specific else ""
+        
         # Appeler le LLM
         prompt = PREREQUIS_1_PROMPT.format(
+            comment_general=comment_general_text,
+            comment_specific=comment_specific_text,
             interventions=interventions_text,
             company_info=company_info_text
         )
@@ -121,7 +129,9 @@ class PrerequisEvaluationAgent:
     def evaluate_prerequis_2(
         self,
         interventions: List[Dict[str, Any]],
-        company_info: Dict[str, Any]
+        company_info: Dict[str, Any],
+        comment_general: str = "",
+        comment_specific: str = ""
     ) -> PrerequisEvaluationResponse:
         """
         Évalue le prérequis 2 : Équipe projet complète
@@ -148,8 +158,14 @@ class PrerequisEvaluationAgent:
         interventions_text = self._format_interventions(interventions)
         company_info_text = self._format_company_info(company_info)
         
+        # Formater les commentaires
+        comment_general_text = f"\nCONTEXTE GÉNÉRAL :\n{comment_general}\n" if comment_general else ""
+        comment_specific_text = f"\nINSTRUCTION SPÉCIFIQUE POUR CE PRÉREQUIS :\n{comment_specific}\n" if comment_specific else ""
+        
         # Appeler le LLM
         prompt = PREREQUIS_2_PROMPT.format(
+            comment_general=comment_general_text,
+            comment_specific=comment_specific_text,
             interventions=interventions_text,
             company_info=company_info_text
         )
@@ -194,7 +210,9 @@ class PrerequisEvaluationAgent:
     def evaluate_prerequis_3(
         self,
         validated_use_cases: List[Dict[str, Any]],
-        company_info: Dict[str, Any]
+        company_info: Dict[str, Any],
+        comment_general: str = "",
+        comment_specific: str = ""
     ) -> PrerequisEvaluationResponse:
         """
         Évalue le prérequis 3 : Cas d'usage important
@@ -221,8 +239,14 @@ class PrerequisEvaluationAgent:
         use_cases_text = self._format_use_cases(validated_use_cases)
         company_info_text = self._format_company_info(company_info)
         
+        # Formater les commentaires
+        comment_general_text = f"\nCONTEXTE GÉNÉRAL :\n{comment_general}\n" if comment_general else ""
+        comment_specific_text = f"\nINSTRUCTION SPÉCIFIQUE POUR CE PRÉREQUIS :\n{comment_specific}\n" if comment_specific else ""
+        
         # Appeler le LLM
         prompt = PREREQUIS_3_PROMPT.format(
+            comment_general=comment_general_text,
+            comment_specific=comment_specific_text,
             validated_use_cases=use_cases_text,
             company_info=company_info_text
         )
@@ -268,7 +292,9 @@ class PrerequisEvaluationAgent:
         self,
         document_id: int,
         interventions: List[Dict[str, Any]],
-        company_info: Dict[str, Any]
+        company_info: Dict[str, Any],
+        comment_general: str = "",
+        comment_specific: str = ""
     ) -> PrerequisDocumentEvaluationResponse:
         """
         Évalue le prérequis 4 pour un document : Données présentes
@@ -296,8 +322,14 @@ class PrerequisEvaluationAgent:
         interventions_text = self._format_interventions(interventions)
         company_info_text = self._format_company_info(company_info)
         
+        # Formater les commentaires
+        comment_general_text = f"\nCONTEXTE GÉNÉRAL :\n{comment_general}\n" if comment_general else ""
+        comment_specific_text = f"\nINSTRUCTION SPÉCIFIQUE POUR CE PRÉREQUIS :\n{comment_specific}\n" if comment_specific else ""
+        
         # Appeler le LLM
         prompt = PREREQUIS_4_PROMPT.format(
+            comment_general=comment_general_text,
+            comment_specific=comment_specific_text,
             document_id=document_id,
             interventions=interventions_text,
             company_info=company_info_text
@@ -417,7 +449,9 @@ class PrerequisEvaluationAgent:
         self,
         document_id: int,
         interventions: List[Dict[str, Any]],
-        company_info: Dict[str, Any]
+        company_info: Dict[str, Any],
+        comment_general: str = "",
+        comment_specific: str = ""
     ) -> PrerequisDocumentEvaluationResponse:
         """
         Évalue le prérequis 5 pour un document : Entreprise en mouvement
@@ -445,8 +479,14 @@ class PrerequisEvaluationAgent:
         interventions_text = self._format_interventions(interventions)
         company_info_text = self._format_company_info(company_info)
         
+        # Formater les commentaires
+        comment_general_text = f"\nCONTEXTE GÉNÉRAL :\n{comment_general}\n" if comment_general else ""
+        comment_specific_text = f"\nINSTRUCTION SPÉCIFIQUE POUR CE PRÉREQUIS :\n{comment_specific}\n" if comment_specific else ""
+        
         # Appeler le LLM
         prompt = PREREQUIS_5_PROMPT.format(
+            comment_general=comment_general_text,
+            comment_specific=comment_specific_text,
             document_id=document_id,
             interventions=interventions_text,
             company_info=company_info_text
