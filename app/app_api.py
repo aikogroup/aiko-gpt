@@ -1153,8 +1153,8 @@ def main():
         st.markdown("**Génération du rapport**")
         page_diag = st.radio(
             "Navigation Génération du rapport",
-            ["Génération des Enjeux et Recommandations", "Rappel de la mission", "Atouts de l'entreprise", "Chaîne de valeur"],
-            index=0 if st.session_state.current_page == "Génération des Enjeux et Recommandations" else (1 if st.session_state.current_page == "Rappel de la mission" else (2 if st.session_state.current_page == "Atouts de l'entreprise" else (3 if st.session_state.current_page == "Chaîne de valeur" else None))),
+            ["Génération des Enjeux et Recommandations", "Rappel de la mission", "Atouts de l'entreprise", "Chaîne de valeur", "Prérequis IA"],
+            index=0 if st.session_state.current_page == "Génération des Enjeux et Recommandations" else (1 if st.session_state.current_page == "Rappel de la mission" else (2 if st.session_state.current_page == "Atouts de l'entreprise" else (3 if st.session_state.current_page == "Chaîne de valeur" else (4 if st.session_state.current_page == "Prérequis IA" else None)))),
             key="nav_diag",
             label_visibility="collapsed"
         )
@@ -1380,6 +1380,8 @@ def main():
         display_atouts_entreprise()
     elif page == "Chaîne de valeur":
         display_value_chain_page()
+    elif page == "Prérequis IA":
+        display_prerequis_evaluation_page()
 
 def display_diagnostic_section():
     """Affiche la section de génération du diagnostic (utilise fichiers depuis session_state)"""
@@ -6036,6 +6038,335 @@ def display_value_chain_page():
     # Afficher la progression si un workflow est en cours
     if st.session_state.get("value_chain_thread_id"):
         display_value_chain_workflow_progress()
+
+
+def display_prerequis_evaluation_page():
+    """Affiche la page d'évaluation des prérequis IA"""
+    st.header("📊 Évaluation des Prérequis IA")
+    
+    st.markdown("""
+    Cette section évalue les **5 prérequis de transformation IA** de l'entreprise :
+    
+    1. **Vision claire des leaders** : Pourquoi l'IA ?
+    2. **Équipe projet complète, compétente et qui décide**
+    3. **Cas d'usage important pour le business**
+    4. **Données présentes et faciles d'accès**
+    5. **Entreprise en mouvement** (digitalisation…)
+    
+    L'analyse se base sur :
+    - Les transcriptions des entretiens
+    - Les informations de l'entreprise validées
+    - Les cas d'usage validés (obligatoire)
+    """)
+    
+    # Vérifier les prérequis
+    validated_company_info = st.session_state.get("validated_company_info")
+    uploaded_transcripts = st.session_state.get("uploaded_transcripts", [])
+    
+    # Vérifier les cas d'usage validés
+    validated_use_cases = st.session_state.get("validated_use_cases", [])
+    
+    if not validated_company_info:
+        st.warning("⚠️ Veuillez d'abord valider les informations de l'entreprise dans 'Contexte de l'entreprise'.")
+        return
+    
+    if not uploaded_transcripts:
+        st.warning("⚠️ Veuillez d'abord uploader des transcriptions dans 'Upload de documents'.")
+        return
+    
+    if not validated_use_cases:
+        st.warning("⚠️ Veuillez d'abord valider les cas d'usage dans 'Validation des besoins et use cases'.")
+        return
+    
+    # Afficher les informations
+    company_name = validated_company_info.get("nom", "")
+    if company_name:
+        st.info(f"🏢 Entreprise : {company_name}")
+    
+    st.info(f"📄 {len(uploaded_transcripts)} transcription(s) disponible(s)")
+    st.info(f"✅ {len(validated_use_cases)} cas d'usage validé(s)")
+    
+    # Si un workflow est en cours, afficher la progression
+    if st.session_state.get("prerequis_thread_id"):
+        display_prerequis_workflow_progress()
+        return
+    
+    # Afficher les résultats finaux s'ils existent
+    if st.session_state.get("prerequis_workflow_completed"):
+        display_prerequis_final_results()
+        return
+    
+    st.markdown("---")
+    
+    # Bouton pour lancer le workflow
+    if st.button("🚀 Lancer l'évaluation des prérequis IA", type="primary"):
+        thread_id = str(uuid.uuid4())
+        st.session_state.prerequis_thread_id = thread_id
+        st.session_state.prerequis_workflow_completed = False
+        
+        try:
+            with st.spinner("Démarrage du workflow d'évaluation des prérequis..."):
+                # Récupérer les document_ids depuis uploaded_transcripts
+                transcript_document_ids = []
+                for t in uploaded_transcripts:
+                    doc_id = t.get("document_id")
+                    if doc_id is not None:
+                        try:
+                            transcript_document_ids.append(int(doc_id))
+                        except (ValueError, TypeError):
+                            st.error(f"❌ Document ID invalide: {doc_id}")
+                            return
+                
+                if not transcript_document_ids:
+                    st.error("❌ Aucun document transcript trouvé.")
+                    return
+                
+                # Appel API pour démarrer le workflow
+                response = requests.post(
+                    f"{API_URL}/prerequis-evaluation/threads/{thread_id}/runs",
+                    json={
+                        "transcript_document_ids": transcript_document_ids,
+                        "company_info": validated_company_info,
+                        "validated_use_cases": validated_use_cases
+                    },
+                    timeout=600
+                )
+                response.raise_for_status()
+                
+                st.success("✅ Workflow lancé !")
+                st.rerun()
+        
+        except Exception as e:
+            st.error(f"❌ Erreur lors du démarrage du workflow : {str(e)}")
+            st.session_state.prerequis_thread_id = None
+
+
+def poll_prerequis_workflow_status():
+    """Poll le statut du workflow d'évaluation des prérequis"""
+    thread_id = st.session_state.get("prerequis_thread_id")
+    if not thread_id:
+        return None
+    
+    try:
+        response = requests.get(
+            f"{API_URL}/prerequis-evaluation/threads/{thread_id}/state",
+            timeout=10
+        )
+        response.raise_for_status()
+        state = response.json()
+        return state.get("status", "unknown")
+    except Exception as e:
+        st.error(f"❌ Erreur lors de la récupération du statut : {str(e)}")
+        return None
+
+
+def display_prerequis_workflow_progress():
+    """Affiche la progression du workflow d'évaluation des prérequis"""
+    st.markdown("---")
+    st.header("🔄 Progression du Workflow d'Évaluation des Prérequis")
+    
+    # Si le workflow est déjà terminé dans session_state, afficher les résultats
+    if st.session_state.get("prerequis_workflow_completed"):
+        display_prerequis_final_results()
+        return
+    
+    # Poll le statut
+    status = poll_prerequis_workflow_status()
+    
+    if status == "running":
+        st.info("⚙️ Le workflow est en cours d'exécution...")
+        st.markdown("#### Étapes en cours :")
+        st.markdown("""
+        - 📝 Chargement des interventions
+        - 📊 Évaluation du prérequis 1 (Vision claire des leaders)
+        - 👥 Évaluation du prérequis 2 (Équipe projet complète)
+        - 🎯 Évaluation du prérequis 3 (Cas d'usage important)
+        - 💾 Évaluation du prérequis 4 (Données présentes)
+        - 🚀 Évaluation du prérequis 5 (Entreprise en mouvement)
+        - 📋 Synthèse globale
+        """)
+        
+        # Auto-refresh toutes les 3 secondes
+        time.sleep(3)
+        st.rerun()
+    
+    elif status == "completed":
+        # Récupérer l'état final UNE SEULE FOIS
+        thread_id = st.session_state.get("prerequis_thread_id")
+        try:
+            response = requests.get(
+                f"{API_URL}/prerequis-evaluation/threads/{thread_id}/state",
+                timeout=10
+            )
+            response.raise_for_status()
+            state = response.json()
+            
+            # Extraire les résultats depuis le state
+            result = state.get("result", {})
+            if result:
+                # Le résultat contient directement les données
+                st.session_state.prerequis_workflow_state = {
+                    "final_evaluations": result.get("final_evaluations", []),
+                    "synthese_globale": result.get("synthese_globale", ""),
+                    "prerequis_markdown": result.get("prerequis_markdown", "")
+                }
+            else:
+                # Fallback : utiliser values si disponible
+                values = state.get("values", {})
+                st.session_state.prerequis_workflow_state = {
+                    "final_evaluations": values.get("final_evaluations", []),
+                    "synthese_globale": values.get("synthese_globale", ""),
+                    "prerequis_markdown": values.get("prerequis_markdown", "")
+                }
+            
+            st.session_state.prerequis_workflow_completed = True
+            st.rerun()
+        except Exception as e:
+            st.error(f"❌ Erreur lors de la récupération des résultats : {str(e)}")
+    
+    elif status == "error":
+        st.error("❌ Une erreur s'est produite lors de l'exécution du workflow.")
+        st.session_state.prerequis_thread_id = None
+
+
+def display_prerequis_final_results():
+    """Affiche les résultats finaux de l'évaluation des prérequis avec champs éditables"""
+    workflow_state = st.session_state.get("prerequis_workflow_state", {})
+    
+    if not workflow_state:
+        st.warning("⚠️ Aucun résultat disponible.")
+        return
+    
+    st.success("✅ Évaluation des prérequis terminée !")
+    st.markdown("---")
+    
+    # Afficher les évaluations
+    final_evaluations = workflow_state.get("final_evaluations", [])
+    synthese_globale = workflow_state.get("synthese_globale", "")
+    
+    if not final_evaluations:
+        st.warning("⚠️ Aucune évaluation disponible.")
+        return
+    
+    # Trier les évaluations par prerequis_id pour garantir l'ordre
+    sorted_evaluations = sorted(final_evaluations, key=lambda e: e.get("prerequis_id", 0) if isinstance(e, dict) else getattr(e, "prerequis_id", 0))
+    
+    st.markdown("## 📊 Résultats de l'évaluation")
+    st.markdown("Vous pouvez modifier les évaluations et les notes ci-dessous :")
+    st.markdown("---")
+    
+    # Afficher les prérequis 2 par 2 avec champs éditables
+    key_suffix = "prerequis_final"
+    
+    for i in range(0, len(sorted_evaluations), 2):
+        col1, col2 = st.columns(2, gap="large")
+        
+        # Premier prérequis de la ligne
+        with col1:
+            evaluation = sorted_evaluations[i]
+            
+            # Gérer dict ou objet
+            if isinstance(evaluation, dict):
+                prerequis_id = evaluation.get("prerequis_id", "N/A")
+                titre = evaluation.get("titre", "N/A")
+                original_note = evaluation.get("note", 0.0)
+                original_evaluation_text = evaluation.get("evaluation_text", "")
+            else:
+                prerequis_id = getattr(evaluation, "prerequis_id", "N/A")
+                titre = getattr(evaluation, "titre", "N/A")
+                original_note = getattr(evaluation, "note", 0.0)
+                original_evaluation_text = getattr(evaluation, "evaluation_text", "")
+            
+            # Initialiser les valeurs dans session_state
+            note_key = f"prerequis_note_{i}_{key_suffix}"
+            text_key = f"prerequis_text_{i}_{key_suffix}"
+            
+            if note_key not in st.session_state:
+                st.session_state[note_key] = float(original_note) if original_note else 0.0
+            if text_key not in st.session_state:
+                st.session_state[text_key] = original_evaluation_text
+            
+            # Afficher le titre du prérequis
+            st.markdown(f"### Prérequis {prerequis_id}: {titre}")
+            
+            # Champ éditable pour l'évaluation (text_area)
+            modified_evaluation_text = st.text_area(
+                "**Évaluation**",
+                key=text_key,
+                label_visibility="visible",
+                height=200
+            )
+            
+            # Champ éditable pour la note (number_input)
+            modified_note = st.number_input(
+                "**Note** (sur 5)",
+                min_value=0.0,
+                max_value=5.0,
+                step=0.1,
+                key=note_key,
+                label_visibility="visible"
+            )
+        
+        # Deuxième prérequis de la ligne (si existant)
+        if i + 1 < len(sorted_evaluations):
+            with col2:
+                evaluation = sorted_evaluations[i + 1]
+                
+                # Gérer dict ou objet
+                if isinstance(evaluation, dict):
+                    prerequis_id = evaluation.get("prerequis_id", "N/A")
+                    titre = evaluation.get("titre", "N/A")
+                    original_note = evaluation.get("note", 0.0)
+                    original_evaluation_text = evaluation.get("evaluation_text", "")
+                else:
+                    prerequis_id = getattr(evaluation, "prerequis_id", "N/A")
+                    titre = getattr(evaluation, "titre", "N/A")
+                    original_note = getattr(evaluation, "note", 0.0)
+                    original_evaluation_text = getattr(evaluation, "evaluation_text", "")
+                
+                # Initialiser les valeurs dans session_state
+                note_key = f"prerequis_note_{i+1}_{key_suffix}"
+                text_key = f"prerequis_text_{i+1}_{key_suffix}"
+                
+                if note_key not in st.session_state:
+                    st.session_state[note_key] = float(original_note) if original_note else 0.0
+                if text_key not in st.session_state:
+                    st.session_state[text_key] = original_evaluation_text
+                
+                # Afficher le titre du prérequis
+                st.markdown(f"### Prérequis {prerequis_id}: {titre}")
+                
+                # Champ éditable pour l'évaluation (text_area)
+                modified_evaluation_text = st.text_area(
+                    "**Évaluation**",
+                    key=text_key,
+                    label_visibility="visible",
+                    height=200
+                )
+                
+                # Champ éditable pour la note (number_input)
+                modified_note = st.number_input(
+                    "**Note** (sur 5)",
+                    min_value=0.0,
+                    max_value=5.0,
+                    step=0.1,
+                    key=note_key,
+                    label_visibility="visible"
+                )
+        
+        st.markdown("---")
+    
+    # Afficher la synthèse globale
+    if synthese_globale:
+        st.markdown("## 📋 Synthèse globale")
+        st.markdown(synthese_globale)
+        st.markdown("---")
+    
+    # Bouton pour régénérer
+    if st.button("🔄 Régénérer l'évaluation", type="secondary"):
+        st.session_state.prerequis_workflow_completed = False
+        st.session_state.prerequis_thread_id = None
+        st.rerun()
 
 
 if __name__ == "__main__":

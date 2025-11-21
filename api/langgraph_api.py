@@ -25,6 +25,7 @@ from workflow.rappel_mission_workflow import RappelMissionWorkflow
 from workflow.atouts_workflow import AtoutsWorkflow
 from workflow.value_chain_workflow import ValueChainWorkflow
 from executive_summary.executive_summary_workflow import ExecutiveSummaryWorkflow
+from prerequis_evaluation.prerequis_evaluation_workflow import PrerequisEvaluationWorkflow
 from langgraph.checkpoint.memory import MemorySaver
 from process_transcript.pdf_parser import PDFParser
 from process_transcript.json_parser import JSONParser
@@ -49,6 +50,7 @@ executive_workflows: Dict[str, Any] = {}  # Workflows Executive Summary
 rappel_workflows: Dict[str, Any] = {}  # Workflows Rappel de la mission
 atouts_workflows: Dict[str, Any] = {}  # Workflows Atouts de l'entreprise
 value_chain_workflows: Dict[str, Any] = {}  # Workflows Chaîne de valeur
+prerequis_evaluation_workflows: Dict[str, Any] = {}  # Workflows Évaluation des prérequis
 checkpointer = MemorySaver()
 
 # Dossier temporaire pour les fichiers uploadés
@@ -138,6 +140,13 @@ class ValueChainValidationFeedback(BaseModel):
     validated_items: List[Dict[str, Any]]
     rejected_items: List[Dict[str, Any]]
     user_action: str  # "continue_teams", "continue_to_activities", "continue_activities", "continue_to_friction", "continue_friction", "finalize"
+
+
+class PrerequisEvaluationInput(BaseModel):
+    """Input pour démarrer un workflow d'évaluation des prérequis"""
+    transcript_document_ids: List[int]  # IDs des documents transcripts dans la DB
+    company_info: Dict[str, Any]
+    validated_use_cases: List[Dict[str, Any]]  # Cas d'usage validés (obligatoire)
 
 
 class ExecutiveValidationFeedback(BaseModel):
@@ -1088,10 +1097,82 @@ async def delete_thread(thread_id: str):
         del value_chain_workflows[thread_id]
         deleted = True
 
+    if thread_id in prerequis_evaluation_workflows:
+        del prerequis_evaluation_workflows[thread_id]
+        deleted = True
+
     if deleted:
         return {"status": "deleted", "thread_id": thread_id}
 
     raise HTTPException(status_code=404, detail="Thread non trouvé")
+
+
+# ==================== ENDPOINTS ÉVALUATION PRÉREQUIS ====================
+
+@app.post("/prerequis-evaluation/threads/{thread_id}/runs")
+async def create_prerequis_evaluation_run(thread_id: str, prerequis_input: PrerequisEvaluationInput):
+    """Démarre un workflow d'évaluation des prérequis"""
+    try:
+        if thread_id not in prerequis_evaluation_workflows:
+            workflow = PrerequisEvaluationWorkflow(checkpointer=checkpointer)
+            prerequis_evaluation_workflows[thread_id] = {
+                "workflow": workflow,
+                "state": None,
+                "status": "created"
+            }
+        
+        workflow_data = prerequis_evaluation_workflows[thread_id]
+        workflow = workflow_data["workflow"]
+        
+        print(f"\n🚀 [API] Démarrage workflow Évaluation prérequis pour thread {thread_id}")
+        print(f"📁 Documents: {len(prerequis_input.transcript_document_ids)}")
+        print(f"🏢 Entreprise: {prerequis_input.company_info.get('nom', 'N/A')}")
+        print(f"📋 Cas d'usage validés: {len(prerequis_input.validated_use_cases)}")
+        
+        # Exécuter le workflow
+        result = workflow.run(
+            transcript_document_ids=prerequis_input.transcript_document_ids,
+            company_info=prerequis_input.company_info,
+            validated_use_cases=prerequis_input.validated_use_cases,
+            thread_id=thread_id
+        )
+        
+        workflow_data["state"] = result
+        workflow_data["status"] = "completed" if result.get("success") else "error"
+        
+        return {
+            "thread_id": thread_id,
+            "status": workflow_data["status"],
+            "result": result
+        }
+    
+    except Exception as e:
+        print(f"❌ [API] Erreur Évaluation prérequis: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Erreur workflow évaluation prérequis: {str(e)}")
+
+
+@app.get("/prerequis-evaluation/threads/{thread_id}/state")
+async def get_prerequis_evaluation_state(thread_id: str):
+    """
+    Récupère l'état actuel du workflow d'évaluation des prérequis
+    
+    Args:
+        thread_id: ID du thread
+        
+    Returns:
+        État du workflow
+    """
+    if thread_id not in prerequis_evaluation_workflows:
+        raise HTTPException(status_code=404, detail="Thread non trouvé")
+    
+    workflow_data = prerequis_evaluation_workflows[thread_id]
+    
+    return {
+        "thread_id": thread_id,
+        "status": workflow_data["status"],
+        "state": workflow_data["state"],
+        "result": workflow_data["state"]  # Alias pour compatibilité avec Streamlit
+    }
 
 
 # ==================== DÉMARRAGE ====================
