@@ -40,8 +40,52 @@ app = FastAPI(
     version="1.0.0"
 )
 
+# Middleware de logging pour toutes les requêtes
+import logging
+from fastapi import Request
+import time
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    """Middleware pour logger toutes les requêtes"""
+    start_time = time.time()
+    
+    # Logger la requête entrante
+    logger.info(f"📥 {request.method} {request.url.path} - Client: {request.client.host if request.client else 'unknown'}")
+    
+    try:
+        response = await call_next(request)
+        process_time = time.time() - start_time
+        
+        # Logger la réponse
+        logger.info(f"📤 {request.method} {request.url.path} - Status: {response.status_code} - Time: {process_time:.3f}s")
+        
+        return response
+    except Exception as e:
+        process_time = time.time() - start_time
+        logger.error(f"❌ {request.method} {request.url.path} - Error: {str(e)} - Time: {process_time:.3f}s")
+        raise
+
 # Inclure les endpoints de base de données
 app.include_router(db_router)
+
+# Logger tous les endpoints au démarrage
+@app.on_event("startup")
+async def startup_event():
+    """Log tous les endpoints disponibles au démarrage"""
+    routes = []
+    for route in app.routes:
+        if hasattr(route, 'methods') and hasattr(route, 'path'):
+            routes.append(f"{', '.join(route.methods)} {route.path}")
+    
+    logger.info("=" * 80)
+    logger.info("🚀 API aiko démarrée - Endpoints disponibles:")
+    for route in sorted(routes):
+        logger.info(f"   {route}")
+    logger.info("=" * 80)
 
 # Stockage en mémoire des workflows (en production, utiliser Redis ou DB)
 workflows: Dict[str, Any] = {}
@@ -53,7 +97,14 @@ checkpointer = MemorySaver()
 
 # Dossier temporaire pour les fichiers uploadés
 UPLOAD_DIR = Path("/tmp/aiko_uploads")
-UPLOAD_DIR.mkdir(exist_ok=True)
+# Créer le dossier avec les bonnes permissions
+UPLOAD_DIR.mkdir(exist_ok=True, mode=0o755)
+# Vérifier que le dossier existe et est accessible en écriture
+if not UPLOAD_DIR.exists():
+    raise RuntimeError(f"Impossible de créer le dossier d'upload: {UPLOAD_DIR}")
+if not os.access(UPLOAD_DIR, os.W_OK):
+    raise RuntimeError(f"Le dossier d'upload n'est pas accessible en écriture: {UPLOAD_DIR}")
+print(f"✅ Dossier d'upload initialisé: {UPLOAD_DIR} (existe: {UPLOAD_DIR.exists()}, accessible: {os.access(UPLOAD_DIR, os.W_OK)})")
 
 
 # ==================== MODÈLES PYDANTIC ====================
@@ -158,6 +209,31 @@ class WordExtractInput(BaseModel):
     force_llm: bool = False  # Si True, force l'extraction via LLM
 
 
+class ParseTranscriptInput(BaseModel):
+    """Input pour parser et sauvegarder un transcript"""
+    file_path: str
+    project_id: int
+    file_name: str
+    validated_speakers: List[Dict[str, Any]]  # Liste des speakers validés
+    metadata: Optional[Dict[str, Any]] = None
+
+
+class ParseWorkshopInput(BaseModel):
+    """Input pour parser et sauvegarder un workshop"""
+    file_path: str
+    project_id: int
+    file_name: str
+    metadata: Optional[Dict[str, Any]] = None
+
+
+class ParseWordReportInput(BaseModel):
+    """Input pour parser et sauvegarder un word report"""
+    file_path: str
+    project_id: int
+    file_name: str
+    metadata: Optional[Dict[str, Any]] = None
+
+
 # ==================== ENDPOINTS ====================
 
 @app.get("/")
@@ -167,6 +243,33 @@ async def root():
         "service": "aiko LangGraph API",
         "status": "running",
         "version": "1.0.0"
+    }
+
+@app.get("/health")
+async def health_check():
+    """Health check détaillé avec liste des endpoints disponibles"""
+    routes = []
+    for route in app.routes:
+        if hasattr(route, 'methods') and hasattr(route, 'path'):
+            routes.append({
+                "path": route.path,
+                "methods": list(route.methods)
+            })
+    
+    # Vérifier spécifiquement si l'endpoint classify-speakers existe
+    classify_endpoint_exists = any(
+        route.get("path") == "/transcripts/classify-speakers" 
+        and "POST" in route.get("methods", [])
+        for route in routes
+    )
+    
+    return {
+        "status": "healthy",
+        "endpoints": routes,
+        "classify_speakers_endpoint_exists": classify_endpoint_exists,
+        "upload_dir": str(UPLOAD_DIR),
+        "upload_dir_exists": UPLOAD_DIR.exists(),
+        "upload_dir_writable": os.access(UPLOAD_DIR, os.W_OK) if UPLOAD_DIR.exists() else False
     }
 
 
@@ -182,6 +285,17 @@ async def upload_files(files: List[UploadFile] = File(...)):
         }
     """
     try:
+        # Vérifier que le dossier d'upload existe et est accessible
+        if not UPLOAD_DIR.exists():
+            UPLOAD_DIR.mkdir(exist_ok=True, mode=0o755)
+            print(f"⚠️ Dossier d'upload recréé: {UPLOAD_DIR}")
+        
+        if not os.access(UPLOAD_DIR, os.W_OK):
+            raise HTTPException(
+                status_code=500, 
+                detail=f"Le dossier d'upload n'est pas accessible en écriture: {UPLOAD_DIR}"
+            )
+        
         file_paths = []
         workshop_files = []
         transcript_files = []
@@ -194,8 +308,28 @@ async def upload_files(files: List[UploadFile] = File(...)):
             
             # Sauvegarder le fichier
             content = await file.read()
+            content_size = len(content)
+            
+            # Écrire le fichier
             with open(file_path, "wb") as f:
                 f.write(content)
+            
+            # Vérifier que le fichier a bien été écrit
+            if not file_path.exists():
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Le fichier n'a pas pu être sauvegardé: {file_path}"
+                )
+            
+            # Vérifier la taille du fichier écrit
+            written_size = file_path.stat().st_size
+            if written_size != content_size:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Taille du fichier incorrecte: attendu {content_size} octets, obtenu {written_size} octets"
+                )
+            
+            print(f"✅ Fichier sauvegardé: {file_path} ({written_size} octets)")
             
             file_paths.append(str(file_path))
             
@@ -208,6 +342,8 @@ async def upload_files(files: List[UploadFile] = File(...)):
                 # Fichier Word pour Executive Summary
                 workshop_files.append(str(file_path))  # Pour l'instant, on le met dans workshop_files
         
+        print(f"✅ {len(file_paths)} fichier(s) uploadé(s) avec succès dans {UPLOAD_DIR}")
+        
         return {
             "file_paths": file_paths,
             "file_types": {
@@ -217,7 +353,12 @@ async def upload_files(files: List[UploadFile] = File(...)):
             "count": len(file_paths)
         }
     
+    except HTTPException:
+        raise
     except Exception as e:
+        print(f"❌ Erreur lors de l'upload: {str(e)}")
+        import traceback
+        print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Erreur upload: {str(e)}")
 
 
@@ -237,12 +378,33 @@ async def classify_speakers(input_data: ClassifySpeakersInput):
             ]
         }
     """
+    logger.info(f"🔍 [classify-speakers] Début de la classification - file_path: {input_data.file_path}")
     try:
         file_path = input_data.file_path
         
+        # DEBUG: Vérifier si le chemin contient aiko_uploads_local au lieu de aiko_uploads
+        if "aiko_uploads_local" in file_path:
+            logger.warning(f"⚠️ [classify-speakers] Chemin contient 'aiko_uploads_local', correction automatique")
+            file_path = file_path.replace("/tmp/aiko_uploads_local", "/tmp/aiko_uploads")
+            logger.info(f"🔧 [classify-speakers] Chemin corrigé: {file_path}")
+        
         # Vérifier que le fichier existe
-        if not Path(file_path).exists():
-            raise HTTPException(status_code=404, detail=f"Fichier non trouvé: {file_path}")
+        file_path_obj = Path(file_path)
+        if not file_path_obj.exists():
+            logger.error(f"❌ [classify-speakers] Fichier non trouvé: {file_path}")
+            # Essayer de trouver le fichier dans aiko_uploads si on cherchait dans aiko_uploads_local
+            if "aiko_uploads_local" in str(input_data.file_path):
+                alternative_path = str(input_data.file_path).replace("/tmp/aiko_uploads_local", "/tmp/aiko_uploads")
+                logger.info(f"🔍 [classify-speakers] Tentative avec chemin alternatif: {alternative_path}")
+                if Path(alternative_path).exists():
+                    file_path = alternative_path
+                    file_path_obj = Path(file_path)
+                    logger.info(f"✅ [classify-speakers] Fichier trouvé avec chemin alternatif")
+                else:
+                    raise HTTPException(status_code=404, detail=f"Fichier non trouvé: {file_path}")
+            else:
+                raise HTTPException(status_code=404, detail=f"Fichier non trouvé: {file_path}")
+        logger.info(f"✅ [classify-speakers] Fichier trouvé: {file_path} ({file_path_obj.stat().st_size} octets)")
         
         # Initialiser les parsers et le classificateur
         pdf_parser = PDFParser()
@@ -279,6 +441,8 @@ async def classify_speakers(input_data: ClassifySpeakersInput):
         # Construire le dictionnaire de rôles connus
         known_roles = input_data.known_speakers or {}
         
+        logger.info(f"🔍 [classify-speakers] Classification de {len(all_speakers)} speakers uniques")
+        
         # NOUVEAU: Un seul appel LLM pour identifier les vrais speakers ET extraire leurs rôles
         speakers_list = speaker_classifier.identify_and_extract_speakers_with_roles(
             all_speakers=all_speakers,
@@ -287,12 +451,15 @@ async def classify_speakers(input_data: ClassifySpeakersInput):
             known_roles=known_roles
         )
         
+        logger.info(f"✅ [classify-speakers] Classification terminée - {len(speakers_list)} speakers identifiés")
         return {"speakers": speakers_list}
     
     except HTTPException:
         raise
     except Exception as e:
-        print(f"❌ [API] Erreur lors de la classification des speakers: {str(e)}")
+        logger.error(f"❌ [classify-speakers] Erreur lors de la classification: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Erreur classification: {str(e)}")
 
 
@@ -336,8 +503,122 @@ async def extract_word_data(input_data: WordExtractInput):
     except HTTPException:
         raise
     except Exception as e:
-        print(f"❌ [API] Erreur lors de l'extraction Word: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Erreur extraction Word: {str(e)}")
+        logger.error(f"❌ [word/extract] Erreur lors de l'extraction: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Erreur extraction: {str(e)}")
+
+
+@app.post("/documents/parse-transcript")
+async def parse_and_save_transcript(input_data: ParseTranscriptInput):
+    """
+    Parse et sauvegarde un transcript dans la base de données.
+    
+    Args:
+        input_data: Contient file_path, project_id, file_name, validated_speakers, metadata
+    
+    Returns:
+        {"document_id": int}
+    """
+    try:
+        logger.info(f"🔍 [parse-transcript] Début du parsing - file_path: {input_data.file_path}")
+        
+        # Importer DocumentParserService
+        from database.document_parser_service import DocumentParserService
+        
+        parser_service = DocumentParserService()
+        document_id = parser_service.parse_and_save_transcript(
+            file_path=input_data.file_path,
+            project_id=input_data.project_id,
+            file_name=input_data.file_name,
+            validated_speakers=input_data.validated_speakers,
+            metadata=input_data.metadata
+        )
+        
+        logger.info(f"✅ [parse-transcript] Document sauvegardé avec ID: {document_id}")
+        return {"document_id": document_id}
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ [parse-transcript] Erreur lors du parsing: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Erreur parsing: {str(e)}")
+
+
+@app.post("/documents/parse-workshop")
+async def parse_and_save_workshop(input_data: ParseWorkshopInput):
+    """
+    Parse et sauvegarde un workshop dans la base de données.
+    
+    Args:
+        input_data: Contient file_path, project_id, file_name, metadata
+    
+    Returns:
+        {"document_id": int}
+    """
+    try:
+        logger.info(f"🔍 [parse-workshop] Début du parsing - file_path: {input_data.file_path}")
+        
+        # Importer DocumentParserService
+        from database.document_parser_service import DocumentParserService
+        
+        parser_service = DocumentParserService()
+        document_id = parser_service.parse_and_save_workshop(
+            file_path=input_data.file_path,
+            project_id=input_data.project_id,
+            file_name=input_data.file_name,
+            metadata=input_data.metadata
+        )
+        
+        logger.info(f"✅ [parse-workshop] Document sauvegardé avec ID: {document_id}")
+        return {"document_id": document_id}
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ [parse-workshop] Erreur lors du parsing: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Erreur parsing: {str(e)}")
+
+
+@app.post("/documents/parse-word-report")
+async def parse_and_save_word_report(input_data: ParseWordReportInput):
+    """
+    Parse et sauvegarde un word report dans la base de données.
+    
+    Args:
+        input_data: Contient file_path, project_id, file_name, metadata
+    
+    Returns:
+        {"document_id": int}
+    """
+    try:
+        logger.info(f"🔍 [parse-word-report] Début du parsing - file_path: {input_data.file_path}")
+        
+        # Importer DocumentParserService
+        from database.document_parser_service import DocumentParserService
+        
+        parser_service = DocumentParserService()
+        document_id = parser_service.parse_and_save_word_report(
+            file_path=input_data.file_path,
+            project_id=input_data.project_id,
+            file_name=input_data.file_name,
+            metadata=input_data.metadata
+        )
+        
+        logger.info(f"✅ [parse-word-report] Document sauvegardé avec ID: {document_id}")
+        return {"document_id": document_id}
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ [parse-word-report] Erreur lors du parsing: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Erreur parsing: {str(e)}")
 
 
 @app.post("/threads/{thread_id}/runs")

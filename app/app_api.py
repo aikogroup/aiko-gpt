@@ -453,9 +453,13 @@ def upload_files_to_api(files: List[Any]) -> Dict[str, Any]:
     """
     try:
         files_data = []
+        # Stocker les fichiers en mémoire pour pouvoir les copier localement si nécessaire
+        files_content = {}
         for uploaded_file in files:
+            file_content = uploaded_file.getvalue()
+            files_content[uploaded_file.name] = file_content
             files_data.append(
-                ("files", (uploaded_file.name, uploaded_file.getvalue(), uploaded_file.type))
+                ("files", (uploaded_file.name, file_content, uploaded_file.type))
             )
         
         response = requests.post(
@@ -465,11 +469,39 @@ def upload_files_to_api(files: List[Any]) -> Dict[str, Any]:
         response.raise_for_status()
         
         result = response.json()
-        # Retourner à la fois file_types et file_paths pour gérer les fichiers Word
-        return {
+        api_paths = {
             "workshop": result.get("file_types", {}).get("workshop", []),
             "transcript": result.get("file_types", {}).get("transcript", []),
             "file_paths": result.get("file_paths", [])
+        }
+        
+        # IMPORTANT: Toujours utiliser les chemins retournés par l'API pour les appels API
+        # Les fichiers sont sauvegardés dans /tmp/aiko_uploads/ sur l'API
+        # Même si Streamlit et l'API sont sur des machines différentes, on doit utiliser
+        # le chemin de l'API car c'est là que le fichier est réellement stocké
+        
+        # DEBUG: Vérifier que les chemins retournés par l'API sont corrects
+        for path_type in ["workshop", "transcript", "file_paths"]:
+            for path in api_paths.get(path_type, []):
+                if "aiko_uploads_local" in path:
+                    print(f"⚠️ [DEBUG] Chemin incorrect reçu de l'API: {path}")
+                    print(f"   Le chemin devrait contenir 'aiko_uploads' et non 'aiko_uploads_local'")
+                elif "aiko_uploads" not in path:
+                    print(f"⚠️ [DEBUG] Chemin suspect reçu de l'API: {path}")
+        
+        # Pour le parsing local (si nécessaire), on peut copier les fichiers localement,
+        # mais pour les appels API, on utilise toujours le chemin de l'API
+        
+        # Créer un dossier local pour le parsing si nécessaire (mais ne pas l'utiliser pour les appels API)
+        local_upload_dir = Path("/tmp/aiko_uploads_local")
+        local_upload_dir.mkdir(exist_ok=True)
+        
+        # Retourner directement les chemins de l'API
+        # Ces chemins pointent vers /tmp/aiko_uploads/ sur l'API où les fichiers sont réellement stockés
+        return {
+            "workshop": api_paths["workshop"],
+            "transcript": api_paths["transcript"],
+            "file_paths": api_paths["file_paths"]
         }
     
     except Exception as e:
@@ -2271,14 +2303,33 @@ def generate_word_report():
             # Sauvegarder dans la base de données si un projet est sélectionné
             if st.session_state.current_project_id:
                 try:
-                    # Parser et sauvegarder directement avec DocumentParserService
+                    # Uploader le fichier vers l'API puis le parser
                     file_name = os.path.basename(output_path)
-                    document_parser_service.parse_and_save_word_report(
-                        file_path=output_path,
-                        project_id=st.session_state.current_project_id,
-                        file_name=file_name,
-                        metadata={}
+                    with open(output_path, 'rb') as f:
+                        files_data = [("files", (file_name, f.read(), "application/vnd.openxmlformats-officedocument.wordprocessingml.document"))]
+                    
+                    # Upload vers l'API
+                    upload_response = requests.post(
+                        f"{API_URL}/files/upload",
+                        files=files_data
                     )
+                    upload_response.raise_for_status()
+                    upload_result = upload_response.json()
+                    api_file_path = upload_result.get("file_paths", [])[0] if upload_result.get("file_paths") else None
+                    
+                    if api_file_path:
+                        # Parser et sauvegarder via l'API
+                        response = requests.post(
+                            f"{API_URL}/documents/parse-word-report",
+                            json={
+                                "file_path": api_file_path,
+                                "project_id": st.session_state.current_project_id,
+                                "file_name": file_name,
+                                "metadata": {}
+                            },
+                            timeout=300
+                        )
+                        response.raise_for_status()
                 except Exception as e:
                     st.warning(f"⚠️ Erreur lors de la sauvegarde en base de données: {str(e)}")
             
@@ -2497,24 +2548,53 @@ def display_upload_documents_section():
                 
                 # Sauvegarder dans la base de données si un projet est sélectionné
                 document_id = None
+                file_name = None
                 if st.session_state.current_project_id:
                     try:
-                        # Parser et sauvegarder directement avec DocumentParserService
+                        # Parser et sauvegarder via l'API (le fichier est sur l'API, pas sur Streamlit)
                         file_name = os.path.basename(st.session_state.current_transcript_file_path)
-                        document_id = document_parser_service.parse_and_save_transcript(
-                            file_path=st.session_state.current_transcript_file_path,
-                            project_id=st.session_state.current_project_id,
-                            file_name=file_name,
-                            validated_speakers=validated_speakers_list  # Passer les speakers validés avec level
+                        
+                        # Appeler l'API pour parser et sauvegarder
+                        response = requests.post(
+                            f"{API_URL}/documents/parse-transcript",
+                            json={
+                                "file_path": st.session_state.current_transcript_file_path,
+                                "project_id": st.session_state.current_project_id,
+                                "file_name": file_name,
+                                "validated_speakers": validated_speakers_list,
+                                "metadata": {}
+                            },
+                            timeout=300  # Timeout de 5 minutes pour le parsing
                         )
+                        response.raise_for_status()
+                        result = response.json()
+                        document_id = result.get("document_id")
                     except ValueError as e:
                         st.error(f"❌ {str(e)}")
+                        st.stop()
+                    except FileNotFoundError as e:
+                        st.error(f"❌ {str(e)}")
+                        st.error(f"   Le fichier a peut-être été supprimé ou n'est pas accessible.")
+                        st.stop()
                     except Exception as e:
-                        st.warning(f"⚠️ Erreur lors de la sauvegarde en base de données: {str(e)}")
+                        st.error(f"❌ Erreur lors de la sauvegarde en base de données: {str(e)}")
+                        import traceback
+                        st.error(f"**Détails de l'erreur :**")
+                        st.code(traceback.format_exc())
+                        st.stop()
+                else:
+                    st.error("❌ Veuillez d'abord sélectionner un projet avant de valider le transcript.")
+                    st.stop()
+                
+                # Vérifier que document_id a bien été créé
+                if document_id is None:
+                    st.error("❌ Erreur : Le document n'a pas pu être sauvegardé. Veuillez réessayer.")
+                    st.stop()
                 
                 # Sauvegarder le transcript dans la liste (pour compatibilité avec workflows)
                 transcript_data = {
                     "file_path": st.session_state.current_transcript_file_path,
+                    "file_name": file_name,  # NOUVEAU: Sauvegarder le nom du fichier
                     "document_id": document_id,  # NOUVEAU: Stocker document_id
                     "speakers": [
                         {"name": s["name"], "role": s["role"]}
@@ -2568,6 +2648,19 @@ def display_upload_documents_section():
                         else:
                             file_path = new_paths[0]
                             
+                            # DEBUG: Vérifier que le chemin est correct
+                            if "aiko_uploads_local" in file_path:
+                                st.error(f"❌ ERREUR: Le chemin contient 'aiko_uploads_local' au lieu de 'aiko_uploads'")
+                                st.error(f"   Chemin reçu: {file_path}")
+                                st.error(f"   Le chemin doit pointer vers /tmp/aiko_uploads/ sur l'API")
+                                st.session_state.transcript_classification_in_progress = False
+                                st.stop()
+                            
+                            # S'assurer que le chemin pointe vers /tmp/aiko_uploads/ (pas aiko_uploads_local)
+                            if "/tmp/aiko_uploads_local" in file_path:
+                                file_path = file_path.replace("/tmp/aiko_uploads_local", "/tmp/aiko_uploads")
+                                st.warning(f"⚠️ Chemin corrigé: {file_path}")
+                            
                             # Construire le dictionnaire des rôles connus depuis les transcripts précédents
                             known_speakers = {}
                             if 'uploaded_transcripts' in st.session_state:
@@ -2582,13 +2675,28 @@ def display_upload_documents_section():
                             st.session_state.transcript_classification_in_progress = True
                             with st.spinner("🔍 Classification des speakers en cours..."):
                                 try:
+                                    # Vérifier d'abord que l'endpoint existe
+                                    health_response = requests.get(f"{API_URL}/health", timeout=5)
+                                    if health_response.status_code == 200:
+                                        health_data = health_response.json()
+                                        endpoints = [ep.get("path", "") for ep in health_data.get("endpoints", [])]
+                                        if "/transcripts/classify-speakers" not in endpoints:
+                                            st.error(f"❌ L'endpoint /transcripts/classify-speakers n'est pas disponible dans l'API déployée.")
+                                            st.error(f"Endpoints disponibles: {', '.join(endpoints[:10])}")
+                                            st.session_state.transcript_classification_in_progress = False
+                                            st.stop()
+                                    
+                                    # DEBUG: Logger le chemin envoyé
+                                    print(f"🔍 [DEBUG] Envoi du chemin à l'API: {file_path}")
+                                    
                                     response = requests.post(
                                         f"{API_URL}/transcripts/classify-speakers",
                                         json={
                                             "file_path": file_path,
                                             "interviewer_names": None,  # Utiliser les valeurs par défaut
                                             "known_speakers": known_speakers
-                                        }
+                                        },
+                                        timeout=120  # Timeout de 2 minutes pour la classification
                                     )
                                     response.raise_for_status()
                                     result = response.json()
@@ -2601,8 +2709,20 @@ def display_upload_documents_section():
                                     st.success("✅ Classification terminée !")
                                     st.rerun()
                                     
+                                except requests.exceptions.Timeout:
+                                    st.error(f"❌ Timeout : La classification prend trop de temps. Veuillez réessayer.")
+                                    st.session_state.transcript_classification_in_progress = False
+                                except requests.exceptions.HTTPError as e:
+                                    if e.response.status_code == 404:
+                                        st.error(f"❌ Erreur 404 : L'endpoint /transcripts/classify-speakers n'existe pas dans l'API déployée.")
+                                        st.error(f"   Veuillez vérifier que l'API a été déployée avec la dernière version du code.")
+                                        st.error(f"   URL de l'API: {API_URL}")
+                                    else:
+                                        st.error(f"❌ Erreur HTTP {e.response.status_code} lors de la classification: {e.response.text}")
+                                    st.session_state.transcript_classification_in_progress = False
                                 except requests.exceptions.RequestException as e:
                                     st.error(f"❌ Erreur lors de la classification: {str(e)}")
+                                    st.error(f"   URL de l'API: {API_URL}")
                                     st.session_state.transcript_classification_in_progress = False
                                     
                     except Exception as e:
@@ -2685,34 +2805,81 @@ def display_upload_documents_section():
             ]
             
             # Sauvegarder dans la base de données si un projet est sélectionné
-            if st.session_state.current_project_id:
-                try:
-                    from database.repository import WorkshopRepository
-                    from database.db import get_db_context
-                    
-                    for i, file_path in enumerate(new_paths):
-                        # Parser et sauvegarder directement avec DocumentParserService
-                        file_name = os.path.basename(file_path)
-                        document_id = document_parser_service.parse_and_save_workshop(
-                            file_path=file_path,
-                            project_id=st.session_state.current_project_id,
-                            file_name=file_name,
-                            metadata={}
+            if not st.session_state.current_project_id:
+                st.error("❌ Veuillez d'abord sélectionner un projet avant d'uploader les workshops.")
+                st.stop()
+            
+            try:
+                from database.repository import WorkshopRepository
+                from database.db import get_db_context
+                
+                for i, file_path in enumerate(new_paths):
+                    # Parser et sauvegarder via l'API (le fichier est sur l'API, pas sur Streamlit)
+                    file_name = os.path.basename(file_path)
+                    try:
+                        # Appeler l'API pour parser et sauvegarder
+                        response = requests.post(
+                            f"{API_URL}/documents/parse-workshop",
+                            json={
+                                "file_path": file_path,
+                                "project_id": st.session_state.current_project_id,
+                                "file_name": file_name,
+                                "metadata": {}
+                            },
+                            timeout=300  # Timeout de 5 minutes pour le parsing
                         )
-                        # Charger les ateliers depuis la base de données pour ce document
-                        with get_db_context() as db:
-                            workshops = WorkshopRepository.get_by_document(db, document_id)
-                            ateliers = [w.atelier_name for w in workshops]
-                        
-                        # Mettre à jour le workshop_dict avec document_id et ateliers
-                        if i < len(new_workshop_dicts):
-                            new_workshop_dicts[i]["document_id"] = document_id
-                            new_workshop_dicts[i]["ateliers"] = ateliers
-                            # Supprimer file_path et extracted_text qui ne sont plus nécessaires
-                            new_workshop_dicts[i].pop("file_path", None)
-                            new_workshop_dicts[i].pop("extracted_text", None)
-                except Exception as e:
-                    st.warning(f"⚠️ Erreur lors de la sauvegarde en base de données: {str(e)}")
+                        response.raise_for_status()
+                        result = response.json()
+                        document_id = result.get("document_id")
+                    except requests.exceptions.HTTPError as e:
+                        if e.response.status_code == 404:
+                            st.error(f"❌ Fichier non trouvé sur l'API: {file_path}")
+                        else:
+                            st.error(f"❌ Erreur HTTP {e.response.status_code} lors du parsing: {e.response.text}")
+                        continue
+                    except requests.exceptions.RequestException as e:
+                        st.error(f"❌ Erreur lors du parsing du fichier {file_name}: {str(e)}")
+                        continue
+                    except Exception as e:
+                        st.error(f"❌ Erreur lors du parsing du fichier {file_name}: {str(e)}")
+                        import traceback
+                        st.code(traceback.format_exc())
+                        continue
+                    
+                    # Vérifier que document_id a bien été créé
+                    if document_id is None:
+                        st.error(f"❌ Erreur : Le document {file_name} n'a pas pu être sauvegardé.")
+                        continue
+                    
+                    # Charger les ateliers depuis la base de données pour ce document
+                    with get_db_context() as db:
+                        workshops = WorkshopRepository.get_by_document(db, document_id)
+                        ateliers = [w.atelier_name for w in workshops]
+                    
+                    # Mettre à jour le workshop_dict avec document_id et ateliers
+                    # IMPORTANT: Conserver file_name, ne pas le supprimer
+                    if i < len(new_workshop_dicts):
+                        new_workshop_dicts[i]["document_id"] = document_id
+                        new_workshop_dicts[i]["ateliers"] = ateliers
+                        # S'assurer que file_name est bien présent
+                        if "file_name" not in new_workshop_dicts[i]:
+                            new_workshop_dicts[i]["file_name"] = file_name
+                        # Supprimer file_path et extracted_text qui ne sont plus nécessaires
+                        new_workshop_dicts[i].pop("file_path", None)
+                        new_workshop_dicts[i].pop("extracted_text", None)
+            except Exception as e:
+                st.error(f"❌ Erreur lors de la sauvegarde en base de données: {str(e)}")
+                import traceback
+                st.error(f"**Détails de l'erreur :**")
+                st.code(traceback.format_exc())
+                st.stop()
+            
+            # Filtrer les workshops qui n'ont pas de document_id (échec de sauvegarde)
+            new_workshop_dicts = [w for w in new_workshop_dicts if w.get("document_id") is not None]
+            
+            if not new_workshop_dicts:
+                st.error("❌ Aucun workshop n'a pu être sauvegardé. Veuillez vérifier les erreurs ci-dessus.")
+                st.stop()
             
             # Ajouter les nouveaux workshops aux workshops existants (après avoir récupéré les document_id)
             existing_workshops = st.session_state.get("uploaded_workshops", [])
@@ -2722,7 +2889,7 @@ def display_upload_documents_section():
             for f in new_workshops:
                 st.session_state.uploaded_file_names.add(f.name)
             
-            st.success(f"✅ {len(new_workshops)} nouveau(x) fichier(s) d'atelier sauvegardé(s)")
+            st.success(f"✅ {len(new_workshop_dicts)} nouveau(x) fichier(s) d'atelier sauvegardé(s)")
             # Forcer la mise à jour de la sidebar
             st.rerun()
     
@@ -3667,15 +3834,20 @@ def display_word_validation_section():
                             word_path = all_paths[0]
                             st.session_state.word_validation_path = word_path
                             
-                            # Sauvegarder le document dans la base de données
+                            # Sauvegarder le document dans la base de données via l'API
                             try:
                                 file_name = os.path.basename(word_path)
-                                document_parser_service.parse_and_save_word_report(
-                                    file_path=word_path,
-                                    project_id=st.session_state.current_project_id,
-                                    file_name=file_name,
-                                    metadata={}
+                                response = requests.post(
+                                    f"{API_URL}/documents/parse-word-report",
+                                    json={
+                                        "file_path": word_path,
+                                        "project_id": st.session_state.current_project_id,
+                                        "file_name": file_name,
+                                        "metadata": {}
+                                    },
+                                    timeout=300
                                 )
+                                response.raise_for_status()
                             except Exception as e:
                                 st.warning(f"⚠️ Erreur lors de la sauvegarde du document: {str(e)}")
                             
