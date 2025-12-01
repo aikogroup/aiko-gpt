@@ -3,7 +3,7 @@ Modèles Pydantic pour l'évaluation des 5 prérequis de transformation IA
 """
 
 from pydantic import BaseModel, Field
-from typing import List
+from typing import List, Optional, Dict, Any
 
 
 class PrerequisEvaluation(BaseModel):
@@ -57,4 +57,5 @@ class PrerequisValidationFeedback(BaseModel):
     """Modèle pour le feedback de validation des prérequis"""
     validated_prerequis: List[int] = Field(description="Liste des IDs des prérequis validés (1 à 5)")
     regeneration_comment: str = Field(default="", description="Commentaire pour la régénération des prérequis non validés")
+    modified_evaluations: Optional[Dict[int, Dict[str, Any]]] = Field(default=None, description="Modifications des prérequis validés (prerequis_id -> {note, evaluation_text})")
 

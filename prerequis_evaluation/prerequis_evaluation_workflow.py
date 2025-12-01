@@ -48,6 +48,7 @@ class PrerequisEvaluationState(TypedDict, total=False):
     # Validation
     validated_prerequis: List[int]  # Liste des IDs des prérequis validés (1 à 5)
     regeneration_comment: str  # Commentaire pour la régénération des prérequis non validés
+    modified_evaluations: Dict[int, Dict[str, Any]]  # Modifications des prérequis validés (prerequis_id -> {note, evaluation_text})
     validation_pending: bool  # Flag pour savoir si on attend une validation
     
     # Résultats finaux
@@ -611,19 +612,42 @@ class PrerequisEvaluationWorkflow:
         evaluation_4 = state.get("evaluation_prerequis_4")
         evaluation_5 = state.get("evaluation_prerequis_5")
         company_info = state.get("company_info", {})
+        modified_evaluations = state.get("modified_evaluations", {})
         
-        # Collecter toutes les évaluations
+        # Fonction pour appliquer les modifications à une évaluation
+        def apply_modifications(evaluation: Optional[PrerequisEvaluation], prerequis_id: int) -> Optional[PrerequisEvaluation]:
+            if not evaluation:
+                return None
+            
+            # Vérifier si des modifications existent pour ce prérequis
+            if prerequis_id in modified_evaluations:
+                mods = modified_evaluations[prerequis_id]
+                # Créer une nouvelle évaluation avec les modifications
+                return PrerequisEvaluation(
+                    prerequis_id=evaluation.prerequis_id,
+                    titre=evaluation.titre,
+                    note=mods.get("note", evaluation.note),
+                    evaluation_text=mods.get("evaluation_text", evaluation.evaluation_text)
+                )
+            return evaluation
+        
+        # Collecter toutes les évaluations en appliquant les modifications
         evaluations = []
-        if evaluation_1:
-            evaluations.append(evaluation_1)
-        if evaluation_2:
-            evaluations.append(evaluation_2)
-        if evaluation_3:
-            evaluations.append(evaluation_3)
-        if evaluation_4:
-            evaluations.append(evaluation_4)
-        if evaluation_5:
-            evaluations.append(evaluation_5)
+        eval_1 = apply_modifications(evaluation_1, 1)
+        if eval_1:
+            evaluations.append(eval_1)
+        eval_2 = apply_modifications(evaluation_2, 2)
+        if eval_2:
+            evaluations.append(eval_2)
+        eval_3 = apply_modifications(evaluation_3, 3)
+        if eval_3:
+            evaluations.append(eval_3)
+        eval_4 = apply_modifications(evaluation_4, 4)
+        if eval_4:
+            evaluations.append(eval_4)
+        eval_5 = apply_modifications(evaluation_5, 5)
+        if eval_5:
+            evaluations.append(eval_5)
         
         if len(evaluations) != 5:
             logger.warning(f"Nombre d'évaluations incorrect : {len(evaluations)} au lieu de 5")
@@ -666,6 +690,7 @@ class PrerequisEvaluationWorkflow:
         # Vérifier si on a reçu le feedback (injecté par l'API via resume_workflow_with_validation)
         validated_prerequis = state.get("validated_prerequis", [])
         regeneration_comment = state.get("regeneration_comment", "")
+        modified_evaluations = state.get("modified_evaluations", {})
         
         if not validated_prerequis:
             # Première fois : le workflow va s'arrêter ici (interrupt_before)
@@ -678,10 +703,71 @@ class PrerequisEvaluationWorkflow:
         logger.info(f"✅ [VALIDATION] Prérequis validés : {validated_prerequis}")
         logger.info(f"💬 [VALIDATION] Commentaire de régénération : {regeneration_comment[:50]}..." if regeneration_comment else "💬 [VALIDATION] Pas de commentaire")
         
+        # Appliquer les modifications aux évaluations individuelles pour qu'elles soient persistées
+        updates = {}
+        if modified_evaluations:
+            logger.info(f"📝 [VALIDATION] Application des modifications à {len(modified_evaluations)} prérequis")
+            # Prérequis 1
+            if 1 in validated_prerequis and 1 in modified_evaluations and state.get("evaluation_prerequis_1"):
+                mods = modified_evaluations[1]
+                updates["evaluation_prerequis_1"] = PrerequisEvaluation(
+                    prerequis_id=1,
+                    titre=state["evaluation_prerequis_1"].titre,
+                    note=mods.get("note", state["evaluation_prerequis_1"].note),
+                    evaluation_text=mods.get("evaluation_text", state["evaluation_prerequis_1"].evaluation_text)
+                )
+                logger.info(f"✅ [VALIDATION] Prérequis 1 modifié : note {updates['evaluation_prerequis_1'].note}/5")
+            
+            # Prérequis 2
+            if 2 in validated_prerequis and 2 in modified_evaluations and state.get("evaluation_prerequis_2"):
+                mods = modified_evaluations[2]
+                updates["evaluation_prerequis_2"] = PrerequisEvaluation(
+                    prerequis_id=2,
+                    titre=state["evaluation_prerequis_2"].titre,
+                    note=mods.get("note", state["evaluation_prerequis_2"].note),
+                    evaluation_text=mods.get("evaluation_text", state["evaluation_prerequis_2"].evaluation_text)
+                )
+                logger.info(f"✅ [VALIDATION] Prérequis 2 modifié : note {updates['evaluation_prerequis_2'].note}/5")
+            
+            # Prérequis 3
+            if 3 in validated_prerequis and 3 in modified_evaluations and state.get("evaluation_prerequis_3"):
+                mods = modified_evaluations[3]
+                updates["evaluation_prerequis_3"] = PrerequisEvaluation(
+                    prerequis_id=3,
+                    titre=state["evaluation_prerequis_3"].titre,
+                    note=mods.get("note", state["evaluation_prerequis_3"].note),
+                    evaluation_text=mods.get("evaluation_text", state["evaluation_prerequis_3"].evaluation_text)
+                )
+                logger.info(f"✅ [VALIDATION] Prérequis 3 modifié : note {updates['evaluation_prerequis_3'].note}/5")
+            
+            # Prérequis 4
+            if 4 in validated_prerequis and 4 in modified_evaluations and state.get("evaluation_prerequis_4"):
+                mods = modified_evaluations[4]
+                updates["evaluation_prerequis_4"] = PrerequisEvaluation(
+                    prerequis_id=4,
+                    titre=state["evaluation_prerequis_4"].titre,
+                    note=mods.get("note", state["evaluation_prerequis_4"].note),
+                    evaluation_text=mods.get("evaluation_text", state["evaluation_prerequis_4"].evaluation_text)
+                )
+                logger.info(f"✅ [VALIDATION] Prérequis 4 modifié : note {updates['evaluation_prerequis_4'].note}/5")
+            
+            # Prérequis 5
+            if 5 in validated_prerequis and 5 in modified_evaluations and state.get("evaluation_prerequis_5"):
+                mods = modified_evaluations[5]
+                updates["evaluation_prerequis_5"] = PrerequisEvaluation(
+                    prerequis_id=5,
+                    titre=state["evaluation_prerequis_5"].titre,
+                    note=mods.get("note", state["evaluation_prerequis_5"].note),
+                    evaluation_text=mods.get("evaluation_text", state["evaluation_prerequis_5"].evaluation_text)
+                )
+                logger.info(f"✅ [VALIDATION] Prérequis 5 modifié : note {updates['evaluation_prerequis_5'].note}/5")
+        
         # Retourner l'état mis à jour
-        return {
+        result = {
             "validation_pending": False
         }
+        result.update(updates)
+        return result
     
     def _regenerate_prerequis_node(self, state: PrerequisEvaluationState) -> PrerequisEvaluationState:
         """Régénère uniquement les prérequis non validés avec le commentaire de régénération"""
@@ -715,6 +801,9 @@ class PrerequisEvaluationWorkflow:
                     combined_comments[comment_key] = f"COMMENTAIRE POUR RÉGÉNÉRATION :\n{regeneration_comment}"
         
         # Régénérer chaque prérequis non validé
+        # Construire un dictionnaire de retour avec les nouvelles évaluations
+        updates = {}
+        
         try:
             # Prérequis 1
             if 1 in prerequis_to_regenerate:
@@ -725,7 +814,7 @@ class PrerequisEvaluationWorkflow:
                     comment_general=combined_comments.get("comment_general", ""),
                     comment_specific=combined_comments.get("comment_1", "")
                 )
-                state["evaluation_prerequis_1"] = evaluation_response.evaluation
+                updates["evaluation_prerequis_1"] = evaluation_response.evaluation
                 logger.info(f"✅ Prérequis 1 régénéré : note {evaluation_response.evaluation.note}/5")
             
             # Prérequis 2
@@ -737,7 +826,7 @@ class PrerequisEvaluationWorkflow:
                     comment_general=combined_comments.get("comment_general", ""),
                     comment_specific=combined_comments.get("comment_2", "")
                 )
-                state["evaluation_prerequis_2"] = evaluation_response.evaluation
+                updates["evaluation_prerequis_2"] = evaluation_response.evaluation
                 logger.info(f"✅ Prérequis 2 régénéré : note {evaluation_response.evaluation.note}/5")
             
             # Prérequis 3
@@ -749,7 +838,7 @@ class PrerequisEvaluationWorkflow:
                     comment_general=combined_comments.get("comment_general", ""),
                     comment_specific=combined_comments.get("comment_3", "")
                 )
-                state["evaluation_prerequis_3"] = evaluation_response.evaluation
+                updates["evaluation_prerequis_3"] = evaluation_response.evaluation
                 logger.info(f"✅ Prérequis 3 régénéré : note {evaluation_response.evaluation.note}/5")
             
             # Prérequis 4
@@ -817,8 +906,8 @@ class PrerequisEvaluationWorkflow:
                         evaluations_by_doc,
                         company_info
                     )
-                    state["evaluation_prerequis_4"] = evaluation_response.evaluation
-                    state["evaluations_prerequis_4_by_doc"] = evaluations_by_doc
+                    updates["evaluation_prerequis_4"] = evaluation_response.evaluation
+                    updates["evaluations_prerequis_4_by_doc"] = evaluations_by_doc
                     logger.info(f"✅ Prérequis 4 régénéré : note {evaluation_response.evaluation.note}/5")
             
             # Prérequis 5
@@ -886,12 +975,12 @@ class PrerequisEvaluationWorkflow:
                         evaluations_by_doc,
                         company_info
                     )
-                    state["evaluation_prerequis_5"] = evaluation_response.evaluation
-                    state["evaluations_prerequis_5_by_doc"] = evaluations_by_doc
+                    updates["evaluation_prerequis_5"] = evaluation_response.evaluation
+                    updates["evaluations_prerequis_5_by_doc"] = evaluations_by_doc
                     logger.info(f"✅ Prérequis 5 régénéré : note {evaluation_response.evaluation.note}/5")
             
             logger.info(f"✅ Régénération terminée pour les prérequis : {prerequis_to_regenerate}")
-            return {}
+            return updates
             
         except Exception as e:
             logger.error(f"Erreur lors de la régénération : {e}")
@@ -979,6 +1068,7 @@ class PrerequisEvaluationWorkflow:
             "evaluations_prerequis_5_by_doc": [],
             "validated_prerequis": [],
             "regeneration_comment": "",
+            "modified_evaluations": {},
             "validation_pending": False,
             "final_evaluations": [],
             "synthese_globale": ""
@@ -1014,6 +1104,8 @@ class PrerequisEvaluationWorkflow:
                 "final_evaluations": [eval.model_dump() if hasattr(eval, 'model_dump') else eval for eval in state.get("final_evaluations", [])],
                 "synthese_globale": state.get("synthese_globale", ""),
                 "prerequis_markdown": "",
+                "validated_prerequis": state.get("validated_prerequis", []),
+                "modified_evaluations": state.get("modified_evaluations", {}),
                 "error": ""
             }
         
@@ -1024,6 +1116,8 @@ class PrerequisEvaluationWorkflow:
             "final_evaluations": [eval.model_dump() if hasattr(eval, 'model_dump') else eval for eval in state.get("final_evaluations", [])],
             "synthese_globale": state.get("synthese_globale", ""),
             "prerequis_markdown": state.get("prerequis_markdown", ""),
+            "validated_prerequis": state.get("validated_prerequis", []),
+            "modified_evaluations": state.get("modified_evaluations", {}),
             "error": state.get("error", "")
         }
     
@@ -1031,7 +1125,8 @@ class PrerequisEvaluationWorkflow:
         self,
         validated_prerequis: List[int],
         regeneration_comment: str,
-        thread_id: str
+        thread_id: str,
+        modified_evaluations: Optional[Dict[int, Dict[str, Any]]] = None
     ) -> Dict[str, Any]:
         """
         Reprend le workflow après validation utilisateur
@@ -1040,6 +1135,7 @@ class PrerequisEvaluationWorkflow:
             validated_prerequis: Liste des IDs des prérequis validés (1 à 5)
             regeneration_comment: Commentaire pour la régénération des prérequis non validés
             thread_id: ID du thread
+            modified_evaluations: Modifications des prérequis validés (prerequis_id -> {note, evaluation_text})
             
         Returns:
             État final du workflow
@@ -1047,6 +1143,8 @@ class PrerequisEvaluationWorkflow:
         logger.info(f"🔄 Reprise du workflow avec validation pour thread {thread_id}")
         logger.info(f"✅ Prérequis validés : {validated_prerequis}")
         logger.info(f"💬 Commentaire de régénération : {regeneration_comment[:50]}..." if regeneration_comment else "💬 Pas de commentaire")
+        if modified_evaluations:
+            logger.info(f"📝 Modifications reçues pour {len(modified_evaluations)} prérequis")
         
         config = {"configurable": {"thread_id": thread_id}}
         
@@ -1059,6 +1157,7 @@ class PrerequisEvaluationWorkflow:
         current_state = snapshot.values
         current_state["validated_prerequis"] = validated_prerequis
         current_state["regeneration_comment"] = regeneration_comment
+        current_state["modified_evaluations"] = modified_evaluations or {}
         current_state["validation_pending"] = False
         
         # Mettre à jour l'état dans le checkpointer
@@ -1085,6 +1184,8 @@ class PrerequisEvaluationWorkflow:
                 "final_evaluations": [eval.model_dump() if hasattr(eval, 'model_dump') else eval for eval in state.get("final_evaluations", [])],
                 "synthese_globale": state.get("synthese_globale", ""),
                 "prerequis_markdown": "",
+                "validated_prerequis": state.get("validated_prerequis", []),
+                "modified_evaluations": state.get("modified_evaluations", {}),
                 "error": ""
             }
         
@@ -1095,6 +1196,8 @@ class PrerequisEvaluationWorkflow:
             "final_evaluations": [eval.model_dump() if hasattr(eval, 'model_dump') else eval for eval in state.get("final_evaluations", [])],
             "synthese_globale": state.get("synthese_globale", ""),
             "prerequis_markdown": state.get("prerequis_markdown", ""),
+            "validated_prerequis": state.get("validated_prerequis", []),
+            "modified_evaluations": state.get("modified_evaluations", {}),
             "error": state.get("error", "")
         }
 

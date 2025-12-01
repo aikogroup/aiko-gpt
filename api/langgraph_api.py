@@ -206,6 +206,7 @@ class PrerequisValidationFeedback(BaseModel):
     validated_prerequis: List[int]  # Liste des IDs des prérequis validés (1 à 5)
     regeneration_comment: str = ""  # Commentaire pour la régénération des prérequis non validés
     comments: Optional[Dict[str, str]] = None  # Commentaires (comment_general, comment_1 à comment_5)
+    modified_evaluations: Optional[Dict[int, Dict[str, Any]]] = None  # Modifications des prérequis validés (prerequis_id -> {note, evaluation_text})
 
 
 class ExecutiveValidationFeedback(BaseModel):
@@ -1503,7 +1504,8 @@ async def send_prerequis_validation(thread_id: str, feedback: PrerequisValidatio
         result = workflow.resume_workflow_with_validation(
             validated_prerequis=feedback.validated_prerequis,
             regeneration_comment=feedback.regeneration_comment,
-            thread_id=thread_id
+            thread_id=thread_id,
+            modified_evaluations=feedback.modified_evaluations
         )
         
         # Mettre à jour l'état
