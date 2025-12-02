@@ -2577,8 +2577,17 @@ def display_upload_documents_section():
                         # Si pas de level et que ce n'est pas un interviewer, mettre "inconnu" par défaut
                         level = "inconnu"
                     
-                    original_name = speaker.get("original_name", speaker.get("name", ""))
-                    validated_name = speaker.get("name", original_name)
+                    # Récupérer original_name et validated_name
+                    # original_name devrait toujours être présent car on le stocke dans speaker_dict ligne 2503
+                    original_name = speaker.get("original_name")
+                    validated_name = speaker.get("name", "")
+                    
+                    # Si original_name n'est pas présent, utiliser name comme fallback (cas où le speaker n'a pas été initialisé correctement)
+                    if not original_name:
+                        original_name = validated_name
+                        import logging
+                        logger = logging.getLogger(__name__)
+                        logger.warning(f"⚠️ original_name manquant pour speaker '{validated_name}', utilisation de name comme fallback")
                     
                     speaker_dict = {
                         "name": validated_name,  # Nom validé (peut être différent de original_name)
@@ -2590,6 +2599,9 @@ def display_upload_documents_section():
                     # Si le nom a été renommé, ajouter original_name pour le mapping
                     if original_name and original_name != validated_name:
                         speaker_dict["original_name"] = original_name
+                        import logging
+                        logger = logging.getLogger(__name__)
+                        logger.info(f"📝 Speaker renommé: '{original_name}' -> '{validated_name}'")
                     
                     validated_speakers_list.append(speaker_dict)
                 
