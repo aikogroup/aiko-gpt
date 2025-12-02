@@ -1706,7 +1706,12 @@ def display_diagnostic_section():
     # Bouton de démarrage
     st.markdown("---")
     
-    if st.session_state.uploaded_transcripts or st.session_state.uploaded_workshops:
+    # Vérifier les conditions requises
+    has_transcripts = len(st.session_state.get("uploaded_transcripts", [])) > 0
+    has_workshops = len(st.session_state.get("uploaded_workshops", [])) > 0
+    has_company_info = st.session_state.get("validated_company_info") is not None
+    
+    if has_transcripts and has_workshops and has_company_info:
         if st.button("🚀 Démarrer l'Analyse des Besoins", type="primary", width="stretch"):
             # Utiliser les fichiers depuis session_state
             # Étape 1 : Démarrage du workflow avec messages rotatifs
@@ -1845,7 +1850,16 @@ def display_diagnostic_section():
                 except queue.Empty:
                     status_placeholder.error("❌ Timeout lors de la récupération du résultat")
     else:
-        st.info("👆 Veuillez uploader au moins un fichier pour démarrer")
+        missing_items = []
+        if not has_transcripts:
+            missing_items.append("au moins un transcript")
+        if not has_workshops:
+            missing_items.append("au moins un workshop")
+        if not has_company_info:
+            missing_items.append("le contexte d'entreprise (web search)")
+        
+        st.error(f"❌ **Impossible de démarrer le workflow.** Il manque : {', '.join(missing_items)}")
+        st.info("👆 Veuillez compléter tous les éléments requis avant de démarrer l'analyse.")
 
 def display_workflow_progress():
     """Affiche la progression du workflow et gère les validations"""

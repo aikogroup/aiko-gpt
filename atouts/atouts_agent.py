@@ -113,6 +113,8 @@ class AtoutsAgent:
         if additional_context:
             prompt += f"\n\nContexte additionnel fourni par l'utilisateur :\n{additional_context}"
         
+        print(prompt)
+        
         try:
             response = openai.responses.parse(
                 model=self.model,
@@ -186,6 +188,8 @@ class AtoutsAgent:
         # Ajouter le contexte additionnel si fourni
         if additional_context:
             prompt += f"\n\nContexte additionnel :\n{additional_context}"
+        
+        print(prompt)
         
         try:
             response = openai.responses.parse(

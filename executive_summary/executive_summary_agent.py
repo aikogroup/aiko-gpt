@@ -118,6 +118,7 @@ class ExecutiveSummaryAgent:
                     final_needs=needs_str
                 )
             
+            print(prompt)
             prompt_end = time.time()
             format_duration = format_end - format_start
             prompt_duration = prompt_end - prompt_start
@@ -296,6 +297,7 @@ class ExecutiveSummaryAgent:
                     recommendations_feedback=feedback_str
                 )
             
+            print(prompt)
             # Appel à l'API avec structured output
             response = self.client.responses.parse(
                 model=self.model,

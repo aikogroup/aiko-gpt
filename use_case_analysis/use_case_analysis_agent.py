@@ -200,6 +200,7 @@ class UseCaseAnalysisAgent:
                     web_search_data=web_search_str,
                     additional_context=additional_context if additional_context else "Aucune information supplémentaire fournie."
                 )
+                print(user_prompt)
             else:
                 logger.info(f"Régénération avec feedback")
                 
@@ -232,6 +233,7 @@ class UseCaseAnalysisAgent:
                     additional_context=additional_context if additional_context else "Aucune information supplémentaire fournie."
                 )
             
+            print(user_prompt)
             logger.info("Appel à l'API OpenAI Response avec structured output...")
             
             # Appel à l'API OpenAI Responses avec structured output
