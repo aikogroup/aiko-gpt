@@ -228,7 +228,7 @@ def load_interviewers() -> List[str]:
         st.error(f"❌ Erreur lors du chargement des intervieweurs : {str(e)}")
         return DEFAULT_INTERVIEWERS
 
-def save_interviewers(interviewers: List[str]) -> bool:
+def save_interviewers(interviewers: List[str]) -> tuple[bool, str]:
     """
     Sauvegarde la liste des intervieweurs dans la base de données.
     
@@ -236,7 +236,9 @@ def save_interviewers(interviewers: List[str]) -> bool:
         interviewers: Liste des noms d'intervieweurs à sauvegarder
     
     Returns:
-        True si la sauvegarde a réussi, False sinon
+        Tuple (success: bool, message: str) :
+        - success: True si la sauvegarde a réussi, False sinon
+        - message: Message détaillé sur le résultat de l'opération
     """
     try:
         from database.repository import SpeakerRepository
@@ -264,6 +266,10 @@ def save_interviewers(interviewers: List[str]) -> bool:
             
             # Supprimer les interviewers qui ne sont plus dans la liste
             # (mais seulement s'ils n'ont pas de transcripts associés)
+            deleted_count = 0
+            kept_count = 0
+            kept_names = []
+            
             for speaker in existing_interviewers:
                 if speaker.name not in interviewers_normalized:
                     # Vérifier si le speaker a des transcripts associés
@@ -274,13 +280,33 @@ def save_interviewers(interviewers: List[str]) -> bool:
                     if transcript_count == 0:
                         # Pas de transcripts, on peut le supprimer
                         db.delete(speaker)
-                    # Sinon, on le garde (il a des transcripts historiques)
+                        deleted_count += 1
+                    else:
+                        # Sinon, on le garde (il a des transcripts historiques)
+                        kept_count += 1
+                        kept_names.append(speaker.name)
             
             db.commit()
-            return True
+            
+            # Construire le message de retour
+            if kept_count == 0:
+                # Tous les interviewers ont été supprimés ou aucun n'était à supprimer
+                if deleted_count > 0:
+                    message = f"✅ {deleted_count} interviewer(s) supprimé(s) avec succès"
+                else:
+                    message = "✅ Configuration sauvegardée"
+                return (True, message)
+            else:
+                # Certains interviewers n'ont pas pu être supprimés
+                names_str = ", ".join(kept_names)
+                if deleted_count > 0:
+                    message = f"⚠️ {deleted_count} interviewer(s) supprimé(s), mais {kept_count} n'ont pas pu être supprimés car ils ont des transcripts associés : {names_str}"
+                else:
+                    message = f"⚠️ Impossible de supprimer {kept_count} interviewer(s) car ils ont des transcripts associés : {names_str}"
+                return (False, message)
     except Exception as e:
-        st.error(f"❌ Erreur lors de la sauvegarde des intervieweurs : {str(e)}")
-        return False
+        error_message = f"❌ Erreur lors de la sauvegarde des intervieweurs : {str(e)}"
+        return (False, error_message)
 
 def init_debug_data():
     """Initialise les données simulées en mode DEV"""
@@ -847,10 +873,16 @@ def display_interviewers_config_page():
                 st.text(f"• {interviewer}")
             with col_delete:
                 if st.button("🗑️", key=f"delete_{idx}"):
+                    interviewer_to_delete = interviewer
                     interviewers.remove(interviewer)
-                    if save_interviewers(interviewers):
-                        st.success(f"✅ {interviewer} retiré")
+                    success, message = save_interviewers(interviewers)
+                    if success:
+                        st.success(message)
                         st.rerun()
+                    else:
+                        # Si la suppression a échoué, remettre l'interviewer dans la liste
+                        interviewers.append(interviewer_to_delete)
+                        st.warning(message)
     else:
         st.warning("⚠️ Aucun interviewer configuré")
     
@@ -868,9 +900,14 @@ def display_interviewers_config_page():
         if new_interviewer and new_interviewer.strip():
             if new_interviewer.strip() not in interviewers:
                 interviewers.append(new_interviewer.strip())
-                if save_interviewers(interviewers):
-                    st.success(f"✅ {new_interviewer.strip()} ajouté")
+                success, message = save_interviewers(interviewers)
+                if success:
+                    st.success(message)
                     st.rerun()
+                else:
+                    # Si l'ajout a échoué, retirer l'interviewer de la liste
+                    interviewers.remove(new_interviewer.strip())
+                    st.error(message)
             else:
                 st.warning("⚠️ Ce nom est déjà dans la liste")
         else:
@@ -1659,7 +1696,7 @@ def display_diagnostic_section():
     st.subheader("Informations Supplémentaires")
     st.info("💡 Vous pouvez ajouter ici des informations complémentaires qui ne sont pas présentes dans les transcriptions ou les ateliers.")
     additional_context = st.text_area(
-        "Informations supplémentaires",
+        "Informations supplémentaires pour la génération des besoins",
         placeholder="Ex: L'entreprise souhaite prioriser les solutions IA pour la R&D. Il y a également un projet de fusion prévu pour 2025 qui impacte la stratégie.",
         height=150,
         key="additional_context_input",
