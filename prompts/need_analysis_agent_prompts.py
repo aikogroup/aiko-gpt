@@ -145,6 +145,13 @@ Si vous validez moins de 5 besoins, l'agent relancera l'analyse.
 NEED_REGENERATION_PROMPT = """
 Les besoins précédents n'ont pas obtenu suffisamment de validations.
 
+BESOINS DÉJÀ VALIDÉS PAR L'UTILISATEUR (À NE JAMAIS REPROPOSER, MÊME SOUS UNE FORME SIMILAIRE) :
+{validated_needs}
+
+⚠️ CRITIQUE : Les besoins ci-dessus ont été VALIDÉS par l'utilisateur. 
+Tu ne dois JAMAIS reproposer ces besoins, même avec un thème légèrement différent.
+Si un besoin est validé, explore d'autres domaines métier complètement différents.
+
 BESOINS DÉJÀ PROPOSÉS LORS DE L'ITÉRATION PRÉCÉDENTE (À NE JAMAIS REPROPOSER) :
 {previous_needs}
 
@@ -156,10 +163,6 @@ BESOINS EXPLICITEMENT REJETÉS PAR L'UTILISATEUR :
 
 COMMENTAIRES DE L'UTILISATEUR :
 {user_feedback}
-
-RÉSUMÉ DE LA VALIDATION :
-- Besoins validés : {validated_needs_count}
-- Besoins rejetés : {rejected_needs_count}
 
 RAPPEL CRITIQUE : Les besoins doivent provenir EXCLUSIVEMENT des WORKSHOPS et TRANSCRIPTS !
 Ne pas utiliser le WEB_SEARCH pour identifier des besoins.
@@ -192,35 +195,34 @@ INFORMATIONS SUPPLÉMENTAIRES FOURNIES PAR L'UTILISATEUR :
 INSTRUCTIONS CRITIQUES POUR LA NOUVELLE ITÉRATION :
 
 INTERDICTIONS ABSOLUES :
-1. NE JAMAIS reproposer un besoin déjà proposé dans l'itération précédente (même avec un thème légèrement différent)
-2. NE PAS créer de variantes ou reformulations des besoins déjà proposés
-3. Exemples à éviter :
-   - Si "Automatisation des processus de contrôle qualité" a déjà été proposé
-   - NE PAS proposer "Automatisation des contrôles qualité" (trop similaire)
-   - NE PAS proposer "Optimisation du contrôle qualité" (même domaine)
-   - PLUTÔT explorer d'autres domaines : R&D, commercial, supply chain, RH, etc.
+1. NE JAMAIS reproposer un besoin déjà VALIDÉ (même avec un thème légèrement différent ou une reformulation)
+2. NE JAMAIS reproposer un besoin déjà proposé dans l'itération précédente (même avec un thème légèrement différent)
+3. NE PAS créer de variantes ou reformulations des besoins déjà validés ou proposés
+4. Exemples à éviter :
+   - Si "Maintenance prédictive et GMAO" est validé, NE PAS proposer "Mise en place d'une GMAO" (trop similaire)
+   - Si "Automatisation des processus qualité" a déjà été proposé, NE PAS proposer "Automatisation qualité" (trop similaire)
+   - PLUTÔT explorer d'autres domaines : R&D, commercial, supply chain, RH, formation, communication, etc.
 
 OBLIGATIONS :
-4. Explorer des DOMAINES MÉTIER COMPLÈTEMENT DIFFÉRENTS de ceux déjà proposés
-5. Identifier des PROCESSUS ou SERVICES NON ENCORE COUVERTS dans les workshops/transcripts
-6. Proposer des besoins plus concrets, actionnables et mieux sourcés depuis les ATELIERS et ENTRETIENS
-7. Générer 5 nouveaux besoins DISTINCTS et PERTINENTS
-8. TOUTES les citations doivent venir des workshops (use_cases, objectives) ou transcripts (citations_cles, besoins_exprimes, frustrations_blocages, opportunites_automatisation)
+5. Explorer des DOMAINES MÉTIER COMPLÈTEMENT DIFFÉRENTS de ceux déjà validés ou proposés
+6. Identifier des PROCESSUS ou SERVICES NON ENCORE COUVERTS dans les workshops/transcripts
+7. Proposer des besoins plus concrets, actionnables et mieux sourcés depuis les ATELIERS et ENTRETIENS
+8. Générer de nouveaux besoins DISTINCTS et PERTINENTS (nombre raisonnable selon la richesse des données, généralement entre 8 et 12)
+9. TOUTES les citations doivent venir des workshops (use_cases, objectives) ou transcripts (citations_cles, besoins_exprimes, frustrations_blocages, opportunites_automatisation)
    RAPPEL : Pour les transcripts, utilise le champ "text" de chaque objet pour extraire le texte de la citation
-9. IGNORER les informations génériques du web (acquisitions, stratégie, conformité)
+10. IGNORER les informations génériques du web (acquisitions, stratégie, conformité)
 
 RÈGLES DE FORMAT :
-10. VÉRIFIE L'UNICITÉ DES THÈMES : Assure-toi qu'aucun thème n'est utilisé deux fois dans ta proposition ET qu'aucun thème ne ressemble aux besoins déjà proposés
-11. FORMAT STRICT : Les citations doivent contenir UNIQUEMENT le texte, SANS mention de source (pas de "- Transcript", "- Nom de personne", etc.)
-12. Chaque besoin doit avoir 3 à 5 citations CONCRÈTES et DIFFÉRENTES
+11. VÉRIFIE L'UNICITÉ DES THÈMES : Assure-toi qu'aucun thème n'est utilisé deux fois dans ta proposition ET qu'aucun thème ne ressemble aux besoins déjà validés ou proposés
+12. FORMAT STRICT : Les citations doivent contenir UNIQUEMENT le texte, SANS mention de source (pas de "- Transcript", "- Nom de personne", etc.)
+13. Chaque besoin doit avoir 3 à 5 citations CONCRÈTES et DIFFÉRENTES
 
 STRATÉGIE DE DIVERSIFICATION :
-- Analyse les besoins déjà proposés pour identifier les domaines/processus déjà couverts
+- Analyse les besoins déjà validés ET proposés pour identifier les domaines/processus déjà couverts
 - Cherche dans les WORKSHOPS et TRANSCRIPTS des aspects complètement différents
-- Si un domaine a déjà été exploré (ex: qualité, automatisation), passe à un autre domaine (ex: formation, collaboration, prévision, analyse de données, communication, etc.)
+- Si un domaine a déjà été exploré (ex: qualité, automatisation, maintenance), passe à un autre domaine (ex: formation, collaboration, prévision, analyse de données, communication, etc.)
+- Évite absolument de reprendre les mêmes concepts que les besoins validés, même avec des mots différents
 
-Itération actuelle : {current_iteration} / {max_iterations}
-
-OBJECTIF : Génère 5 nouveaux besoins avec des THÈMES VRAIMENT DIFFÉRENTS de tous les besoins déjà proposés, avec 3 à 5 citations CONCRÈTES issues des WORKSHOPS et TRANSCRIPTS uniquement. VÉRIFIE que chaque thème est UNIQUE et DISTINCT de TOUS les besoins déjà proposés (validés ou rejetés). Les citations doivent être du texte pur, sans indication de source.
+OBJECTIF : Génère de nouveaux besoins avec des THÈMES VRAIMENT DIFFÉRENTS de tous les besoins déjà validés ET de tous les besoins déjà proposés, avec 3 à 5 citations CONCRÈTES issues des WORKSHOPS et TRANSCRIPTS uniquement. VÉRIFIE que chaque thème est UNIQUE et DISTINCT de TOUS les besoins déjà validés (qui ne doivent JAMAIS être reproposés) et de TOUS les besoins déjà proposés (validés ou rejetés). Les citations doivent être du texte pur, sans indication de source.
 """
 

@@ -17,51 +17,34 @@ Types d'équipes à identifier :
    - Exemples : Infra & IT, Données & Qualité, Finance & Contrôle, RH & Formation
 
 Règles importantes :
-- Identifie les équipes mentionnées explicitement dans les transcriptions
-- Utilise les métadonnées enrichies (niveau hiérarchique, rôle) pour mieux comprendre l'organisation
-- Chaque équipe doit avoir un nom clair et une description de son rôle
-- Ne propose que des équipes réellement mentionnées dans les transcriptions
-- Les interventions sont préfixées avec [niveau=...|rôle=...] pour te donner du contexte
--La valeur doit être STRICTEMENT 'equipe_metier' ou 'equipe_support'. Aucune autre valeur n'est autorisée.
+- La source principale est le contenu sémantique des interventions des employés.
+- Identifie une équipe uniquement si elle :
+  * est explicitement mentionnée dans le texte, ou
+  * est décrite clairement par ses activités et responsabilités dans le texte.
+- Les métadonnées (niveau, rôle) ne doivent servir que de support secondaire, pour confirmer une équipe déjà suggérée par le texte.
+  → Ne crée jamais une équipe uniquement sur la base d’un rôle cité.
+- Si plusieurs formulations différentes décrivent la même équipe, les fusionner.
+- Ne propose aucune équipe non mentionnée ou non décrite dans le transcript.
+- La valeur "type" doit être STRICTEMENT "equipe_metier" ou "equipe_support". Aucune autre valeur n'est acceptée.
 """
 
 # Prompt pour l'extraction des équipes
 VALUE_CHAIN_TEAMS_PROMPT = """
-Analyse ces interventions d'employés de l'entreprise et identifie toutes les équipes (métier et support) mentionnées.
+Analyse ces interventions d'employés de l'entreprise et identifie toutes les équipes (métier et support)  réellement mentionnées ou clairement décrites par leurs activités.
 
-IMPORTANT - Métadonnées enrichies disponibles :
-Les interventions sont enrichies avec des métadonnées qui t'aident à mieux comprendre l'organisation :
-- **Niveau hiérarchique** : niveau=direction, niveau=métier, ou niveau=inconnu
-- **Rôle** : rôle=... - le rôle exact du speaker dans l'entreprise (ex: "Directeur Technique", "Chef de projet R&D", etc.)
+Utilise le texte du transcript comme source principale de vérité.
+Les métadonnées (niveau=..., rôle=...) peuvent servir uniquement à confirmer ou préciser une équipe déjà déduite du contenu.
 
-IMPORTANT - Utilisation du rôle des speakers :
-Le rôle des speakers (rôle=...) est un indicateur clé pour identifier les équipes :
-- "Directeur R&D", "Chef de projet R&D", "Ingénieur R&D", "Responsable R&D" → Équipe R&D
-- "Directeur IT", "Responsable Infrastructure", "Admin Système", "Chef de projet IT" → Équipe Infra&IT
-- "Directeur Marketing", "Responsable Communication", "Chef de projet Marketing" → Équipe Marketing&Communication
-- "Directeur Commercial", "Responsable Ventes", "Chef de projet Commercial" → Équipe Vente&Distribution
-- "Directeur Production", "Responsable Production", "Chef d'atelier" → Équipe Production
-- "Directeur Qualité", "Responsable Qualité", "Responsable Réglementaire" → Équipe Qualification Réglementaire
-- "Directeur RH", "Responsable RH", "Responsable Formation" → Équipe RH&Formation
-- "Directeur Financier", "DAF", "Contrôleur de gestion" → Équipe Finance&Contrôle
-- "Responsable Données", "Data Manager", "Responsable Qualité Données" → Équipe Données&Qualité
-
-Ces métadonnées te permettent de :
-- Identifier les équipes mentionnées explicitement ET implicitement (via les rôles des speakers)
-- Comprendre l'organisation de l'entreprise même si les équipes ne sont pas nommées directement
-- Distinguer les équipes métier des équipes support selon le rôle
-- Mieux comprendre la structure organisationnelle de l'entreprise
-
-Contexte de l'entreprise (pour mieux comprendre, mais ne pas suggérer d'équipes) :
+Contexte de l’entreprise :
 {company_info}
 
 Interventions :
 {transcript_text}
 
 Pour chaque équipe identifiée, détermine :
-1. Le nom de l'équipe (ex: "R&D", "Infra&IT", "Marketing&Communication")
-2. Le type : "equipe_metier" ou "equipe_support"
-3. Une description du rôle de l'équipe dans l'entreprise
+- son nom normalisé (fusionner si plusieurs noms pour la même équipe)
+- son type : "equipe_metier" ou "equipe_support"
+- une courte description basée sur les activités mentionnées dans le texte
 
 Exemples d'équipes métier :
 - R&D : Recherche et développement de produits

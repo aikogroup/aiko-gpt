@@ -48,6 +48,7 @@ class NeedAnalysisAgent:
         rejected_needs: Optional[List[Dict]] = None,
         user_feedback: str = "",
         validated_needs_count: int = 0,
+        validated_needs: Optional[List[Dict]] = None,
         additional_context: str = ""
     ) -> Dict[str, Any]:
         """
@@ -62,6 +63,8 @@ class NeedAnalysisAgent:
             rejected_needs: Besoins rejetés par l'utilisateur
             user_feedback: Commentaires de l'utilisateur
             validated_needs_count: Nombre de besoins validés
+            validated_needs: Liste des besoins déjà validés par l'utilisateur (à ne pas reproposer)
+            additional_context: Contexte additionnel fourni par l'utilisateur
             
         Returns:
             Dict contenant les besoins identifiés et le résumé
@@ -103,19 +106,17 @@ class NeedAnalysisAgent:
                 # Itération suivante - régénération avec feedback
                 previous_needs_str = json.dumps(safe_serialize(previous_needs), ensure_ascii=False, indent=2)
                 rejected_needs_str = json.dumps(safe_serialize(rejected_needs or []), ensure_ascii=False, indent=2)
+                validated_needs_str = json.dumps(safe_serialize(validated_needs or []), ensure_ascii=False, indent=2)
                 rejected_needs_count = len(rejected_needs or [])
                 
                 user_prompt = NEED_REGENERATION_PROMPT.format(
+                    validated_needs=validated_needs_str,
                     previous_needs=previous_needs_str,
                     rejected_needs=rejected_needs_str,
                     user_feedback=user_feedback if user_feedback else "Aucun commentaire spécifique",
-                    validated_needs_count=validated_needs_count,
-                    rejected_needs_count=rejected_needs_count,
                     workshop_data=workshop_str,
                     transcript_data=transcript_str,
                     web_search_data=web_search_str,
-                    current_iteration=iteration,
-                    max_iterations=3,
                     additional_context=additional_context if additional_context else "Aucune information supplémentaire fournie."
                 )
             

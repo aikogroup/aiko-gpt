@@ -810,6 +810,16 @@ class NeedAnalysisWorkflow:
                 ]
                 print(f"💰 [OPTIMISATION] Rejected needs allégés: {len(rejected_needs)} besoins sans quotes")
             
+            # Alléger aussi les besoins validés pour économiser les tokens
+            validated_needs = state.get("validated_needs", [])
+            validated_needs_light = None
+            if validated_needs:
+                validated_needs_light = [
+                    {"id": need.get("id"), "theme": need.get("theme")}
+                    for need in validated_needs
+                ]
+                print(f"💰 [OPTIMISATION] Validated needs allégés: {len(validated_needs)} besoins sans quotes")
+            
             analysis_result = self.need_analysis_agent.analyze_needs(
                 workshop_data=state["workshop_results"],  # SIMPLIFICATION: utiliser directement workshop_results
                 transcript_data=state["transcript_data"],
@@ -818,6 +828,7 @@ class NeedAnalysisWorkflow:
                 rejected_needs=rejected_needs_light,
                 user_feedback=user_feedback,
                 validated_needs_count=validated_count,
+                validated_needs=validated_needs_light,
                 additional_context=state.get("additional_context", "")
             )
             

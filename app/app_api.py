@@ -2028,6 +2028,9 @@ def display_pre_use_case_interrupt_interface():
     Affiche l'interface avant la génération des use cases.
     Affiche les besoins validés avec leurs citations et un champ pour le contexte additionnel.
     """
+
+    poll_workflow_status()
+    
     st.markdown("### 📋 Besoins Validés - Préparation de la Génération des Cas d'Usage")
     
     # Afficher les besoins validés avec leurs citations
