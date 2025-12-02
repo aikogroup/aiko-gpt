@@ -2425,19 +2425,36 @@ def display_upload_documents_section():
             speaker_unique_id = speaker.get('unique_id')
             is_interviewer = speaker.get("is_interviewer", False)
             
-            # Colonnes : Nom, Rôle, Level (si interviewé), Type, Supprimer
+            # Récupérer le nom original (détecté) et le nom validé
+            # Si original_name n'existe pas encore, utiliser name comme original_name
+            original_name = speaker.get("original_name", speaker.get("name", ""))
+            validated_name = speaker.get("name", original_name)
+            
+            # Colonnes : Nom détecté, Nom validé, Rôle, Level (si interviewé), Type, Supprimer
             if is_interviewer:
-                col1, col2, col3, col4 = st.columns([3, 3, 1, 1])
+                col1, col2, col3, col4, col5 = st.columns([2, 2.5, 2.5, 1, 1])
             else:
-                col1, col2, col3, col4, col5 = st.columns([2.5, 2.5, 2, 1, 1])
+                col1, col2, col3, col4, col5, col6 = st.columns([2, 2.5, 2.5, 2, 1, 1])
             
             with col1:
-                speaker_name = st.text_input(
-                    "Nom",
-                    value=speaker.get("name", ""),
-                    key=f"speaker_name_{speaker_unique_id}"
+                # Afficher le nom détecté (lecture seule)
+                st.text_input(
+                    "Nom détecté",
+                    value=original_name,
+                    key=f"speaker_original_name_{speaker_unique_id}",
+                    disabled=True,
+                    help="Nom extrait du fichier (JSON/PDF)"
                 )
+            
             with col2:
+                # Champ pour le nom validé (éditable)
+                speaker_name = st.text_input(
+                    "Nom validé",
+                    value=validated_name,
+                    key=f"speaker_name_{speaker_unique_id}",
+                    help="Vous pouvez modifier le nom si nécessaire"
+                )
+            with col3:
                 speaker_role = st.text_input(
                     "Rôle",
                     value=speaker.get("role", ""),
@@ -2446,7 +2463,7 @@ def display_upload_documents_section():
             
             # Afficher le level seulement pour les interviewés
             if not is_interviewer:
-                with col3:
+                with col4:
                     current_level = speaker.get("level", "inconnu")
                     # Si level est None, None ou vide, afficher "inconnu" comme valeur par défaut
                     if not current_level or current_level == "None" or current_level == "":
@@ -2465,7 +2482,7 @@ def display_upload_documents_section():
                         help="Sélectionnez le niveau hiérarchique du speaker"
                     )
             
-            with col4:
+            with col5:
                 if is_interviewer:
                     st.markdown("<br>", unsafe_allow_html=True)
                     st.caption("Interviewer")
@@ -2474,7 +2491,7 @@ def display_upload_documents_section():
                     st.caption("Participant")
             
             if not is_interviewer:
-                with col5:
+                with col6:
                     # Bouton supprimer (sauf pour les interviewers)
                     if st.button("🗑️", key=f"delete_speaker_{speaker_unique_id}", help="Supprimer ce speaker"):
                         st.session_state.delete_speaker_id = speaker_unique_id
@@ -2482,7 +2499,8 @@ def display_upload_documents_section():
             
             # Construire le dictionnaire du speaker
             speaker_dict = {
-                "name": speaker_name,
+                "name": speaker_name,  # Nom validé (peut être modifié)
+                "original_name": original_name,  # Nom détecté (toujours conservé)
                 "role": speaker_role,
                 "is_interviewer": is_interviewer,
                 "unique_id": speaker_unique_id
@@ -2527,6 +2545,7 @@ def display_upload_documents_section():
                 if new_speaker_name and new_speaker_name.strip():
                     new_speaker = {
                         "name": new_speaker_name.strip(),
+                        "original_name": new_speaker_name.strip(),  # Pour un speaker ajouté manuellement, original = validé
                         "role": new_speaker_role.strip() if new_speaker_role else "",
                         "level": new_speaker_level,  # Level sélectionné par l'utilisateur
                         "is_interviewer": False,
@@ -2548,6 +2567,7 @@ def display_upload_documents_section():
                     st.stop()
                 
                 # Préparer les speakers avec level (sélectionné par l'utilisateur ou depuis l'API)
+                # Créer le mapping original_name -> validated_name pour gérer les renommages
                 validated_speakers_list = []
                 for speaker in updated_speakers:
                     # Pour les interviewers, level est None
@@ -2557,12 +2577,20 @@ def display_upload_documents_section():
                         # Si pas de level et que ce n'est pas un interviewer, mettre "inconnu" par défaut
                         level = "inconnu"
                     
+                    original_name = speaker.get("original_name", speaker.get("name", ""))
+                    validated_name = speaker.get("name", original_name)
+                    
                     speaker_dict = {
-                        "name": speaker["name"],
+                        "name": validated_name,  # Nom validé (peut être différent de original_name)
                         "role": speaker.get("role", ""),
                         "level": level,
                         "is_interviewer": speaker.get("is_interviewer", False)
                     }
+                    
+                    # Si le nom a été renommé, ajouter original_name pour le mapping
+                    if original_name and original_name != validated_name:
+                        speaker_dict["original_name"] = original_name
+                    
                     validated_speakers_list.append(speaker_dict)
                 
                 # Sauvegarder dans la base de données si un projet est sélectionné
@@ -2692,7 +2720,16 @@ def display_upload_documents_section():
                                     
                                     # Sauvegarder les données dans session_state
                                     st.session_state.current_transcript_file_path = file_path
-                                    st.session_state.current_transcript_speakers = result.get("speakers", [])
+                                    # Initialiser les speakers avec original_name = name (nom détecté)
+                                    speakers_from_api = result.get("speakers", [])
+                                    st.session_state.current_transcript_speakers = [
+                                        {
+                                            **speaker,
+                                            "original_name": speaker.get("name", ""),  # Stocker le nom détecté
+                                            "unique_id": str(uuid.uuid4())  # Ajouter un unique_id
+                                        }
+                                        for speaker in speakers_from_api
+                                    ]
                                     st.session_state.transcript_classification_in_progress = False
                                     
                                     st.success("✅ Classification terminée !")

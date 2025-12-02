@@ -449,25 +449,45 @@ async def classify_speakers(input_data: ClassifySpeakersInput):
         # Identifier les interviewers (par matching de noms)
         interviewer_names_set = speaker_classifier._identify_interviewers(interventions)
         
-        # Extraire TOUS les speakers uniques du parsing
-        all_speakers = list(set(
-            interv.get("speaker", "") 
-            for interv in interventions 
-            if interv.get("speaker")
-        ))
-        
         # Construire le dictionnaire de rôles connus
         known_roles = input_data.known_speakers or {}
         
-        logger.info(f"🔍 [classify-speakers] Classification de {len(all_speakers)} speakers uniques")
-        
-        # NOUVEAU: Un seul appel LLM pour identifier les vrais speakers ET extraire leurs rôles
-        speakers_list = speaker_classifier.identify_and_extract_speakers_with_roles(
-            all_speakers=all_speakers,
-            interventions=interventions,
-            interviewer_names_set=interviewer_names_set,
-            known_roles=known_roles
-        )
+        # Pour JSON : extraire directement les speaker_name uniques et utiliser extract_roles_for_json_speakers
+        # Pour PDF : utiliser identify_and_extract_speakers_with_roles (identification + extraction rôles)
+        if file_extension == '.json':
+            # Extraire directement les speaker_name uniques du JSON
+            json_speakers = list(set(
+                interv.get("speaker", "") 
+                for interv in interventions 
+                if interv.get("speaker")
+            ))
+            
+            logger.info(f"🔍 [classify-speakers] Extraction rôles pour {len(json_speakers)} speakers JSON")
+            
+            # Utiliser la nouvelle fonction qui n'identifie pas les speakers (déjà fait par le JSON)
+            speakers_list = speaker_classifier.extract_roles_for_json_speakers(
+                json_speakers=json_speakers,
+                interventions=interventions,
+                interviewer_names_set=interviewer_names_set,
+                known_roles=known_roles
+            )
+        else:
+            # Pour PDF : extraire TOUS les speakers uniques et identifier les vrais speakers
+            all_speakers = list(set(
+                interv.get("speaker", "") 
+                for interv in interventions 
+                if interv.get("speaker")
+            ))
+            
+            logger.info(f"🔍 [classify-speakers] Classification de {len(all_speakers)} speakers uniques (PDF)")
+            
+            # Utiliser la fonction qui identifie ET extrait les rôles
+            speakers_list = speaker_classifier.identify_and_extract_speakers_with_roles(
+                all_speakers=all_speakers,
+                interventions=interventions,
+                interviewer_names_set=interviewer_names_set,
+                known_roles=known_roles
+            )
         
         logger.info(f"✅ [classify-speakers] Classification terminée - {len(speakers_list)} speakers identifiés")
         return {"speakers": speakers_list}

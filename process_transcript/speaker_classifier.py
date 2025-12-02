@@ -12,7 +12,10 @@ import sys
 
 # Ajouter le répertoire parent au path pour importer les prompts
 sys.path.append(str(Path(__file__).parent.parent))
-from prompts.speaker_identification_prompts import SPEAKER_IDENTIFICATION_AND_ROLE_EXTRACTION_PROMPT
+from prompts.speaker_identification_prompts import (
+    SPEAKER_IDENTIFICATION_AND_ROLE_EXTRACTION_PROMPT,
+    EXTRACT_ROLES_FOR_JSON_SPEAKERS_PROMPT
+)
 
 load_dotenv()
 
@@ -520,6 +523,200 @@ Réponds UNIQUEMENT par "direction", "métier" ou "inconnu".
                 {"name": name, "role": "", "level": None, "is_interviewer": True}
                 for name in interviewer_names_set
             ]
+    
+    def extract_roles_for_json_speakers(
+        self,
+        json_speakers: List[str],
+        interventions: List[Dict[str, Any]],
+        interviewer_names_set: Set[str],
+        known_roles: Optional[Dict[str, str]] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Extrait les rôles et niveaux hiérarchiques pour les speakers déjà identifiés depuis le JSON.
+        Ne fait PAS d'identification de speakers (contrairement à identify_and_extract_speakers_with_roles).
+        
+        Args:
+            json_speakers: Liste des speaker_name uniques extraits du JSON (déjà identifiés)
+            interventions: Liste de toutes les interventions pour contexte
+            interviewer_names_set: Set des noms d'interviewers (ne seront pas traités)
+            known_roles: Dictionnaire optionnel de speaker_name -> role pour réutiliser les rôles déjà connus
+            
+        Returns:
+            Liste de dictionnaires avec {"name": str, "role": str, "level": str, "is_interviewer": bool}
+        """
+        if not json_speakers or not interventions:
+            return []
+        
+        # Filtrer les interviewers de la liste (ils seront ajoutés séparément)
+        candidate_speakers = [s for s in json_speakers if s not in interviewer_names_set]
+        
+        if not candidate_speakers:
+            # Seulement des interviewers, retourner juste eux
+            return [
+                {"name": name, "role": "", "level": None, "is_interviewer": True}
+                for name in interviewer_names_set
+            ]
+        
+        # Grouper les interventions par speaker
+        interventions_by_speaker = {}
+        for intervention in interventions:
+            speaker = intervention.get("speaker", "")
+            if speaker in candidate_speakers:
+                if speaker not in interventions_by_speaker:
+                    interventions_by_speaker[speaker] = []
+                interventions_by_speaker[speaker].append(intervention)
+        
+        # Construire le texte avec TOUTES les interventions de chaque speaker
+        all_interventions_text = []
+        for speaker in candidate_speakers:
+            speaker_intervs = interventions_by_speaker.get(speaker, [])
+            if speaker_intervs:
+                all_interventions_text.append(f"\n=== {speaker} ===")
+                for interv in speaker_intervs:
+                    text = interv.get('text', '').strip()
+                    if text:
+                        all_interventions_text.append(f"{text}")
+        
+        all_interventions = "\n".join(all_interventions_text)
+        
+        # Construire la liste des rôles connus pour référence
+        known_roles_text = ""
+        if known_roles:
+            known_roles_text = "\n\nRôles déjà connus pour référence:\n"
+            for name, role in known_roles.items():
+                if name in candidate_speakers:
+                    known_roles_text += f"- {name}: {role}\n"
+        
+        # Formater la liste des speakers JSON
+        json_speakers_text = "\n".join(f"- {speaker}" for speaker in candidate_speakers)
+        
+        # Construire le prompt
+        prompt = EXTRACT_ROLES_FOR_JSON_SPEAKERS_PROMPT.format(
+            json_speakers=json_speakers_text,
+            all_interventions=all_interventions,
+            known_roles_text=known_roles_text
+        )
+        
+        try:
+            response = self.client.responses.create(
+                model=self.model,
+                input=[{
+                    "role": "user",
+                    "content": [{
+                        "type": "input_text",
+                        "text": prompt
+                    }]
+                }]
+            )
+            
+            result_text = response.output_text.strip()
+            
+            # Parser le JSON
+            # Nettoyer le texte (enlever markdown code blocks si présent)
+            if result_text.startswith("```"):
+                result_text = result_text.split("```")[1]
+                if result_text.startswith("json"):
+                    result_text = result_text[4:]
+                result_text = result_text.strip()
+            
+            result_json = json.loads(result_text)
+            
+            # Construire la liste finale
+            speakers_list = []
+            
+            # D'abord, ajouter les interviewers
+            for interviewer_name in interviewer_names_set:
+                speakers_list.append({
+                    "name": interviewer_name,
+                    "role": "",
+                    "level": None,
+                    "is_interviewer": True
+                })
+            
+            # Ensuite, ajouter les speakers avec leurs rôles extraits
+            # Créer un mapping pour vérifier que tous les speakers JSON sont présents
+            speakers_found = {}
+            for speaker_data in result_json.get("speakers", []):
+                name = speaker_data.get("name", "").strip()
+                role = speaker_data.get("role", "").strip()
+                level = speaker_data.get("level", "inconnu").strip().lower()
+                
+                if not name:
+                    continue
+                
+                # Normaliser "NON_TROUVE" en chaîne vide
+                if role.upper() == "NON_TROUVE":
+                    role = ""
+                    level = "inconnu"  # Si pas de rôle, level doit être inconnu
+                
+                # Valider le level
+                if level not in ["direction", "métier", "inconnu"]:
+                    logger.warning(f"Level invalide '{level}' pour {name}, utilisation de 'inconnu'")
+                    level = "inconnu"
+                
+                # Vérifier si le rôle est dans les rôles connus (priorité)
+                if known_roles and name in known_roles:
+                    role = known_roles[name]
+                
+                speakers_found[name] = {
+                    "name": name,
+                    "role": role,
+                    "level": level,
+                    "is_interviewer": False
+                }
+            
+            # S'assurer que tous les speakers JSON sont présents (même si le LLM ne les a pas retournés)
+            for speaker_name in candidate_speakers:
+                if speaker_name not in speakers_found:
+                    # Le LLM n'a pas retourné ce speaker, créer une entrée par défaut
+                    logger.warning(f"Speaker '{speaker_name}' non retourné par le LLM, création d'entrée par défaut")
+                    speakers_found[speaker_name] = {
+                        "name": speaker_name,
+                        "role": "",
+                        "level": "inconnu",
+                        "is_interviewer": False
+                    }
+            
+            # Ajouter tous les speakers trouvés dans l'ordre original
+            for speaker_name in candidate_speakers:
+                if speaker_name in speakers_found:
+                    speakers_list.append(speakers_found[speaker_name])
+            
+            logger.info(f"✓ Extraction rôles JSON: {len(candidate_speakers)} speakers → {len([s for s in speakers_list if not s['is_interviewer']])} speakers avec rôles")
+            
+            return speakers_list
+            
+        except json.JSONDecodeError as e:
+            logger.error(f"Erreur de parsing JSON de la réponse LLM: {e}")
+            logger.error(f"Réponse reçue: {result_text[:500]}")
+            # Fallback: retourner les speakers JSON avec rôles vides
+            speakers_list = [
+                {"name": name, "role": "", "level": None, "is_interviewer": True}
+                for name in interviewer_names_set
+            ]
+            for speaker_name in candidate_speakers:
+                speakers_list.append({
+                    "name": speaker_name,
+                    "role": "",
+                    "level": "inconnu",
+                    "is_interviewer": False
+                })
+            return speakers_list
+        except Exception as e:
+            logger.error(f"Erreur lors de l'extraction des rôles JSON: {e}")
+            # Fallback: retourner les speakers JSON avec rôles vides
+            speakers_list = [
+                {"name": name, "role": "", "level": None, "is_interviewer": True}
+                for name in interviewer_names_set
+            ]
+            for speaker_name in candidate_speakers:
+                speakers_list.append({
+                    "name": speaker_name,
+                    "role": "",
+                    "level": "inconnu",
+                    "is_interviewer": False
+                })
+            return speakers_list
     
     def set_interviewer_names(self, interviewer_names: List[str]):
         """

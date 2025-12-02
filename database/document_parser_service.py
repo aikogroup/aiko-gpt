@@ -94,9 +94,17 @@ class DocumentParserService:
         if not interventions:
             raise ValueError(f"Aucune intervention trouvée dans le fichier: {file_path}")
         
-        # Créer un mapping nom -> speaker validé
+        # Créer un mapping nom validé -> speaker validé
         validated_speakers_map = {s["name"]: s for s in validated_speakers}
         validated_names = set(validated_speakers_map.keys())
+        
+        # Créer un mapping nom original -> nom validé pour gérer les renommages
+        original_to_validated_map = {}
+        for speaker_data in validated_speakers:
+            validated_name = speaker_data["name"]
+            original_name = speaker_data.get("original_name")
+            if original_name and original_name != validated_name:
+                original_to_validated_map[original_name] = validated_name
         
         # Sauvegarder dans la BDD
         with get_db_context() as db:
@@ -151,15 +159,25 @@ class DocumentParserService:
             # ET créer les transcripts avec speaker_id
             transcript_bases = []
             for intervention in interventions:
-                speaker_name = intervention.get("speaker")
+                speaker_name = intervention.get("speaker")  # Nom original du JSON/PDF
                 
-                # Si le speaker est validé, associer speaker_id
+                # Déterminer le nom validé à utiliser pour le matching
+                validated_name_to_use = None
+                
+                # 1. D'abord essayer de matcher par nom exact (nom validé)
                 if speaker_name in validated_names:
-                    speaker_id = speaker_id_map.get(speaker_name)
-                    speaker_type = speaker_type_map.get(speaker_name)
+                    validated_name_to_use = speaker_name
+                # 2. Sinon utiliser le mapping original_name -> validated_name si le speaker a été renommé
+                elif speaker_name in original_to_validated_map:
+                    validated_name_to_use = original_to_validated_map[speaker_name]
+                
+                # Si le speaker est validé (directement ou via mapping), associer speaker_id
+                if validated_name_to_use and validated_name_to_use in validated_names:
+                    speaker_id = speaker_id_map.get(validated_name_to_use)
+                    speaker_type = speaker_type_map.get(validated_name_to_use)
                     transcript_bases.append(
                         TranscriptBase(
-                            speaker=speaker_name,  # Garder le nom parsé pour traçabilité
+                            speaker=speaker_name,  # Garder le nom original du JSON/PDF pour traçabilité
                             speaker_id=speaker_id,
                             timestamp=intervention.get("timestamp"),
                             text=intervention.get("text", ""),
