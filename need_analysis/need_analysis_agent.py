@@ -94,7 +94,10 @@ class NeedAnalysisAgent:
             web_search_str = json.dumps(web_search_safe, ensure_ascii=False, indent=2)
             
             # Choix du prompt selon l'itération
-            if iteration == 1 or not previous_needs:
+            # On est en mode régénération si on a des previous_needs ET (des rejected_needs OU du user_feedback)
+            is_regeneration = previous_needs and (rejected_needs or user_feedback)
+            
+            if not is_regeneration:
                 # Première itération - génération initiale
                 user_prompt = NEED_ANALYSIS_USER_PROMPT.format(
                     workshop_data=workshop_str,
@@ -119,8 +122,8 @@ class NeedAnalysisAgent:
                     web_search_data=web_search_str,
                     additional_context=additional_context if additional_context else "Aucune information supplémentaire fournie."
                 )
-            
             # Appel à l'API OpenAI Responses avec structured output
+            print(user_prompt)
             # Utilisation du paramètre 'instructions' pour le system prompt
             response = self.client.responses.parse(
                 model=self.model,
