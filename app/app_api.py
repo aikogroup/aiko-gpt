@@ -567,7 +567,7 @@ def upload_files_to_api(files: List[Any]) -> Dict[str, Any]:
         st.error(f"❌ Erreur lors de l'upload: {str(e)}")
         return {"workshop": [], "transcript": [], "file_paths": []}
 
-def start_workflow_api_call(workshop_data: List[Any], transcript_data: List[Any], company_name: str, company_url: str, company_description: str, validated_company_info: Optional[Dict[str, Any]], interviewer_names: List[str], additional_context: str, result_queue: queue.Queue):
+def start_workflow_api_call(workshop_data: List[Any], transcript_data: List[Any], company_name: str, company_url: str, company_description: str, validated_company_info: Optional[Dict[str, Any]], interviewer_names: List[str], additional_context: str, result_queue: queue.Queue, num_needs: int = 10, num_quotes_per_need: int = 4):
     """
     Fait l'appel API dans un thread séparé.
     Extrait les document_ids depuis workshop_data et transcript_data et les passe à l'API.
@@ -615,7 +615,9 @@ def start_workflow_api_call(workshop_data: List[Any], transcript_data: List[Any]
                 "company_description": company_description if company_description else None,
                 "validated_company_info": validated_company_info,
                 "interviewer_names": interviewer_names,
-                "additional_context": additional_context if additional_context else ""
+                "additional_context": additional_context if additional_context else "",
+                "num_needs": num_needs,
+                "num_quotes_per_need": num_quotes_per_need
             },
             timeout=900  # 5 minutes pour le traitement initial
         )
@@ -1109,12 +1111,21 @@ def display_project_selector_in_sidebar():
         ]
         
         # Trouver l'index du projet actuel
+        # Si current_project_id est défini, vérifier qu'il existe toujours dans la liste
         current_index = 0
         if st.session_state.current_project_id:
+            project_found = False
             for i, p in enumerate(projects):
                 if p['id'] == st.session_state.current_project_id:
                     current_index = i + 1
+                    project_found = True
                     break
+            # Si le projet n'existe plus dans la liste, réinitialiser
+            if not project_found:
+                st.session_state.current_project_id = None
+                st.session_state.current_project = None
+                st.session_state.project_loaded = False
+                current_index = 0
         
         selected = st.selectbox(
             "Projet",
@@ -1432,6 +1443,15 @@ def main():
                                         if 'validated_recommendations' in st.session_state:
                                             st.session_state.validated_recommendations = []
                                         
+                                        # Réinitialiser les inputs de configuration
+                                        if 'num_needs_input' in st.session_state:
+                                            del st.session_state.num_needs_input
+                                        if 'num_quotes_per_need_input' in st.session_state:
+                                            del st.session_state.num_quotes_per_need_input
+                                        
+                                        # Invalider le cache de la liste des projets
+                                        load_project_list.clear()
+                                        
                                         # Retourner à la page d'accueil
                                         st.session_state.current_page = "Accueil"
                                         
@@ -1703,13 +1723,39 @@ def display_diagnostic_section():
         label_visibility="hidden"
     )
     
+    # Configuration de la génération
+    st.markdown("---")
+    st.markdown("### ⚙️ Configuration de la génération")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        num_needs = st.number_input(
+            "Nombre de besoins à générer",
+            min_value=1,
+            max_value=50,
+            value=10,
+            help="Nombre de besoins métier à identifier",
+            key="num_needs_input"
+        )
+    with col2:
+        num_quotes_per_need = st.number_input(
+            "Nombre de citations par besoin",
+            min_value=1,
+            max_value=10,
+            value=4,
+            help="Nombre de citations à inclure pour chaque besoin",
+            key="num_quotes_per_need_input"
+        )
+    
     # Bouton de démarrage
     st.markdown("---")
     
     # Vérifier les conditions requises
     has_transcripts = len(st.session_state.get("uploaded_transcripts", [])) > 0
     has_workshops = len(st.session_state.get("uploaded_workshops", [])) > 0
-    has_company_info = st.session_state.get("validated_company_info") is not None
+    validated_company_info = st.session_state.get("validated_company_info")
+    # Vérifier que validated_company_info existe ET n'est pas un dict vide
+    has_company_info = validated_company_info is not None and isinstance(validated_company_info, dict) and len(validated_company_info) > 0
     
     if has_transcripts and has_workshops and has_company_info:
         if st.button("🚀 Démarrer l'Analyse des Besoins", type="primary", width="stretch"):
@@ -1737,7 +1783,9 @@ def display_diagnostic_section():
                     st.session_state.get("validated_company_info"),
                     interviewer_names,
                     additional_context or "",
-                    result_queue
+                    result_queue,
+                    num_needs,
+                    num_quotes_per_need
                 )
                 
                 # Afficher des messages rotatifs pendant que l'API traite

@@ -37,6 +37,9 @@ class WorkflowState(TypedDict):
     company_info: Dict[str, Any]
     # Informations supplémentaires fournies par l'utilisateur
     additional_context: str
+    # Paramètres de génération
+    num_needs: int
+    num_quotes_per_need: int
     # Résultats des agents
     workshop_results: Dict[str, Any]
     transcript_results: List[Dict[str, Any]]
@@ -829,7 +832,9 @@ class NeedAnalysisWorkflow:
                 user_feedback=user_feedback,
                 validated_needs_count=validated_count,
                 validated_needs=validated_needs_light,
-                additional_context=state.get("additional_context", "")
+                additional_context=state.get("additional_context", ""),
+                num_needs=state.get("num_needs", 10),
+                num_quotes_per_need=state.get("num_quotes_per_need", 4)
             )
             
             if "error" in analysis_result:
@@ -1093,7 +1098,7 @@ class NeedAnalysisWorkflow:
     def run(self, workshop_document_ids: List[int] = None, transcript_document_ids: List[int] = None,
             company_info: Dict[str, Any] = None, 
             workshop_results: Dict[str, Any] = None, transcript_results: List[Dict[str, Any]] = None, web_search_results: Dict[str, Any] = None,
-            interviewer_names: List[str] = None, thread_id: str = None, additional_context: str = "") -> Dict[str, Any]:
+            interviewer_names: List[str] = None, thread_id: str = None, additional_context: str = "", num_needs: int = 10, num_quotes_per_need: int = 4) -> Dict[str, Any]:
         """
         Exécute le workflow complet.
         NOUVELLE ARCHITECTURE: Exécution MANUELLE des nœuds jusqu'à human_validation.
@@ -1107,6 +1112,9 @@ class NeedAnalysisWorkflow:
             transcript_results: Résultats pré-calculés du transcript agent
             web_search_results: Résultats pré-calculés du web search agent
             thread_id: ID du thread pour le checkpointer (optionnel, généré automatiquement si non fourni)
+            additional_context: Contexte additionnel fourni par l'utilisateur
+            num_needs: Nombre de besoins à générer (par défaut: 10)
+            num_quotes_per_need: Nombre de citations par besoin (par défaut: 4)
             
         Returns:
             Résultats du workflow
@@ -1131,6 +1139,9 @@ class NeedAnalysisWorkflow:
                 company_info=company_info or {},
                 # Informations supplémentaires fournies par l'utilisateur
                 additional_context=additional_context or "",
+                # Paramètres de génération
+                num_needs=num_needs,
+                num_quotes_per_need=num_quotes_per_need,
                 # Résultats des agents (pré-calculés OU vides)
                 workshop_results=workshop_results or {},
                 transcript_results=transcript_results or [],

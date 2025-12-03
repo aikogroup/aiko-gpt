@@ -49,7 +49,9 @@ class NeedAnalysisAgent:
         user_feedback: str = "",
         validated_needs_count: int = 0,
         validated_needs: Optional[List[Dict]] = None,
-        additional_context: str = ""
+        additional_context: str = "",
+        num_needs: int = 10,
+        num_quotes_per_need: int = 4
     ) -> Dict[str, Any]:
         """
         Analyse les besoins métier à partir des données d'entrée.
@@ -65,6 +67,8 @@ class NeedAnalysisAgent:
             validated_needs_count: Nombre de besoins validés
             validated_needs: Liste des besoins déjà validés par l'utilisateur (à ne pas reproposer)
             additional_context: Contexte additionnel fourni par l'utilisateur
+            num_needs: Nombre de besoins à générer (par défaut: 10)
+            num_quotes_per_need: Nombre de citations par besoin (par défaut: 4)
             
         Returns:
             Dict contenant les besoins identifiés et le résumé
@@ -97,13 +101,21 @@ class NeedAnalysisAgent:
             # On est en mode régénération si on a des previous_needs ET (des rejected_needs OU du user_feedback)
             is_regeneration = previous_needs and (rejected_needs or user_feedback)
             
+            # Formater les prompts avec les valeurs
+            system_prompt = NEED_ANALYSIS_SYSTEM_PROMPT.format(
+                num_needs=num_needs,
+                num_quotes_per_need=num_quotes_per_need
+            )
+            
             if not is_regeneration:
                 # Première itération - génération initiale
                 user_prompt = NEED_ANALYSIS_USER_PROMPT.format(
                     workshop_data=workshop_str,
                     transcript_data=transcript_str,
                     web_search_data=web_search_str,
-                    additional_context=additional_context if additional_context else "Aucune information supplémentaire fournie."
+                    additional_context=additional_context if additional_context else "Aucune information supplémentaire fournie.",
+                    num_needs=num_needs,
+                    num_quotes_per_need=num_quotes_per_need
                 )
             else:
                 # Itération suivante - régénération avec feedback
@@ -120,14 +132,16 @@ class NeedAnalysisAgent:
                     workshop_data=workshop_str,
                     transcript_data=transcript_str,
                     web_search_data=web_search_str,
-                    additional_context=additional_context if additional_context else "Aucune information supplémentaire fournie."
+                    additional_context=additional_context if additional_context else "Aucune information supplémentaire fournie.",
+                    num_needs=num_needs,
+                    num_quotes_per_need=num_quotes_per_need
                 )
             # Appel à l'API OpenAI Responses avec structured output
             print(user_prompt)
             # Utilisation du paramètre 'instructions' pour le system prompt
             response = self.client.responses.parse(
                 model=self.model,
-                instructions=NEED_ANALYSIS_SYSTEM_PROMPT,
+                instructions=system_prompt,
                 input=[
                     {
                         "role": "user",

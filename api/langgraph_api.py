@@ -121,6 +121,8 @@ class WorkflowInput(BaseModel):
     validated_company_info: Optional[Dict[str, Any]] = None
     interviewer_names: Optional[List[str]] = None
     additional_context: Optional[str] = ""
+    num_needs: int = 10
+    num_quotes_per_need: int = 4
 
 class ValidationFeedback(BaseModel):
     """Feedback de validation utilisateur"""
@@ -706,6 +708,8 @@ async def create_run(thread_id: str, workflow_input: WorkflowInput):
             print(f"📄 Company Description: {workflow_input.company_description}")
         print(f"👥 Interviewers: {workflow_input.interviewer_names}")
         print(f"📝 Additional context: {len(workflow_input.additional_context or '')} caractères")
+        print(f"🔢 Nombre de besoins: {workflow_input.num_needs}")
+        print(f"🔢 Nombre de citations par besoin: {workflow_input.num_quotes_per_need}")
         
         # Construire company_info avec tous les champs disponibles
         # Si validated_company_info est fourni, l'utiliser directement
@@ -728,7 +732,9 @@ async def create_run(thread_id: str, workflow_input: WorkflowInput):
             company_info=company_info,
             interviewer_names=workflow_input.interviewer_names,
             thread_id=thread_id,
-            additional_context=workflow_input.additional_context or ""
+            additional_context=workflow_input.additional_context or "",
+            num_needs=workflow_input.num_needs,
+            num_quotes_per_need=workflow_input.num_quotes_per_need
         )
         
         # Mettre à jour l'état

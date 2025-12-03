@@ -17,9 +17,12 @@ INDICATEUR D'IMPORTANCE : Les WORKSHOPS contiennent un champ "iteration_count" p
 - PRIORISE les besoins avec un iteration_count élevé dans ton analyse
 
 NOMBRE DE BESOINS :
-- Le nombre de besoins à identifier peut être spécifié dans les informations supplémentaires fournies par l'utilisateur
-- Si l'utilisateur demande explicitement un nombre, respecte cette demande
-- Sinon, propose un nombre raisonnable (généralement entre 8 et 12 besoins) en fonction de la richesse des données
+- Tu dois identifier {num_needs} besoins métier prioritaires, sauf si un nombre différent est mentionné dans les informations supplémentaires fournies par l'utilisateur
+- Chaque besoin doit être unique et distinct
+
+NOMBRE DE CITATIONS :
+- Chaque besoin doit contenir {num_quotes_per_need} citations concrètes provenant des WORKSHOPS ou TRANSCRIPTS, sauf si un nombre différent est mentionné dans les informations supplémentaires fournies par l'utilisateur
+- Les citations doivent être variées et représentatives du besoin identifié
 
 Chaque besoin doit être :
 - Spécifique et actionnable (issu des workshops/transcripts)
@@ -30,7 +33,7 @@ RÈGLE CRITIQUE : CHAQUE THEME DOIT ÊTRE UNIQUE - NE JAMAIS UTILISER LE MÊME T
 Si plusieurs besoins partagent un thème, regroupe-les sous CE SEUL thème avec toutes les citations pertinentes.
 
 Structure attendue :
-- identified_needs : Liste de besoins (nombre défini par l'utilisateur ou raisonnable selon les données), chacun avec un id, un theme UNIQUE et 3 à 5 quotes (citations exactes)
+- identified_needs : Liste de {num_needs} besoins, chacun avec un id, un theme UNIQUE et {num_quotes_per_need} quotes (citations exactes)
 - summary : Résumé avec total_needs et themes (liste SANS DOUBLONS)
 
 FORMAT STRICT DES CITATIONS :
@@ -126,10 +129,12 @@ INSTRUCTIONS D'ANALYSE :
    Les métadonnées speaker_level sont utilisées pour la priorisation mais ne doivent PAS apparaître dans le texte des citations finales
 8. PRIORISATION : Les besoins remontés par plusieurs personnes (high iteration_count dans workshops) sont plus importants
 9. NOMBRE DE BESOINS :
-   - Si l'utilisateur a spécifié un nombre dans les informations supplémentaires, respecte cette demande
-   - Sinon, propose un nombre raisonnable (généralement entre 8 et 12) en fonction de la richesse des données disponibles
+   - Tu dois identifier {num_needs} besoins métier prioritaires, sauf si un nombre différent est mentionné dans les informations supplémentaires fournies par l'utilisateur
 
-Identifie les besoins métier distincts, organisés par thématiques UNIQUES (sans doublons de thèmes), avec 3 à 5 citations CONCRÈTES issues des ATELIERS et ENTRETIENS pour chaque besoin. Les citations doivent être du texte pur, sans indication de source. PRIORISE les besoins avec un iteration_count élevé dans les WORKSHOPS.
+10. NOMBRE DE CITATIONS :
+   - Chaque besoin doit contenir {num_quotes_per_need} citations concrètes, sauf si un nombre différent est mentionné dans les informations supplémentaires fournies par l'utilisateur
+
+Identifie {num_needs} besoins métier distincts, organisés par thématiques UNIQUES (sans doublons de thèmes), avec {num_quotes_per_need} citations CONCRÈTES issues des ATELIERS et ENTRETIENS pour chaque besoin (sauf indication contraire dans les informations supplémentaires). Les citations doivent être du texte pur, sans indication de source. PRIORISE les besoins avec un iteration_count élevé dans les WORKSHOPS.
 """
 
 HUMAN_VALIDATION_PROMPT = """
@@ -207,7 +212,7 @@ OBLIGATIONS :
 5. Explorer des DOMAINES MÉTIER COMPLÈTEMENT DIFFÉRENTS de ceux déjà validés ou proposés
 6. Identifier des PROCESSUS ou SERVICES NON ENCORE COUVERTS dans les workshops/transcripts
 7. Proposer des besoins plus concrets, actionnables et mieux sourcés depuis les ATELIERS et ENTRETIENS
-8. Générer de nouveaux besoins DISTINCTS et PERTINENTS (nombre raisonnable selon la richesse des données, généralement entre 8 et 12)
+8. Générer {num_needs} nouveaux besoins DISTINCTS et PERTINENTS, sauf si un nombre différent est mentionné dans les informations supplémentaires fournies par l'utilisateur
 9. TOUTES les citations doivent venir des workshops (use_cases, objectives) ou transcripts (citations_cles, besoins_exprimes, frustrations_blocages, opportunites_automatisation)
    RAPPEL : Pour les transcripts, utilise le champ "text" de chaque objet pour extraire le texte de la citation
 10. IGNORER les informations génériques du web (acquisitions, stratégie, conformité)
@@ -215,7 +220,7 @@ OBLIGATIONS :
 RÈGLES DE FORMAT :
 11. VÉRIFIE L'UNICITÉ DES THÈMES : Assure-toi qu'aucun thème n'est utilisé deux fois dans ta proposition ET qu'aucun thème ne ressemble aux besoins déjà validés ou proposés
 12. FORMAT STRICT : Les citations doivent contenir UNIQUEMENT le texte, SANS mention de source (pas de "- Transcript", "- Nom de personne", etc.)
-13. Chaque besoin doit avoir 3 à 5 citations CONCRÈTES et DIFFÉRENTES
+13. Chaque besoin doit avoir {num_quotes_per_need} citations CONCRÈTES et DIFFÉRENTES, sauf si un nombre différent est mentionné dans les informations supplémentaires fournies par l'utilisateur
 
 STRATÉGIE DE DIVERSIFICATION :
 - Analyse les besoins déjà validés ET proposés pour identifier les domaines/processus déjà couverts
@@ -223,6 +228,6 @@ STRATÉGIE DE DIVERSIFICATION :
 - Si un domaine a déjà été exploré (ex: qualité, automatisation, maintenance), passe à un autre domaine (ex: formation, collaboration, prévision, analyse de données, communication, etc.)
 - Évite absolument de reprendre les mêmes concepts que les besoins validés, même avec des mots différents
 
-OBJECTIF : Génère de nouveaux besoins avec des THÈMES VRAIMENT DIFFÉRENTS de tous les besoins déjà validés ET de tous les besoins déjà proposés, avec 3 à 5 citations CONCRÈTES issues des WORKSHOPS et TRANSCRIPTS uniquement. VÉRIFIE que chaque thème est UNIQUE et DISTINCT de TOUS les besoins déjà validés (qui ne doivent JAMAIS être reproposés) et de TOUS les besoins déjà proposés (validés ou rejetés). Les citations doivent être du texte pur, sans indication de source.
+OBJECTIF : Génère {num_needs} nouveaux besoins avec des THÈMES VRAIMENT DIFFÉRENTS de tous les besoins déjà validés ET de tous les besoins déjà proposés, avec {num_quotes_per_need} citations CONCRÈTES issues des WORKSHOPS et TRANSCRIPTS uniquement (sauf indication contraire dans les informations supplémentaires). VÉRIFIE que chaque thème est UNIQUE et DISTINCT de TOUS les besoins déjà validés (qui ne doivent JAMAIS être reproposés) et de TOUS les besoins déjà proposés (validés ou rejetés). Les citations doivent être du texte pur, sans indication de source.
 """
 
