@@ -76,6 +76,9 @@ DONNÉES WEB SEARCH (Contexte marché et entreprise) :
 INFORMATIONS SUPPLÉMENTAIRES FOURNIES PAR L'UTILISATEUR :
 {additional_context}
 
+FAMILLE DES CAS D'USAGE (si spécifiée) :
+{famille}
+
 INSTRUCTIONS :
 1. Chaque cas d'usage doit répondre à un ou plusieurs besoins validés
 2. Utilise les données workshops et transcripts pour contextualiser les cas d'usage avec des détails techniques/métier concrets
@@ -92,8 +95,13 @@ INSTRUCTIONS :
    - Si l'utilisateur a spécifié un nombre dans les informations supplémentaires, respecte cette demande
    - Sinon, propose un nombre raisonnable (généralement entre 8 et 15) en fonction de la richesse des besoins validés
 8. CLASSIFICATION PAR FAMILLE (optionnel) :
-   - Si l'utilisateur demande une classification par famille dans les informations supplémentaires, utilise le champ "famille" pour classifier les cas d'usage
-   - Sinon, laisse le champ "famille" à None
+   - Si l'utilisateur a fourni des instructions concernant les familles dans le champ "FAMILLE DES CAS D'USAGE", interprète ces instructions
+   - Le champ "famille" peut contenir :
+     * Des instructions complètes (ex: "génère 5 use case quick wins et 5 use case IA Structurant")
+     * Des noms de familles simples (ex: "quick wins, IA Structurant")
+   - Si des instructions de génération par famille sont fournies, génère les cas d'usage en respectant ces instructions et assigne la famille appropriée à chaque cas d'usage
+   - Si seulement des noms de familles sont fournis, génère les cas d'usage puis classe-les selon ces familles
+   - Si aucune instruction famille n'est fournie (champ "FAMILLE DES CAS D'USAGE" = "Non spécifiée"), laisse le champ "famille" à None pour chaque cas d'usage
 
 Génère les cas d'usage en respectant la structure attendue. VÉRIFIE qu'il n'y a pas de doublons thématiques. PRIORISE les besoins avec un iteration_count élevé dans les WORKSHOPS.
 """
@@ -136,6 +144,9 @@ DONNÉES WEB SEARCH (Contexte marché et entreprise - pour t'inspirer) :
 INFORMATIONS SUPPLÉMENTAIRES FOURNIES PAR L'UTILISATEUR :
 {additional_context}
 
+FAMILLE DES CAS D'USAGE (si spécifiée) :
+{famille}
+
 INSTRUCTIONS POUR LA NOUVELLE ITÉRATION :
 1. NE PAS reproposer les cas d'usage qui ont été rejetés
 2. Analyser les cas d'usage rejetés pour comprendre ce qui n'a pas plu
@@ -156,8 +167,13 @@ INSTRUCTIONS POUR LA NOUVELLE ITÉRATION :
     - Si l'utilisateur a spécifié un nombre dans les informations supplémentaires, respecte cette demande
     - Sinon, propose un nombre raisonnable de nouveaux cas d'usage (généralement entre 5 et 10)
 12. CLASSIFICATION PAR FAMILLE (optionnel) :
-    - Si l'utilisateur demande une classification par famille dans les informations supplémentaires, utilise le champ "famille" pour classifier les cas d'usage
-    - Sinon, laisse le champ "famille" à None
+    - Si l'utilisateur a fourni des instructions concernant les familles dans le champ "FAMILLE DES CAS D'USAGE", interprète ces instructions
+    - Le champ "famille" peut contenir :
+      * Des instructions complètes (ex: "génère 5 use case quick wins et 5 use case IA Structurant")
+      * Des noms de familles simples (ex: "quick wins, IA Structurant")
+    - Si des instructions de génération par famille sont fournies, génère les cas d'usage en respectant ces instructions et assigne la famille appropriée à chaque cas d'usage
+    - Si seulement des noms de familles sont fournis, génère les cas d'usage puis classe-les selon ces familles
+    - Si aucune instruction famille n'est fournie (champ "FAMILLE DES CAS D'USAGE" = "Non spécifiée"), laisse le champ "famille" à None pour chaque cas d'usage
 
 Génère de nouveaux cas d'usage en respectant la structure attendue. VÉRIFIE que tous les titres/thèmes sont UNIQUES et différents des cas d'usage précédents.
 """

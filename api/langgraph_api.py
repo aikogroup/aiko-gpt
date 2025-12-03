@@ -134,6 +134,7 @@ class ValidationFeedback(BaseModel):
 class PreUseCaseContextInput(BaseModel):
     """Input pour le contexte additionnel avant génération des use cases"""
     use_case_additional_context: str = ""
+    use_case_famille: str = ""
 
 class UseCaseValidationFeedback(BaseModel):
     """Feedback de validation des use cases"""
@@ -916,10 +917,12 @@ async def send_pre_use_case_context(thread_id: str, context_input: PreUseCaseCon
         
         print(f"\n📝 [API] Réception du contexte additionnel pour thread {thread_id}")
         print(f"💡 Contexte: {len(context_input.use_case_additional_context)} caractères")
+        print(f"🏷️ Famille: {context_input.use_case_famille or 'Non spécifiée'}")
         
         # Reprendre le workflow avec le contexte
         result = workflow.resume_pre_use_case_interrupt_with_context(
             use_case_additional_context=context_input.use_case_additional_context,
+            use_case_famille=context_input.use_case_famille,
             thread_id=thread_id
         )
         

@@ -51,7 +51,8 @@ class UseCaseAnalysisAgent:
         previous_use_cases: Optional[List[Dict]] = None,
         rejected_use_cases: Optional[List[Dict]] = None,
         user_feedback: str = "",
-        additional_context: str = ""
+        additional_context: str = "",
+        famille: str = ""
     ) -> Dict[str, Any]:
         """
         Analyse les besoins validés et identifie les cas d'usage IA pertinents.
@@ -65,6 +66,7 @@ class UseCaseAnalysisAgent:
             rejected_use_cases: Cas d'usage rejetés par l'utilisateur
             user_feedback: Commentaires de l'utilisateur
             additional_context: Contexte additionnel fourni par l'utilisateur pour guider la génération
+            famille: Famille des cas d'usage (optionnel) - peut contenir des instructions complètes ou des noms de familles
             
         Returns:
             Dict contenant les cas d'usage identifiés (use_cases)
@@ -163,6 +165,12 @@ class UseCaseAnalysisAgent:
             else:
                 print(f"    - Aucun contexte additionnel fourni")
             
+            print(f"  🏷️ Famille (famille des cas d'usage):")
+            if famille:
+                print(f"    - Contenu: {famille[:200]}..." if len(famille) > 200 else f"    - Contenu: {famille}")
+            else:
+                print(f"    - Aucune famille spécifiée")
+            
             print(f"  🔄 Previous use cases (cas d'usage précédents):")
             if previous_use_cases:
                 print(f"    - Nombre: {len(previous_use_cases)}")
@@ -198,7 +206,8 @@ class UseCaseAnalysisAgent:
                     workshop_data=workshop_str,
                     transcript_data=transcript_str,
                     web_search_data=web_search_str,
-                    additional_context=additional_context if additional_context else "Aucune information supplémentaire fournie."
+                    additional_context=additional_context if additional_context else "Aucune information supplémentaire fournie.",
+                    famille=famille if famille else "Non spécifiée"
                 )
                 print(user_prompt)
             else:
@@ -230,7 +239,8 @@ class UseCaseAnalysisAgent:
                     workshop_data=workshop_str,
                     transcript_data=transcript_str,
                     web_search_data=web_search_str,
-                    additional_context=additional_context if additional_context else "Aucune information supplémentaire fournie."
+                    additional_context=additional_context if additional_context else "Aucune information supplémentaire fournie.",
+                    famille=famille if famille else "Non spécifiée"
                 )
             
             print(user_prompt)

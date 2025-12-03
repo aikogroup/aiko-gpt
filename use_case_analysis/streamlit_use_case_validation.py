@@ -86,7 +86,8 @@ class StreamlitUseCaseValidation:
                 use_case = use_cases[i]
                 original_titre = use_case.get('titre', 'Titre non défini')
                 original_description = use_case.get('description', 'Description non disponible')
-                original_famille = use_case.get('famille')
+                # Convertir None en '' pour toujours avoir une string
+                original_famille = use_case.get('famille') or ''
                 
                 # Initialiser les valeurs dans session_state APRÈS le nettoyage
                 # Réinitialiser toujours avec la valeur originale pour forcer la mise à jour
@@ -95,17 +96,15 @@ class StreamlitUseCaseValidation:
                 famille_key = f"uc_famille_{i}_{key_suffix}"
                 st.session_state[titre_key] = original_titre
                 st.session_state[desc_key] = original_description
-                if original_famille is not None:
-                    st.session_state[famille_key] = original_famille
+                st.session_state[famille_key] = original_famille  # Toujours initialiser (sera '' si None)
                 
-                # Affichage conditionnel de la famille (au-dessus du titre)
-                if original_famille is not None:
-                    st.markdown("**Famille :**")
-                    modified_famille = st.text_input(
-                        "Famille",
-                        key=famille_key,
-                        label_visibility="hidden"
-                    )
+                # TOUJOURS afficher le champ famille (même s'il est vide)
+                st.markdown("**Famille :**")
+                modified_famille = st.text_input(
+                    "Famille",
+                    key=famille_key,
+                    label_visibility="hidden"
+                )
                 
                 # Champ éditable pour le titre (ne pas passer value pour éviter le warning)
                 modified_titre = st.text_input(
@@ -137,7 +136,8 @@ class StreamlitUseCaseValidation:
                     use_case = use_cases[i + 1]
                     original_titre = use_case.get('titre', 'Titre non défini')
                     original_description = use_case.get('description', 'Description non disponible')
-                    original_famille = use_case.get('famille')
+                    # Convertir None en '' pour toujours avoir une string
+                    original_famille = use_case.get('famille') or ''
                     
                     # Initialiser les valeurs dans session_state APRÈS le nettoyage
                     # Réinitialiser toujours avec la valeur originale pour forcer la mise à jour
@@ -146,17 +146,15 @@ class StreamlitUseCaseValidation:
                     famille_key = f"uc_famille_{i+1}_{key_suffix}"
                     st.session_state[titre_key] = original_titre
                     st.session_state[desc_key] = original_description
-                    if original_famille is not None:
-                        st.session_state[famille_key] = original_famille
+                    st.session_state[famille_key] = original_famille  # Toujours initialiser (sera '' si None)
                     
-                    # Affichage conditionnel de la famille (au-dessus du titre)
-                    if original_famille is not None:
-                        st.markdown("**Famille :**")
-                        modified_famille = st.text_input(
-                            "Famille",
-                            key=famille_key,
-                            label_visibility="hidden"
-                        )
+                    # TOUJOURS afficher le champ famille (même s'il est vide)
+                    st.markdown("**Famille :**")
+                    modified_famille = st.text_input(
+                        "Famille",
+                        key=famille_key,
+                        label_visibility="hidden"
+                    )
                     
                     # Champ éditable pour le titre (ne pas passer value pour éviter le warning)
                     modified_titre = st.text_input(
@@ -304,15 +302,18 @@ class StreamlitUseCaseValidation:
             famille_key = f"uc_famille_{idx}_{key_suffix}"
             modified_titre = st.session_state.get(titre_key, original_uc.get('titre', ''))
             modified_description = st.session_state.get(desc_key, original_uc.get('description', ''))
-            modified_famille = st.session_state.get(famille_key, original_uc.get('famille'))
+            # Convertir None en '' pour toujours avoir une string
+            modified_famille = st.session_state.get(famille_key, original_uc.get('famille') or '')
             
             # Créer le use case modifié (conserver l'id, ia_utilisee et famille modifiée)
+            # Si la famille modifiée est vide, utiliser None pour le champ famille
+            famille_value = modified_famille.strip() if modified_famille and modified_famille.strip() else None
             modified_uc = {
                 'id': original_uc.get('id', ''),
                 'titre': modified_titre.strip() if modified_titre.strip() else original_uc.get('titre', ''),
                 'description': modified_description.strip() if modified_description.strip() else original_uc.get('description', ''),
                 'ia_utilisee': original_uc.get('ia_utilisee', ''),  # Conserver l'original
-                'famille': modified_famille.strip() if modified_famille and modified_famille.strip() else original_uc.get('famille')  # Utiliser la famille modifiée si elle existe
+                'famille': famille_value  # Utiliser la famille modifiée ou None si vide
             }
             validated_uc.append(modified_uc)
         

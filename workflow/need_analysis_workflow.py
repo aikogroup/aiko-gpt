@@ -64,6 +64,7 @@ class WorkflowState(TypedDict):
     proposed_use_cases: List[Dict[str, Any]]
     # Contexte additionnel pour la génération des use cases
     use_case_additional_context: str
+    use_case_famille: str
     # Validation humaine des use cases
     validated_use_cases: List[Dict[str, Any]]
     rejected_use_cases: List[Dict[str, Any]]
@@ -1166,6 +1167,7 @@ class NeedAnalysisWorkflow:
                 proposed_use_cases=[],
                 # Contexte additionnel pour la génération des use cases
                 use_case_additional_context="",
+                use_case_famille="",
                 # Validation humaine des use cases
                 validated_use_cases=[],
                 rejected_use_cases=[],
@@ -1507,6 +1509,7 @@ class NeedAnalysisWorkflow:
             rejected_use_cases = state.get("rejected_use_cases", [])
             user_feedback = state.get("use_case_user_feedback", "")
             additional_context = state.get("use_case_additional_context", "")
+            famille = state.get("use_case_famille", "")
             
             if previous_use_cases:
                 print(f"💬 [DEBUG] Régénération avec feedback")
@@ -1555,7 +1558,8 @@ class NeedAnalysisWorkflow:
                 previous_use_cases=previous_use_cases if previous_use_cases else None,
                 rejected_use_cases=rejected_use_cases if rejected_use_cases else None,
                 user_feedback=user_feedback,
-                additional_context=additional_context
+                additional_context=additional_context,
+                famille=famille
             )
             
             if "error" in result:
@@ -1943,12 +1947,13 @@ class NeedAnalysisWorkflow:
                 "messages": [f"Erreur reprise workflow: {str(e)}"]
             }
     
-    def resume_pre_use_case_interrupt_with_context(self, use_case_additional_context: str, thread_id: str) -> Dict[str, Any]:
+    def resume_pre_use_case_interrupt_with_context(self, use_case_additional_context: str, use_case_famille: str, thread_id: str) -> Dict[str, Any]:
         """
         Reprend le workflow après l'interrupt pre_use_case_interrupt avec le contexte additionnel.
         
         Args:
             use_case_additional_context: Contexte additionnel pour la génération des use cases
+            use_case_famille: Famille des cas d'usage (optionnel)
             thread_id: ID du thread pour récupérer l'état depuis le checkpointer
         
         Returns:
@@ -1956,6 +1961,7 @@ class NeedAnalysisWorkflow:
         """
         print(f"\n🔄 [API] resume_pre_use_case_interrupt_with_context() appelé")
         print(f"💡 Contexte: {len(use_case_additional_context)} caractères")
+        print(f"🏷️ Famille: {use_case_famille or 'Non spécifiée'}")
         print(f"🔑 Thread ID: {thread_id}")
         
         try:
@@ -1968,11 +1974,12 @@ class NeedAnalysisWorkflow:
             
             print(f"📊 [API] État récupéré depuis le checkpointer")
             
-            # Mettre à jour l'état avec le contexte additionnel
+            # Mettre à jour l'état avec le contexte additionnel et la famille
             self.graph.update_state(
                 config,
                 {
-                    "use_case_additional_context": use_case_additional_context
+                    "use_case_additional_context": use_case_additional_context,
+                    "use_case_famille": use_case_famille or ""
                 }
             )
             

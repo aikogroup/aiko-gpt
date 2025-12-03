@@ -767,15 +767,16 @@ def send_validation_feedback_api_call(validated_needs: List[Dict], rejected_need
     except Exception as e:
         result_queue.put((False, str(e)))
 
-def send_pre_use_case_context_api_call(additional_context: str, thread_id: str, result_queue: queue.Queue):
+def send_pre_use_case_context_api_call(additional_context: str, famille: str, thread_id: str, result_queue: queue.Queue):
     """
-    Envoie le contexte additionnel pour la génération des use cases à l'API dans un thread séparé.
+    Envoie le contexte additionnel et la famille pour la génération des use cases à l'API dans un thread séparé.
     """
     try:
         response = requests.post(
             f"{API_URL}/threads/{thread_id}/pre-use-case-context",
             json={
-                "use_case_additional_context": additional_context
+                "use_case_additional_context": additional_context or "",
+                "use_case_famille": famille or ""
             },
             timeout=600
         )
@@ -1600,9 +1601,16 @@ def display_diagnostic_section():
                 for i, uc in enumerate(final_use_cases, 1):
                     st.markdown(f"### {i}. {uc.get('titre', 'N/A')}")
                     st.markdown(f"**Description :** {uc.get('description', 'N/A')}")
-                    famille = uc.get('famille', '')
-                    if famille:
-                        st.markdown(f"**Famille :** {famille}")
+                    # TOUJOURS afficher le champ famille comme text_input (même s'il est vide)
+                    famille = uc.get('famille') or ''  # Convertir None en ''
+                    famille_key = f"final_uc_famille_{i}"
+                    st.markdown("**Famille :**")
+                    modified_famille = st.text_input(
+                        "Famille",
+                        value=famille,
+                        key=famille_key,
+                        label_visibility="hidden"
+                    )
                     st.markdown("---")
         
         st.markdown("---")
@@ -2192,7 +2200,7 @@ def display_pre_use_case_interrupt_interface():
     
     additional_context = st.text_area(
         "Commentaires et instructions (optionnel) :",
-        placeholder="Ex: Génère 15 cas d'usage en priorisant l'automatisation des processus métier. Classifie par famille : automatisation, prédiction, optimisation...",
+        placeholder="Ex: Génère 15 cas d'usage en priorisant l'automatisation des processus métier...",
         height=150,
         key="use_case_additional_context_input",
         label_visibility="hidden"
@@ -2200,9 +2208,21 @@ def display_pre_use_case_interrupt_interface():
     
     st.markdown("---")
     
+    # Nouveau champ pour la famille
+    st.markdown("#### Famille des Cas d'Usage (optionnel)")
+    st.info("💡 Champ pour classifier les cas d'usage par famille. Vous pouvez :\n- Mettre des instructions complètes (ex: \"génère 5 use case quick wins et 5 use case IA Structurant\")\n- Mettre simplement les noms de familles (ex: \"quick wins, IA Structurant\")")
+    famille = st.text_input(
+        "Famille :",
+        placeholder="Ex: génère 5 use case quick wins et 5 use case IA Structurant",
+        key="use_case_famille_input",
+        help="Si rempli, cette information sera utilisée pour guider la génération et classifier les cas d'usage"
+    )
+    
+    st.markdown("---")
+    
     # Bouton pour continuer
     if st.button("✅ Générer les Cas d'Usage", type="primary", use_container_width=True):
-        # Envoyer le contexte additionnel à l'API
+        # Envoyer le contexte additionnel ET la famille à l'API
         status_placeholder = st.empty()
         result_queue = queue.Queue()
         
@@ -2210,6 +2230,7 @@ def display_pre_use_case_interrupt_interface():
             future = executor.submit(
                 send_pre_use_case_context_api_call,
                 additional_context,
+                famille,  # Ajouter le paramètre famille
                 st.session_state.thread_id,
                 result_queue
             )
