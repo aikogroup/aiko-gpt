@@ -11,9 +11,9 @@ class Need(BaseModel):
     id: str = Field(description="Identifiant unique du besoin (ex: need_1)")
     theme: str = Field(description="Thème du besoin (ex: Automatisation & efficacité opérationnelle)")
     quotes: List[str] = Field(
-        description="Liste de 3 à 5 citations exactes provenant des workshops ou transcripts",
-        min_length=3,
-        max_length=5
+        description="Liste de citations exactes provenant des workshops ou transcripts (minimum 1, maximum 10)",
+        min_length=1,
+        max_length=10
     )
 
 

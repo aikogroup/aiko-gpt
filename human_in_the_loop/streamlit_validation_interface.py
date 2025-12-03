@@ -86,7 +86,15 @@ class StreamlitValidationInterface:
                 if original_quotes:
                     st.markdown("**Citations:**")
                     for j, quote in enumerate(original_quotes):
-                        st.text(f"• {quote}")
+                        # S'assurer que quote est une string (gérer les cas où ce serait un dict)
+                        if isinstance(quote, dict):
+                            # Si c'est un dictionnaire, essayer d'extraire le texte
+                            quote_text = quote.get('text', quote.get('quote', str(quote)))
+                        elif isinstance(quote, str):
+                            quote_text = quote
+                        else:
+                            quote_text = str(quote)
+                        st.text(f"• {quote_text}")
                 else:
                     st.info("Aucune citation disponible")
                 
@@ -121,7 +129,15 @@ class StreamlitValidationInterface:
                     if original_quotes:
                         st.markdown("**Citations:**")
                         for j, quote in enumerate(original_quotes):
-                            st.text(f"• {quote}")
+                            # S'assurer que quote est une string (gérer les cas où ce serait un dict)
+                            if isinstance(quote, dict):
+                                # Si c'est un dictionnaire, essayer d'extraire le texte
+                                quote_text = quote.get('text', quote.get('quote', str(quote)))
+                            elif isinstance(quote, str):
+                                quote_text = quote
+                            else:
+                                quote_text = str(quote)
+                            st.text(f"• {quote_text}")
                     else:
                         st.info("Aucune citation disponible")
                     
@@ -239,10 +255,22 @@ class StreamlitValidationInterface:
             # Les citations sont en lecture seule - on garde toujours les originales
             original_quotes = original_need.get('quotes', [])
             
+            # Normaliser les quotes pour s'assurer qu'elles sont toutes des strings
+            normalized_quotes = []
+            for quote in original_quotes:
+                if isinstance(quote, dict):
+                    # Si c'est un dictionnaire, essayer d'extraire le texte
+                    quote_text = quote.get('text', quote.get('quote', str(quote)))
+                    normalized_quotes.append(quote_text)
+                elif isinstance(quote, str):
+                    normalized_quotes.append(quote)
+                else:
+                    normalized_quotes.append(str(quote))
+            
             # Créer le besoin modifié (seul le thème peut être modifié)
             modified_need = {
                 'theme': modified_theme.strip() if modified_theme.strip() else original_need.get('theme', ''),
-                'quotes': original_quotes  # Citations toujours originales
+                'quotes': normalized_quotes  # Citations normalisées (toujours des strings)
             }
             
             validated_new.append(modified_need)
