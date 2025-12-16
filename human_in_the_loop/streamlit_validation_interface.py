@@ -71,9 +71,10 @@ class StreamlitValidationInterface:
                 original_quotes = need.get('quotes', [])
                 
                 # Initialiser les valeurs dans session_state APRÈS le nettoyage
-                # Réinitialiser toujours avec la valeur originale pour forcer la mise à jour
+                # Ne réinitialiser que si la clé n'existe pas encore pour préserver les modifications
                 theme_key = f"need_theme_{i}_{key_suffix}"
-                st.session_state[theme_key] = original_theme
+                if theme_key not in st.session_state:
+                    st.session_state[theme_key] = original_theme
                 
                 # Champ éditable pour le thème (ne pas passer value pour éviter le warning)
                 modified_theme = st.text_input(
@@ -114,9 +115,10 @@ class StreamlitValidationInterface:
                     original_quotes = need.get('quotes', [])
                     
                     # Initialiser les valeurs dans session_state APRÈS le nettoyage
-                    # Réinitialiser toujours avec la valeur originale pour forcer la mise à jour
+                    # Ne réinitialiser que si la clé n'existe pas encore pour préserver les modifications
                     theme_key = f"need_theme_{i+1}_{key_suffix}"
-                    st.session_state[theme_key] = original_theme
+                    if theme_key not in st.session_state:
+                        st.session_state[theme_key] = original_theme
                     
                     # Champ éditable pour le thème (ne pas passer value pour éviter le warning)
                     modified_theme = st.text_input(

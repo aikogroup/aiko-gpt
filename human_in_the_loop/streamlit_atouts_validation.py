@@ -72,11 +72,13 @@ class StreamlitAtoutsValidation:
                 atout_id = atout.get('id', i + 1)
                 
                 # Initialiser les valeurs dans session_state APRÈS le nettoyage
-                # Réinitialiser toujours avec la valeur originale pour forcer la mise à jour
+                # Ne réinitialiser que si la clé n'existe pas encore pour préserver les modifications
                 titre_key = f"atout_titre_{i}_{key_suffix}"
                 description_key = f"atout_description_{i}_{key_suffix}"
-                st.session_state[titre_key] = original_titre
-                st.session_state[description_key] = original_description
+                if titre_key not in st.session_state:
+                    st.session_state[titre_key] = original_titre
+                if description_key not in st.session_state:
+                    st.session_state[description_key] = original_description
                 
                 # Afficher l'ID de l'atout
                 st.markdown(f"**Atout #{atout_id}**")
@@ -113,11 +115,13 @@ class StreamlitAtoutsValidation:
                     atout_id = atout.get('id', i + 2)
                     
                     # Initialiser les valeurs dans session_state APRÈS le nettoyage
-                    # Réinitialiser toujours avec la valeur originale pour forcer la mise à jour
+                    # Ne réinitialiser que si la clé n'existe pas encore pour préserver les modifications
                     titre_key = f"atout_titre_{i+1}_{key_suffix}"
                     description_key = f"atout_description_{i+1}_{key_suffix}"
-                    st.session_state[titre_key] = original_titre
-                    st.session_state[description_key] = original_description
+                    if titre_key not in st.session_state:
+                        st.session_state[titre_key] = original_titre
+                    if description_key not in st.session_state:
+                        st.session_state[description_key] = original_description
                     
                     # Afficher l'ID de l'atout
                     st.markdown(f"**Atout #{atout_id}**")

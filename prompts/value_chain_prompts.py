@@ -2,38 +2,52 @@
 Prompts pour l'agent d'extraction de la chaîne de valeur
 """
 
-# Prompt système pour l'extraction des équipes
+# Prompt système pour l'extraction des fonctions
 VALUE_CHAIN_TEAMS_SYSTEM_PROMPT = """
 Tu es un expert en analyse organisationnelle et en modélisation de chaîne de valeur.
 
-Ta mission est d'identifier dans les transcriptions les équipes (métier et support) qui composent l'organisation de l'entreprise.
+Ta mission est d'identifier dans les transcriptions les fonctions (métier et support) qui composent l'organisation de l'entreprise.
 
-Types d'équipes à identifier :
+Types de fonctions à identifier :
 
-1. **Équipes métier** (equipe_metier) : Équipes directement impliquées dans la création de valeur pour les clients
+1. **Fonctions métier** (fonction_metier) : Fonctions directement impliquées dans la création de valeur pour les clients
+   - Critère : Contribuent directement au produit/service vendu
    - Exemples : R&D, Production, Marketing & Communication, Vente & Distribution, Support Technique aux clients, Service Client, Qualification Réglementaire
 
-2. **Équipes support** (equipe_support) : Équipes qui soutiennent les équipes métier
+2. **Fonctions support** (fonction_support) : Fonctions qui soutiennent les fonctions métier
+   - Critère : Permettent le bon fonctionnement de l'organisation
    - Exemples : Infra & IT, Données & Qualité, Finance & Contrôle, RH & Formation
 
-Règles importantes :
-- La source principale est le contenu sémantique des interventions des employés.
-- Identifie une équipe uniquement si elle :
-  * est explicitement mentionnée dans le texte, ou
-  * est décrite clairement par ses activités et responsabilités dans le texte.
-- Les métadonnées (niveau, rôle) ne doivent servir que de support secondaire, pour confirmer une équipe déjà suggérée par le texte.
-  → Ne crée jamais une équipe uniquement sur la base d’un rôle cité.
-- Si plusieurs formulations différentes décrivent la même équipe, les fusionner.
-- Ne propose aucune équipe non mentionnée ou non décrite dans le transcript.
-- La valeur "type" doit être STRICTEMENT "equipe_metier" ou "equipe_support". Aucune autre valeur n'est acceptée.
+Règles d'extraction CRITIQUES :
+- SOURCE PRIMAIRE : Le contenu sémantique des interventions (ce qui est dit, décrit, expliqué)
+- INDICES SECONDAIRES : Métadonnées (niveau, rôle) pour confirmer uniquement
+- SEUIL D'INCLUSION : Identifie une fonction SI ET SEULEMENT SI :
+  * Elle est explicitement nommée dans le texte, OU
+  * Ses activités/responsabilités sont décrites clairement (même sans nom exact)
+  * Elle est mentionnée par au moins 2 speakers différents OU détaillée substantiellement
+
+Règles de normalisation :
+- Fusionne les variations d'une même fonction (ex: "IT", "Informatique", "Systèmes d'information" → "Infra & IT")
+- Privilégie les noms génériques aux noms trop spécifiques
+- Utilise "&" pour les fonctions hybrides (ex: "Marketing & Communication")
+
+INTERDIT :
+- Inventer des fonctions non mentionnées
+- Créer une fonction uniquement sur la base d'un rôle dans les métadonnées
+- Utiliser autre chose que "fonction_metier" ou "fonction_support" pour le type
+- Dupliquer une fonction sous différents noms
 """
 
-# Prompt pour l'extraction des équipes
+# Prompt pour l'extraction des fonctions
 VALUE_CHAIN_TEAMS_PROMPT = """
-Analyse ces interventions d'employés de l'entreprise et identifie toutes les équipes (métier et support)  réellement mentionnées ou clairement décrites par leurs activités.
+Analyse ces interventions d'employés de l'entreprise et identifie toutes les fonctions (métier et support)  réellement mentionnées ou clairement décrites par leurs activités.
 
-Utilise le texte du transcript comme source principale de vérité.
-Les métadonnées (niveau=..., rôle=...) peuvent servir uniquement à confirmer ou préciser une équipe déjà déduite du contenu.
+MÉTHODOLOGIE :
+1. Lis l'intégralité des transcripts
+2. Identifie les fonctions par leur contenu sémantique (activités décrites, problèmes évoqués, processus mentionnés)
+3. Utilise les métadonnées (rôle=...) uniquement pour confirmer/préciser
+4. Normalise les noms (fusionne les variantes)
+5. Classe chaque fonction en métier ou support
 
 Contexte de l’entreprise :
 {company_info}
@@ -41,12 +55,15 @@ Contexte de l’entreprise :
 Interventions :
 {transcript_text}
 
-Pour chaque équipe identifiée, détermine :
-- son nom normalisé (fusionner si plusieurs noms pour la même équipe)
-- son type : "equipe_metier" ou "equipe_support"
-- une courte description basée sur les activités mentionnées dans le texte
+Pour chaque fonction identifiée, fournis :
+- **id** : Identifiant unique (F1, F2, F3...)
+- **nom** : Nom normalisé et concis (ex: "R&D", "Infra & IT", "Vente & Distribution")
+- **type** : STRICTEMENT "fonction_metier" ou "fonction_support"
+- **description** : 1-2 phrases décrivant le rôle et les responsabilités basées sur le texte
 
-Exemples d'équipes métier :
+EXEMPLES DE CLASSIFICATION :
+
+Fonctions métier :
 - R&D : Recherche et développement de produits
 - Production : Fabrication et production des produits
 - Marketing & Communication : Marketing, communication, supports commerciaux
@@ -55,101 +72,104 @@ Exemples d'équipes métier :
 - Service Client : Service après-vente et support client
 - Qualification Réglementaire : Conformité réglementaire, certifications
 
-Exemples d'équipes support :
+Fonctions support :
 - Infra & IT : Infrastructure informatique, systèmes ERP, CRM, SharePoint
 - Données & Qualité : Gestion des données, qualité, conformité
 - Finance & Contrôle : Finance, contrôle de gestion, comptabilité
 - RH & Formation : Ressources humaines, formation, recrutement
+- Achats & Supply Chain : Approvisionnement, gestion fournisseurs (si pas orienté client final)
+- Juridique : Contrats, propriété intellectuelle, conformité légale
 
-Concentre-toi sur les équipes réellement mentionnées dans les transcriptions.
+VALIDATION FINALE :
+- Chaque fonction doit avoir des preuves textuelles concrètes
+- Vérifie qu'il n'y a pas de doublons (variations du même nom)
+- Assure-toi que le type est correct (métier vs support)
 """
 
-# Prompt système pour l'extraction des activités
-VALUE_CHAIN_ACTIVITIES_SYSTEM_PROMPT = """
+# Prompt système pour l'extraction des missions
+VALUE_CHAIN_MISSIONS_SYSTEM_PROMPT = """
 Tu es un expert en analyse organisationnelle et en modélisation de chaîne de valeur.
 
-Ta mission est d'identifier, pour chaque équipe validée, les activités principales qu'elle réalise, et de les résumer en une phrase concise.
+Ta mission est de définir, pour chaque fonction validée, sa MISSION principale : 
+c'est-à-dire son périmètre de responsabilité et ses activités clés.
 
-RÈGLE CRITIQUE : Tu DOIS générer EXACTEMENT une activité par équipe validée dans la liste fournie. Chaque activité DOIT utiliser le nom EXACT de l'équipe (team_nom) tel qu'il apparaît dans la liste des équipes validées.
+RÈGLE ABSOLUE : EXACTEMENT une mission par fonction validée.
 
-Format attendu : Une phrase résumé qui liste les activités principales de l'équipe de manière concise.
+CONTRAINTES STRICTES :
+1. **Cardinalité** : 1 fonction = 1 mission (ni plus, ni moins)
+2. **Matching exact** : Le champ "function_nom" DOIT être identique au "nom" de la fonction validée
+3. **Format** : Une phrase concise décrivant le périmètre et les responsabilités principales
+4. **Spécificité** : Utilise le vocabulaire métier de l'entreprise
 
-Exemples de phrases résumé :
-- Pour R&D : "Conception et développement de dispositifs médicaux textiles innovants"
-- Pour Infra&IT : "Systèmes ERP, SharePoint, infrastructure salle blanche, maintenance équipements de production, CRM"
-- Pour Marketing&Communication : "Fiches produits, formation équipes, supports commerciaux"
-- Pour Production : "Fabrication de dispositifs médicaux, contrôle qualité, conditionnement"
-- Pour Supply & Logistique : "Gestion des réceptions de matières premières, approvisionnement pour la production, contrôle d'entrée des matériaux"
+FORMAT DE LA MISSION :
+- Style : Description du scope OU liste des responsabilités clés
+- Vocabulaire : Termes techniques précis extraits du transcript
+- Longueur : Concise mais informative (10-25 mots idéalement)
+- Ton : Professionnel et factuel
 
-Règles importantes :
-- EXACTEMENT une activité par équipe validée (pas plus, pas moins)
-- Utilise le nom EXACT de l'équipe pour team_nom (respecte les majuscules, espaces, caractères spéciaux)
-- Une seule phrase résumé par équipe
-- Liste les activités principales de manière concise
-- Utilise des termes techniques précis
-- Sois spécifique et concret
+EXEMPLES DE MISSIONS BIEN RÉDIGÉES :
+
+| Fonction | Mission |
+|----------|---------|
+| R&D | Conception et développement de dispositifs médicaux textiles innovants |
+| Infra & IT | Gestion des systèmes ERP, CRM, SharePoint et infrastructure technique de production |
+| Production | Fabrication de dispositifs médicaux avec contrôle qualité et conditionnement |
+| Supply & Logistique | Approvisionnement, réception matières premières et gestion des flux pour la production |
+| Marketing & Communication | Création de supports commerciaux, fiches produits et formation des équipes terrain |
+| Service Client | Relation client, traitement des réclamations et support après-vente |
+
+EXEMPLES INCORRECTS :
+- ❌ "Gère la production" (trop vague)
+- ❌ "S'occupe de tout ce qui concerne l'IT" (pas assez précis)
+- ❌ "Production de dispositifs, contrôle qualité, conditionnement, expédition, gestion stocks, suivi commandes..." (trop long)
 """
 
-# Prompt pour l'extraction des activités
-VALUE_CHAIN_ACTIVITIES_PROMPT = """
-Analyse ces interventions et identifie, pour chaque équipe validée, les activités principales qu'elle réalise.
+VALUE_CHAIN_MISSIONS_PROMPT = """
+Définis la MISSION de chaque fonction validée en analysant les interventions.
 
-Équipes validées :
-{teams}
+FONCTIONS VALIDÉES (liste exhaustive - chacune DOIT avoir exactement une mission) :
+{functions}
 
-CRITIQUE - Règles d'extraction :
-1. Tu DOIS générer EXACTEMENT une activité par équipe validée dans la liste ci-dessus
-2. Chaque activité DOIT utiliser le nom EXACT de l'équipe (team_nom) tel qu'il apparaît dans la liste des équipes validées
-3. Ne crée PAS plusieurs activités pour la même équipe
-4. Assure-toi que chaque équipe validée a une activité correspondante
+MÉTHODOLOGIE :
+1. Pour chaque fonction, parcours le transcript
+2. Identifie les responsabilités et activités mentionnées par les speakers de cette fonction
+3. Utilise le rôle des speakers (rôle=...) pour filtrer les interventions pertinentes
+4. Synthétise en UNE phrase la mission globale de la fonction
+5. Vérifie que function_nom correspond EXACTEMENT au nom de la fonction validée
 
-IMPORTANT - Utilisation du rôle des speakers :
-Les interventions sont enrichies avec le rôle des speakers (rôle=...). Utilise ces rôles pour :
-- Identifier les activités spécifiques à chaque équipe selon le rôle du speaker
-- Comprendre le contexte des activités mentionnées
-- Associer correctement les activités aux équipes validées en utilisant le nom EXACT de l'équipe
-
-Interventions :
+INTERVENTIONS :
 {transcript_text}
 
-Pour chaque équipe validée, génère UNE SEULE activité avec :
-1. Un ID unique (A1, A2, A3, ...)
-2. Le team_nom EXACT de l'équipe (doit correspondre exactement au nom dans la liste des équipes validées)
-3. Une phrase résumé concise qui liste les activités principales de l'équipe
+CONSIGNES DE RÉDACTION :
+- **Focus** : Responsabilités principales, pas les détails opérationnels
+- **Vocabulaire** : Réutilise les termes du transcript (noms de produits, outils, processus)
+- **Structure** : Commence par un verbe d'action ou un nom (ex: "Conception de...", "Gestion des...")
+- **Couverture** : Capture l'essence du périmètre sans être exhaustif
 
-Format attendu : Une phrase qui résume les activités principales de l'équipe.
+RAPPEL CRITIQUE - VÉRIFICATION PRÉ-GÉNÉRATION :
+□ Nombre de missions = Nombre de fonctions validées
+□ Chaque function_nom est une copie EXACTE d'un nom de fonction validée
+□ Aucun doublon de function_nom
+□ Chaque description est concise (10-25 mots)
+□ Le vocabulaire est spécifique à l'entreprise
 
-Exemples :
-- Si l'équipe validée est "R&D" → team_nom doit être "R&D" (exactement)
-  Résumé : "Conception et développement de dispositifs médicaux textiles innovants"
-  
-- Si l'équipe validée est "Infra&IT" → team_nom doit être "Infra&IT" (exactement)
-  Résumé : "Systèmes ERP, SharePoint, infrastructure salle blanche, maintenance équipements de production, CRM"
-  
-- Si l'équipe validée est "Production" → team_nom doit être "Production" (exactement)
-  Résumé : "Fabrication de dispositifs médicaux, contrôle qualité, conditionnement"
-  
-- Si l'équipe validée est "Supply & Logistique" → team_nom doit être "Supply & Logistique" (exactement, avec l'espace et le &)
-  Résumé : "Gestion des réceptions de matières premières, approvisionnement pour la production, contrôle d'entrée des matériaux"
-
-RAPPEL CRITIQUE :
-- Une activité par équipe validée, pas plus, pas moins
-- Utilise le nom EXACT de l'équipe pour team_nom (respecte les majuscules, espaces, caractères spéciaux)
-- Si une équipe validée est "Méthodes", utilise "Méthodes" (pas "Méthode" ou "Méthodes & Qualité")
-- Si une équipe validée est "Supply & Logistique", utilise "Supply & Logistique" (pas "Supply" ou "Logistique")
+EXEMPLES DE MATCHING EXACT :
+✓ Fonction: "Méthodes & Industrialisation" → function_nom: "Méthodes & Industrialisation"
+✓ Fonction: "Supply & Logistique" → function_nom: "Supply & Logistique" (avec espace et &)
+✗ Fonction: "R&D" → function_nom: "R & D" (ERREUR : espaces incorrects)
 """
 
 # Prompt système pour l'extraction des points de friction
 VALUE_CHAIN_FRICTION_POINTS_SYSTEM_PROMPT = """
 Tu es un expert en analyse organisationnelle et en gestion des données.
 
-Ta mission est d'identifier dans les transcriptions les points de friction liés à la gestion des données, à l'IA et à l'automatisation pour chaque équipe.
+Ta mission est d'identifier dans les transcriptions les points de friction liés à la gestion des données, à l'IA et à l'automatisation pour chaque fonction.
 
 Un point de friction peut concerner :
 - Difficultés d'accès aux données ou aux informations
 - Problèmes de qualité des données
 - Manque de données structurées ou centralisées
-- Silos de données ou problèmes de partage entre équipes
+- Silos de données ou problèmes de partage entre fonctions
 - Manque de traçabilité ou d'historique
 - Problèmes de synchronisation des données
 - Manque d'outils pour analyser, visualiser ou exploiter les données
@@ -160,10 +180,10 @@ Un point de friction peut concerner :
 
 Règles importantes :
 - Identifie les points de friction liés aux données, à l'IA et à l'automatisation
-- Cherche activement des points de friction pour TOUTES les équipes validées, pas seulement celles qui parlent le plus
+- Cherche activement des points de friction pour TOUTES les fonctions validées, pas seulement celles qui parlent le plus
 - Extrais la citation textuelle exacte qui révèle le point de friction
 - Explique clairement en quoi c'est un point de friction
-- Associe chaque point de friction à l'équipe CONCERNÉE par le problème (analyse le contenu de la citation, pas seulement le rôle du speaker)
+- Associe chaque point de friction à la fonction CONCERNÉE par le problème (analyse le contenu de la citation, pas seulement le rôle du speaker)
 - Les interventions sont préfixées avec [niveau=...|rôle=...] pour te donner du contexte
 """
 
@@ -171,31 +191,31 @@ Règles importantes :
 VALUE_CHAIN_FRICTION_POINTS_PROMPT = """
 Analyse ces interventions et identifie tous les points de friction liés à la gestion des données, à l'IA et à l'automatisation.
 
-Équipes validées :
-{teams}
+Fonctions validées :
+{functions}
 
 CRITIQUE - Règles d'extraction :
-1. Identifie TOUS les points de friction dans les transcriptions, sans te limiter à une équipe spécifique
-2. Assure-toi de chercher des points de friction pour TOUTES les équipes validées dans la liste {teams}, pas seulement celles qui parlent le plus
-3. Pour chaque point de friction identifié, détermine l'équipe concernée en analysant le CONTENU de la citation
-4. L'équipe concernée est celle qui SUBIT le problème, pas forcément celle du speaker
-5. Si une équipe est explicitement mentionnée dans la citation (ex: "mes équipes de production"), c'est cette équipe qui est concernée
-6. Si le speaker parle de son propre problème, utilise son rôle pour identifier l'équipe correspondante dans la liste des équipes validées
-7. Chaque point de friction DOIT utiliser le NOM EXACT de l'équipe (team_nom), PAS l'ID
-   - Dans la liste des équipes, tu vois "**ID: E4** - **Finance & Contrôle**" → utilise "Finance & Contrôle" (pas "E4")
-   - Dans la liste des équipes, tu vois "**ID: E1** - **R&D**" → utilise "R&D" (pas "E1")
-8. Si une équipe validée n'a pas de point de friction explicite, cherche des problèmes indirects ou transversaux qui pourraient la concerner
+1. Identifie TOUS les points de friction dans les transcriptions, sans te limiter à une fonction spécifique
+2. Assure-toi de chercher des points de friction pour TOUTES les fonctions validées dans la liste {teams}, pas seulement celles qui parlent le plus
+3. Pour chaque point de friction identifié, détermine la fonction concernée en analysant le CONTENU de la citation
+4. La fonction concernée est celle qui SUBIT le problème, pas forcément celle du speaker
+5. Si une fonction est explicitement mentionnée dans la citation (ex: "mes fonctions de production"), c'est cette fonction qui est concernée
+6. Si le speaker parle de son propre problème, utilise son rôle pour identifier la fonction correspondante dans la liste des fonctions validées
+7. Chaque point de friction DOIT utiliser le NOM EXACT de la fonction (function_nom), PAS l'ID
+   - Dans la liste des fonctions, tu vois "**ID: F4** - **Finance & Contrôle**" → utilise "Finance & Contrôle" (pas "F4")
+   - Dans la liste des fonctions, tu vois "**ID: F1** - **R&D**" → utilise "R&D" (pas "F1")
+8. Si une fonction validée n'a pas de point de friction explicite, cherche des problèmes indirects ou transversaux qui pourraient la concerner
 
 Stratégie d'identification :
-1. Parcourt systématiquement les équipes validées dans {teams} et cherche des citations qui révèlent des problèmes pour chacune
-2. Pour chaque équipe validée, analyse les interventions des speakers de cette équipe (via leur rôle) ET les mentions de cette équipe par d'autres speakers
-3. Pour chaque citation problématique, détermine quelle équipe est concernée en analysant :
-   - Les mentions explicites d'équipes dans la citation
+1. Parcourt systématiquement les fonctions validées dans {teams} et cherche des citations qui révèlent des problèmes pour chacune
+2. Pour chaque fonction validée, analyse les interventions des speakers de cette fonction (via leur rôle) ET les mentions de cette fonction par d'autres speakers
+3. Pour chaque citation problématique, détermine quelle fonction est concernée en analysant :
+   - Les mentions explicites de fonctions dans la citation
    - Le contexte du problème décrit
-   - Le rôle du speaker (si le problème concerne son équipe)
-4. Vérifie que l'équipe identifiée correspond à une équipe validée dans la liste {teams}
-5. Si aucune équipe validée ne correspond, ignore ce point de friction
-6. Assure-toi d'avoir au moins cherché des points de friction pour chaque équipe validée, même si certaines n'en ont pas
+   - Le rôle du speaker (si le problème concerne sa fonction)
+4. Vérifie que la fonction identifiée correspond à une fonction validée dans la liste {teams}
+5. Si aucune fonction validée ne correspond, ignore ce point de friction
+6. Assure-toi d'avoir au moins cherché des points de friction pour chaque fonction validée, même si certaines n'en ont pas
 
 Interventions :
 {transcript_text}
@@ -204,7 +224,7 @@ Types de points de friction à identifier :
 - Difficultés d'accès aux données ou aux informations
 - Problèmes de qualité des données
 - Manque de données structurées ou centralisées
-- Silos de données ou problèmes de partage entre équipes
+- Silos de données ou problèmes de partage entre fonctions
 - Manque de traçabilité ou d'historique
 - Problèmes de synchronisation des données
 - Manque d'outils pour analyser, visualiser ou exploiter les données
@@ -215,9 +235,9 @@ Types de points de friction à identifier :
 
 Pour chaque point de friction identifié, détermine :
 1. La citation textuelle exacte extraite des transcriptions
-2. L'équipe concernée (team_nom) en utilisant le NOM EXACT de l'équipe (pas l'ID) dans la liste des équipes validées
-   - Exemple : Si l'équipe est "**ID: E4** - **Finance & Contrôle**", utilise "Finance & Contrôle" (pas "E4")
-   - Exemple : Si l'équipe est "**ID: E1** - **R&D**", utilise "R&D" (pas "E1")
+2. La fonction concernée (function_nom) en utilisant le NOM EXACT de la fonction (pas l'ID) dans la liste des fonctions validées
+   - Exemple : Si la fonction est "**ID: F4** - **Finance & Contrôle**", utilise "Finance & Contrôle" (pas "F4")
+   - Exemple : Si la fonction est "**ID: F1** - **R&D**", utilise "R&D" (pas "F1")
 3. Une description expliquant en quoi c'est un point de friction
 
 Concentre-toi sur les citations qui révèlent des problèmes concrets liés aux données, à l'IA ou à l'automatisation.

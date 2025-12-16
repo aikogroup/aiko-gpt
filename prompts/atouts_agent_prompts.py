@@ -67,28 +67,27 @@ Utilise les métadonnées enrichies (niveau hiérarchique, rôle) pour mieux com
 ATOUTS_SYNTHESIS_SYSTEM_PROMPT = """
 Tu es un expert en analyse stratégique et en transformation digitale.
 
-Ta mission est de synthétiser les atouts de l'entreprise pour l'intégration de la data et l'IA à partir des citations extraites des transcriptions et des informations sur l'entreprise.
+Ta mission est de synthétiser les **atouts macro-stratégiques** de l'entreprise pour l'intégration de la data et de l'IA, à partir des citations extraites des transcriptions et des informations sur l'entreprise.
 
-Un bon atout doit :
-1. Être formulé de manière positive et stratégique
-2. Expliquer clairement comment il facilite l'adoption de la data et l'IA
-3. Montrer un impact tangible sur la capacité d'intégration de la data et l'IA
-4. Être rédigé en 3-5 lignes avec un style professionnel et percutant
-
+Un bon atout macro doit :
+1. Être formulé de manière positive et stratégique, à un niveau **global et transverse**
+2. Montrer comment il faciliterait l’adoption de la data et de l’IA à l’échelle de l’entreprise
+3. Mettre en évidence un impact tangible sur la compétitivité, la transformation digitale et la création de valeur
+4. Être rédigé en 3-5 lignes avec un style professionnel, consultatif et prospectif
 
 Structure attendue pour chaque atout :
 - Un titre court et impactant (max 15 mots)
 - Une description détaillée (3-5 lignes) qui :
-  * Présente l'atout de manière factuelle et stratégique
-  * Explique son importance pour l'intégration de l'IA
-  * Montre comment il peut être exploité ou amplifié par l'IA
+  * Présente l’atout de manière factuelle et stratégique
+  * Explique son importance pour l’intégration de l’IA à un niveau global
+  * Montre comment il pourrait être exploité ou amplifié par l’IA
   * Utilise un vocabulaire professionnel et des formulations au conditionnel (permettrait, pourrait, constituerait)
   * Adopte un ton consultatif et prospectif
 """
 
 # Prompt pour la synthèse des atouts
 ATOUTS_SYNTHESIS_PROMPT = """
-À partir des citations extraites et des informations sur l'entreprise, synthétise les principaux atouts de l'entreprise pour l'intégration de l'IA.
+À partir des citations extraites et des informations sur l'entreprise, synthétise les principaux **atouts macro-stratégiques** de l'entreprise pour l'intégration de l'IA.
 
 Citations extraites :
 {citations}
@@ -98,40 +97,35 @@ Informations sur l'entreprise :
 
 Génère entre 3 et 6 atouts majeurs qui :
 1. Regroupent les citations par thématique cohérente
-2. Montrent clairement comment chaque atout facilite l'adoption de l'IA
-3. Sont formulés de manière stratégique et professionnelle
+2. Montrent comment chaque atout pourrait faciliter l’adoption de l’IA à un niveau global
+3. Sont formulés de manière stratégique, consultative et prospective
+4. Se concentrent sur des **leviers organisationnels, culturels, technologiques et de marché**, plutôt que sur des projets ou actions spécifiques
 
 Style et ton attendus :
 - Utiliser le conditionnel pour projeter les bénéfices (permettrait, pourrait, constituerait, représenterait)
 - Adopter un vocabulaire stratégique et consultatif
-- Présenter les atouts comme des leviers de transformation
-- Montrer le potentiel d'amplification par l'IA
+- Présenter les atouts comme des leviers de transformation à l’échelle de l’entreprise
+- Montrer le potentiel d’amplification par l’IA
 - 3-5 lignes par description
 
 Exemples de structure attendue :
 
-**Exemple 1 - Expertise métier reconnue et spécialisée :**
-"L'expertise de 30 ans dans les dispositifs médicaux chirurgicaux constitue un différenciateur clé qui permettrait à Cousin Surgery de maintenir sa crédibilité face aux géants du secteur. Le savoir-faire technique approfondi en orthopédie, viscéral et rachis, combiné aux relations de confiance établies avec les chirurgiens, représente un socle solide pour développer des solutions intelligentes qui capitaliseraient sur cette légitimité historique tout en modernisant l'approche commerciale et technique."
+**Exemple macro 1 - Vision stratégique orientée IA :**
+“La vision long-terme de l’entreprise, centrée sur l’innovation et l’optimisation des processus, constituerait un levier majeur pour l’adoption de l’IA. Cette orientation stratégique pourrait aligner l’ensemble des équipes et ressources autour de projets de transformation digitale, maximisant l’impact de l’IA sur la compétitivité et la création de valeur.”
 
-**Exemple 2 - Migration vers une infrastructure technique moderne :**
-"Le récent changement d'ERP et le CRM entre autres constituent une fondation qui pourrait supporter l'intégration d'outils IA. La documentation technique riche d'historique représente un capital de données considérable qui pourrait être structuré et exploité pour créer des avantages concurrentiels durables en matière de support technique et de développement produit."
-
-**Exemple 3 - Capital humain qualifié :**
-"Les équipes techniques qui maîtrisent les enjeux réglementaires pourraient voir leur expertise amplifiée par des systèmes d'automatisation et de veille, leur permettant de se concentrer sur les activités à plus forte valeur ajoutée tout en maintenant l'excellence opérationnelle."
-
-**Exemple 4 - Volonté d'être agile et rapidement mettre en place des projets de transformation :**
-"L'équipe est capable de s'adapter rapidement à la digitalisation et de prendre des décisions rapides pour faire avancer les innovations (ex: Cas d'usage déjà en cours pour les services clients). Cette nature proactive est perçue comme un atout majeur, car elle positionne l'entreprise pour mettre en œuvre efficacement de nouvelles technologies et innovations, particulièrement dans le domaine de l'intelligence artificielle."
+**Exemple macro 2 - Culture organisationnelle agile et collaborative :**
+“La culture d’innovation et l’ouverture à l’expérimentation constitueraient un socle favorable pour l’intégration de l’IA. Cette agilité organisationnelle permettrait de tester rapidement de nouvelles solutions, d’identifier les meilleures pratiques et de déployer des projets IA à grande échelle.”
 
 Assure-toi que chaque atout :
-- A un ID unique (1, 2, 3, ...)
+- A un ID unique (1, 2, 3, …)
 - A un titre percutant et concis (max 15 mots)
 - A une description de 3-5 lignes
-- Est rédigé comme une synthèse stratégique
+- Est rédigé comme une synthèse stratégique macro
 """
 
 # Prompt pour la régénération des atouts (évite les doublons)
 ATOUTS_REGENERATION_PROMPT = """
-À partir des citations extraites et des informations sur l'entreprise, synthétise de NOUVEAUX atouts de l'entreprise pour l'intégration de l'IA.
+À partir des citations extraites et des informations sur l'entreprise, synthétise de NOUVEAUX **atouts macro-stratégiques** de l'entreprise pour l'intégration de l'IA.
 
 IMPORTANT : Tu dois proposer des atouts DIFFÉRENTS de ceux déjà validés ou rejetés par l'utilisateur.
 
@@ -151,31 +145,24 @@ Informations sur l'entreprise :
 {company_info}
 
 Génère entre 3 et 6 NOUVEAUX atouts majeurs qui :
-1. Sont DIFFÉRENTS des atouts déjà validés ou rejetés (évite les thématiques similaires)
-2. Explorent d'autres aspects des citations ou d'autres angles stratégiques
-3. Prennent en compte le feedback de l'utilisateur
-4. Montrent clairement comment chaque atout facilite l'adoption de l'IA
-5. Sont formulés de manière stratégique et professionnelle
-
-Stratégies pour éviter les doublons :
-- Si un atout sur l'expertise métier a déjà été validé/rejeté, explore plutôt l'infrastructure technique
-- Si un atout sur le capital humain existe déjà, explore la culture d'innovation ou l'agilité organisationnelle
-- Cherche des angles complémentaires dans les citations non encore exploitées
-- Combine plusieurs citations de manière différente pour créer de nouveaux atouts
+1. Sont DIFFÉRENTS des atouts déjà validés ou rejetés
+2. Prennent un **angle macro et stratégique**, explorant la vision, la culture, les ressources globales, le positionnement marché ou la capacité d’adaptation
+3. Montrent clairement comment chaque atout pourrait faciliter l’adoption de l’IA à un niveau global
+4. Sont formulés de manière stratégique et consultative
 
 Style et ton attendus :
 - Utiliser le conditionnel pour projeter les bénéfices (permettrait, pourrait, constituerait, représenterait)
 - Adopter un vocabulaire stratégique et consultatif
-- Présenter les atouts comme des leviers de transformation
-- Montrer le potentiel d'amplification par l'IA
+- Présenter les atouts comme des leviers de transformation à l’échelle de l’entreprise
+- Montrer le potentiel d’amplification par l’IA
 - 3-5 lignes par description
 
 Assure-toi que chaque atout :
-- A un ID unique (1, 2, 3, ...)
+- A un ID unique (1, 2, 3, …)
 - A un titre percutant et concis (max 15 mots)
 - A une description de 3-5 lignes
-- Est rédigé comme une synthèse stratégique
 - Est VRAIMENT DIFFÉRENT des atouts déjà proposés
+- Est rédigé comme une synthèse stratégique macro
 """
 
 # Note : ATOUTS_WEB_INFO_PROMPT supprimé car non utilisé

@@ -190,10 +190,10 @@ class ValueChainInput(BaseModel):
 
 class ValueChainValidationFeedback(BaseModel):
     """Feedback de validation de la chaîne de valeur"""
-    validation_type: str  # "teams", "activities", "friction_points"
+    validation_type: str  # "functions", "missions", "friction_points"
     validated_items: List[Dict[str, Any]]
     rejected_items: List[Dict[str, Any]]
-    user_action: str  # "continue_teams", "continue_to_activities", "continue_activities", "continue_to_friction", "continue_friction", "finalize"
+    user_action: str  # "continue_functions", "continue_to_missions", "continue_missions", "continue_to_friction", "continue_friction", "finalize"
 
 
 class PrerequisEvaluationInput(BaseModel):
@@ -1301,7 +1301,7 @@ async def get_value_chain_state(thread_id: str):
                 next_nodes = [snapshot.next]
         
         # Mettre à jour le statut en fonction du prochain nœud
-        if any(node in next_nodes for node in ["validate_teams", "validate_activities", "validate_friction_points"]):
+        if any(node in next_nodes for node in ["validate_teams", "validate_missions", "validate_friction_points"]):
             workflow_data["status"] = "paused"
         elif len(next_nodes) == 0:
             workflow_data["status"] = "completed"
@@ -1362,7 +1362,7 @@ async def send_value_chain_validation(thread_id: str, feedback: ValueChainValida
         if snapshot and snapshot.next:
             next_nodes = list(snapshot.next) if isinstance(snapshot.next, (list, tuple)) else [snapshot.next]
             
-            if any(node in next_nodes for node in ["validate_teams", "validate_activities", "validate_friction_points"]):
+            if any(node in next_nodes for node in ["validate_teams", "validate_missions", "validate_friction_points"]):
                 workflow_data["status"] = "paused"
             elif len(next_nodes) == 0:
                 workflow_data["status"] = "completed"

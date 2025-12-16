@@ -8,18 +8,18 @@ import os
 from dotenv import load_dotenv
 
 from models.value_chain_models import (
-    TeamsResponse,
-    ActivitiesResponse,
+    FunctionsResponse,
+    MissionsResponse,
     FrictionPointsResponse,
-    Team,
-    Activity,
+    Function,
+    Mission,
     FrictionPoint
 )
 from prompts.value_chain_prompts import (
     VALUE_CHAIN_TEAMS_SYSTEM_PROMPT,
     VALUE_CHAIN_TEAMS_PROMPT,
-    VALUE_CHAIN_ACTIVITIES_SYSTEM_PROMPT,
-    VALUE_CHAIN_ACTIVITIES_PROMPT,
+    VALUE_CHAIN_MISSIONS_SYSTEM_PROMPT,
+    VALUE_CHAIN_MISSIONS_PROMPT,
     VALUE_CHAIN_FRICTION_POINTS_SYSTEM_PROMPT,
     VALUE_CHAIN_FRICTION_POINTS_PROMPT
 )
@@ -42,30 +42,30 @@ class ValueChainAgent:
         
         self.model = 'gpt-4.1-nano-2025-04-14'
     
-    def extract_teams(
+    def extract_functions(
         self,
         interventions: List[Dict[str, Any]],
         company_info: Dict[str, Any]
-    ) -> TeamsResponse:
+    ) -> FunctionsResponse:
         """
-        Extrait les équipes (métier et support) depuis les interventions
+        Extrait les fonctions (métier et support) depuis les interventions
         
         Args:
             interventions: Liste des interventions enrichies depuis la DB
             company_info: Informations sur l'entreprise depuis web search (pour contexte uniquement)
             
         Returns:
-            TeamsResponse avec les équipes identifiées
+            FunctionsResponse avec les fonctions identifiées
         """
         if not interventions:
             logger.warning("Aucune intervention fournie")
-            return TeamsResponse(teams=[])
+            return FunctionsResponse(functions=[])
         
         # Préparer le texte pour l'analyse
         transcript_text = self._format_interventions(interventions)
         company_info_text = self._format_company_info(company_info)
         
-        # Appeler le LLM pour extraire les équipes
+        # Appeler le LLM pour extraire les fonctions
         prompt = VALUE_CHAIN_TEAMS_PROMPT.format(
             transcript_text=transcript_text,
             company_info=company_info_text
@@ -86,50 +86,50 @@ class ValueChainAgent:
                         ]
                     }
                 ],
-                text_format=TeamsResponse
+                text_format=FunctionsResponse
             )
             
-            teams_response = response.output_parsed
-            logger.info(f"Extrait {len(teams_response.teams)} équipes")
-            return teams_response
+            functions_response = response.output_parsed
+            logger.info(f"Extrait {len(functions_response.functions)} fonctions")
+            return functions_response
             
         except Exception as e:
-            logger.error(f"Erreur lors de l'extraction des équipes: {e}")
-            return TeamsResponse(teams=[])
+            logger.error(f"Erreur lors de l'extraction des fonctions: {e}")
+            return FunctionsResponse(functions=[])
     
-    def extract_activities(
+    def extract_missions(
         self,
         interventions: List[Dict[str, Any]],
-        teams: List[Team]
-    ) -> ActivitiesResponse:
+        functions: List[Function]
+    ) -> MissionsResponse:
         """
-        Extrait les activités pour chaque équipe validée
+        Extrait les missions pour chaque fonction validée
         
         Args:
             interventions: Liste des interventions enrichies depuis la DB
-            teams: Liste des équipes validées
+            functions: Liste des fonctions validées
             
         Returns:
-            ActivitiesResponse avec une phrase résumé par équipe
+            MissionsResponse avec une phrase résumé par fonction
         """
-        if not interventions or not teams:
-            logger.warning("Aucune intervention ou équipe fournie")
-            return ActivitiesResponse(activities=[])
+        if not interventions or not functions:
+            logger.warning("Aucune intervention ou fonction fournie")
+            return MissionsResponse(missions=[])
         
         # Préparer le texte pour l'analyse
         transcript_text = self._format_interventions(interventions)
-        teams_text = self._format_teams(teams)
+        functions_text = self._format_functions(functions)
         
-        # Appeler le LLM pour extraire les activités
-        prompt = VALUE_CHAIN_ACTIVITIES_PROMPT.format(
+        # Appeler le LLM pour extraire les missions
+        prompt = VALUE_CHAIN_MISSIONS_PROMPT.format(
             transcript_text=transcript_text,
-            teams=teams_text
+            functions=functions_text
         )
         
         try:
             response = openai.responses.parse(
                 model=self.model,
-                instructions=VALUE_CHAIN_ACTIVITIES_SYSTEM_PROMPT,
+                instructions=VALUE_CHAIN_MISSIONS_SYSTEM_PROMPT,
                 input=[
                     {
                         "role": "user",
@@ -141,44 +141,44 @@ class ValueChainAgent:
                         ]
                     }
                 ],
-                text_format=ActivitiesResponse
+                text_format=MissionsResponse
             )
             
-            activities_response = response.output_parsed
-            logger.info(f"Extrait {len(activities_response.activities)} activités")
-            return activities_response
+            missions_response = response.output_parsed
+            logger.info(f"Extrait {len(missions_response.missions)} missions")
+            return missions_response
             
         except Exception as e:
-            logger.error(f"Erreur lors de l'extraction des activités: {e}")
-            return ActivitiesResponse(activities=[])
+            logger.error(f"Erreur lors de l'extraction des missions: {e}")
+            return MissionsResponse(missions=[])
     
     def extract_friction_points(
         self,
         interventions: List[Dict[str, Any]],
-        teams: List[Team]
+        functions: List[Function]
     ) -> FrictionPointsResponse:
         """
-        Extrait les points de friction liés à la gestion des données pour chaque équipe
+        Extrait les points de friction liés à la gestion des données pour chaque fonction
         
         Args:
             interventions: Liste des interventions enrichies depuis la DB
-            teams: Liste des équipes validées
+            functions: Liste des fonctions validées
             
         Returns:
             FrictionPointsResponse avec les points de friction identifiés
         """
-        if not interventions or not teams:
-            logger.warning("Aucune intervention ou équipe fournie")
+        if not interventions or not functions:
+            logger.warning("Aucune intervention ou fonction fournie")
             return FrictionPointsResponse(friction_points=[])
         
         # LOGS DÉTAILLÉS - Début
         logger.info(f"🔍 [FRICTION] Début extraction points de friction")
         logger.info(f"🔍 [FRICTION] Nombre d'interventions: {len(interventions)}")
-        logger.info(f"🔍 [FRICTION] Nombre d'équipes validées: {len(teams)}")
+        logger.info(f"🔍 [FRICTION] Nombre de fonctions validées: {len(functions)}")
         
-        # Afficher les noms des équipes
-        team_names = [team.nom for team in teams]
-        logger.info(f"🔍 [FRICTION] Noms des équipes validées: {team_names}")
+        # Afficher les noms des fonctions
+        function_names = [function.nom for function in functions]
+        logger.info(f"🔍 [FRICTION] Noms des fonctions validées: {function_names}")
         
         # Statistiques sur les interventions
         if interventions:
@@ -197,17 +197,17 @@ class ValueChainAgent:
         
         # Préparer le texte pour l'analyse
         transcript_text = self._format_interventions(interventions)
-        teams_text = self._format_teams(teams)
+        functions_text = self._format_functions(functions)
         
         # Logs sur les données formatées
         logger.info(f"🔍 [FRICTION] Longueur transcript_text formaté: {len(transcript_text)} caractères")
         logger.info(f"🔍 [FRICTION] Aperçu transcript_text (premiers 500 caractères): {transcript_text[:500]}...")
-        logger.info(f"🔍 [FRICTION] Teams_text formaté:\n{teams_text}")
+        logger.info(f"🔍 [FRICTION] Functions_text formaté:\n{functions_text}")
         
         # Appeler le LLM pour extraire les points de friction
         prompt = VALUE_CHAIN_FRICTION_POINTS_PROMPT.format(
             transcript_text=transcript_text,
-            teams=teams_text
+            functions=functions_text
         )
         
         logger.info(f"🔍 [FRICTION] Longueur prompt final: {len(prompt)} caractères")
@@ -239,7 +239,7 @@ class ValueChainAgent:
             if friction_points_response.friction_points:
                 logger.info(f"🔍 [FRICTION] Détail des points de friction extraits:")
                 for fp in friction_points_response.friction_points:
-                    logger.info(f"   - ID: {fp.id}, Team: {fp.team_nom}, Citation: {fp.citation[:100]}...")
+                    logger.info(f"   - ID: {fp.id}, Function: {fp.function_nom}, Citation: {fp.citation[:100]}...")
             else:
                 logger.warning(f"🔍 [FRICTION] ⚠️ Aucun point de friction extrait par le LLM")
             
@@ -303,15 +303,15 @@ class ValueChainAgent:
         
         return "\n".join(formatted) if formatted else "Aucune information disponible."
     
-    def _format_teams(self, teams: List[Team]) -> str:
-        """Formate les équipes pour l'analyse"""
-        if not teams:
-            return "Aucune équipe disponible."
+    def _format_functions(self, functions: List[Function]) -> str:
+        """Formate les fonctions pour l'analyse"""
+        if not functions:
+            return "Aucune fonction disponible."
         
         formatted = []
-        for team in teams:
+        for function in functions:
             formatted.append(
-                f"- **ID: {team.id}** - **{team.nom}** ({team.type}): {team.description}"
+                f"- **ID: {function.id}** - **{function.nom}** ({function.type}): {function.description}"
             )
         
         return "\n".join(formatted)

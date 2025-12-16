@@ -56,7 +56,6 @@ class StreamlitExecutiveValidation:
                 ch_id = challenge.get("id", "")
                 original_titre = challenge.get("titre", "Titre non défini")
                 original_description = challenge.get("description", "")
-                besoins_lies = challenge.get("besoins_lies", [])
                 
                 # Initialiser les valeurs dans session_state si nécessaire
                 titre_key = f"challenge_titre_{i}_{key_suffix}"
@@ -82,14 +81,6 @@ class StreamlitExecutiveValidation:
                     height=100
                 )
                 
-                # Afficher les besoins liés (titres)
-                if besoins_lies:
-                    st.markdown("**Besoins liés:**")
-                    for titre in besoins_lies:
-                        st.text(f"• {titre}")
-                else:
-                    st.info("Aucun besoin lié")
-                
                 # Checkbox pour sélectionner cet enjeu
                 checkbox_key = f"validate_challenge_{i+1}_{key_suffix}"
                 is_selected = st.checkbox(f"Valider cet enjeu", key=checkbox_key)
@@ -101,7 +92,6 @@ class StreamlitExecutiveValidation:
                     ch_id = challenge.get("id", "")
                     original_titre = challenge.get("titre", "Titre non défini")
                     original_description = challenge.get("description", "")
-                    besoins_lies = challenge.get("besoins_lies", [])
                     
                     # Initialiser les valeurs dans session_state si nécessaire
                     titre_key = f"challenge_titre_{i+1}_{key_suffix}"
@@ -126,14 +116,6 @@ class StreamlitExecutiveValidation:
                         label_visibility="visible",
                         height=100
                     )
-                    
-                    # Afficher les besoins liés (titres)
-                    if besoins_lies:
-                        st.markdown("**Besoins liés:**")
-                        for titre in besoins_lies:
-                            st.text(f"• {titre}")
-                    else:
-                        st.info("Aucun besoin lié")
                     
                     # Checkbox pour sélectionner cet enjeu
                     checkbox_key = f"validate_challenge_{i+2}_{key_suffix}"

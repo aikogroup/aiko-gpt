@@ -26,10 +26,22 @@ class MaturityResponse(BaseModel):
 
 
 class Recommendation(BaseModel):
-    """Modèle pour une recommandation"""
+    """Modèle pour une recommandation stratégique (macro)"""
     id: str = Field(description="ID unique de la recommandation (R1, R2, R3, ...)")
-    titre: str = Field(description="Titre court et percutant de la recommandation (max 10 mots, style actionnable)")
-    description: str = Field(description="Description courte de la recommandation (1-2 lignes maximum)")
+    titre: str = Field(
+        description=(
+            "Orientation stratégique IA de haut niveau "
+            "(max 10 mots, formulation non opérationnelle, vision / principe / axe structurant)"
+        )
+    )
+    description: str = Field(
+        description=(
+            "Description stratégique expliquant l'intention, "
+            "l'impact structurant et l'horizon temporel (12–36 mois). "
+            "Aucune action opérationnelle ou outil spécifique."
+        )
+    )
+
 
 
 class RecommendationsResponse(BaseModel):

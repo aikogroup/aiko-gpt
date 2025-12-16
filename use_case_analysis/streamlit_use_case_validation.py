@@ -90,13 +90,16 @@ class StreamlitUseCaseValidation:
                 original_famille = use_case.get('famille') or ''
                 
                 # Initialiser les valeurs dans session_state APRÈS le nettoyage
-                # Réinitialiser toujours avec la valeur originale pour forcer la mise à jour
+                # Ne réinitialiser que si la clé n'existe pas encore pour préserver les modifications
                 titre_key = f"uc_titre_{i}_{key_suffix}"
                 desc_key = f"uc_desc_{i}_{key_suffix}"
                 famille_key = f"uc_famille_{i}_{key_suffix}"
-                st.session_state[titre_key] = original_titre
-                st.session_state[desc_key] = original_description
-                st.session_state[famille_key] = original_famille  # Toujours initialiser (sera '' si None)
+                if titre_key not in st.session_state:
+                    st.session_state[titre_key] = original_titre
+                if desc_key not in st.session_state:
+                    st.session_state[desc_key] = original_description
+                if famille_key not in st.session_state:
+                    st.session_state[famille_key] = original_famille  # Toujours initialiser (sera '' si None)
                 
                 # TOUJOURS afficher le champ famille (même s'il est vide)
                 st.markdown("**Famille :**")
@@ -140,13 +143,16 @@ class StreamlitUseCaseValidation:
                     original_famille = use_case.get('famille') or ''
                     
                     # Initialiser les valeurs dans session_state APRÈS le nettoyage
-                    # Réinitialiser toujours avec la valeur originale pour forcer la mise à jour
+                    # Ne réinitialiser que si la clé n'existe pas encore pour préserver les modifications
                     titre_key = f"uc_titre_{i+1}_{key_suffix}"
                     desc_key = f"uc_desc_{i+1}_{key_suffix}"
                     famille_key = f"uc_famille_{i+1}_{key_suffix}"
-                    st.session_state[titre_key] = original_titre
-                    st.session_state[desc_key] = original_description
-                    st.session_state[famille_key] = original_famille  # Toujours initialiser (sera '' si None)
+                    if titre_key not in st.session_state:
+                        st.session_state[titre_key] = original_titre
+                    if desc_key not in st.session_state:
+                        st.session_state[desc_key] = original_description
+                    if famille_key not in st.session_state:
+                        st.session_state[famille_key] = original_famille  # Toujours initialiser (sera '' si None)
                     
                     # TOUJOURS afficher le champ famille (même s'il est vide)
                     st.markdown("**Famille :**")

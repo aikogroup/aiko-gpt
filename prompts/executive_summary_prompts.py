@@ -3,18 +3,26 @@ Prompts pour l'agent Executive Summary
 """
 
 EXECUTIVE_SUMMARY_SYSTEM_PROMPT = """
-Tu es un expert en conseil Data et IA aux entreprises, spécialisé dans l'analyse stratégique pour des missions de transformation IA.
+Tu es un expert en conseil Data et IA aux entreprises, spécialisé dans l'analyse stratégique pour des missions de transformation Data & IA.
 
 Ton rôle est d'identifier et d'analyser :
-- Les enjeux stratégiques de l'entreprise
-- La maturité IA de l'entreprise
+- Les enjeux stratégiques macro de l'entreprise
+- La maturité Data & IA de l'entreprise
 - Les recommandations personnalisées selon le contexte
 
 Tu dois être précis, factuel et orienté résultats. Utilise un langage professionnel et adapté au niveau exécutif.
 """
 
 IDENTIFY_CHALLENGES_PROMPT = """
-Analyse les données suivantes et identifie les enjeux stratégiques de l'IA pour l'entreprise, en te mettant dans la peau d'un expert en transformation digitale.
+Tu es un expert senior en conseil Data & IA, spécialisé dans les missions de transformation stratégique auprès des Comités Exécutifs.
+
+Ta mission est d’identifier les ENJEUX STRATÉGIQUES Data & IA de l’entreprise à partir des éléments fournis.
+Les enjeux attendus sont de niveau Direction Générale (macro), orientés business et création de valeur,
+et valables sur un horizon stratégique de 3 à 5 ans.
+
+────────────────────────────────────────
+CONTEXTE FOURNI
+────────────────────────────────────────
 
 NOTE DE L'INTERVIEWER (Contexte et insights clés) :
 {interviewer_note}
@@ -25,127 +33,285 @@ DONNÉES TRANSCRIPTS (Entretiens avec les collaborateurs) :
 DONNÉES ATELIERS (Ateliers de co-création) :
 {workshop_content}
 
-BESOINS IDENTIFIÉS (liste des titres uniquement) :
+BESOINS IDENTIFIÉS (titres EXACTS uniquement) :
 {final_needs}
 
-RÈGLE CRITIQUE POUR LES BESOINS LIÉS :
-Les besoins liés que tu indiques DOIVENT correspondre EXACTEMENT aux titres listés ci-dessus.
-Tu ne peux PAS inventer de nouveaux besoins. Utilise UNIQUEMENT les titres de la liste fournie.
+────────────────────────────────────────
+NOMBRE D’ENJEUX À PRODUIRE
+────────────────────────────────────────
 
-NOMBRE D'ENJEUX :
-- Le nombre d'enjeux à identifier peut être spécifié dans les informations supplémentaires fournies par l'utilisateur
-- Si l'utilisateur demande explicitement un nombre, respecte cette demande
-- Sinon, propose un nombre raisonnable (généralement entre 6 et 8 enjeux) en fonction de la richesse des données
+- Si un nombre d’enjeux est explicitement demandé par l’utilisateur, respecte strictement cette demande
+- Sinon, propose un nombre cohérent et raisonnable (généralement entre 6 et 8),
+en fonction de la richesse des données fournies
 
-CONTEXTE :
-Les enjeux de l'IA représentent les grands défis stratégiques que l'entreprise doit relever. Chaque enjeu doit être lié à au moins un besoin identifié lors des entretiens et ateliers.
+────────────────────────────────────────
+DÉFINITION D’UN ENJEU STRATÉGIQUE Data & IA (NIVEAU MACRO)
+────────────────────────────────────────
 
-INSTRUCTIONS :
-1. Identifie les enjeux stratégiques spécifiques et concrets pour l'entreprise (nombre défini par l'utilisateur ou raisonnable selon les données)
-2. Base-toi sur les données réelles des transcripts, ateliers et SURTOUT les besoins identifiés
-3. Pour chaque enjeu, fournis :
-   - Un ID unique (E1, E2, E3, ...)
-   - Un TITRE court et percutant (max 10 mots)
-   - Une DESCRIPTION détaillée en 3-5 lignes expliquant l'enjeu, son impact et sa valeur stratégique
-   - Les BESOINS LIÉS : liste des titres EXACTS des besoins de la liste ci-dessus qui se rattachent à cet enjeu
-4. Chaque enjeu doit être unique et spécifique au contexte de l'entreprise
-5. Les enjeux doivent couvrir différents aspects de la transformation IA
-6. IMPORTANT : Les besoins liés doivent être des titres EXACTS de la liste des besoins identifiés ci-dessus. Ne crée pas de nouveaux besoins.
+Un enjeu stratégique Data & IA est un défi ou une opportunité MAJEURE de niveau Direction Générale.
+Il exprime une tension stratégique clé pour l’entreprise, indépendante de toute solution technique,
+outil, algorithme ou cas d’usage spécifique.
 
-EXEMPLE D'ENJEU :
-Si la liste des besoins contient :
-1. Analyse des Données de Marché
-2. Optimisation du Pricing
-3. Veille Commerciale Proactive
+Un enjeu stratégique Data & IA :
+- S’exprime au niveau BUSINESS, ORGANISATIONNEL ou COMPÉTITIF
+- A un impact transversal (plusieurs métiers, fonctions ou zones géographiques)
+- Est valable sur un horizon stratégique de 3 à 5 ans
+- Peut être compris, débattu et priorisé par un COMEX
+- Ne décrit PAS une fonctionnalité, un projet ou un besoin opérationnel
 
-Alors un enjeu pourrait être :
+────────────────────────────────────────
+PRINCIPE DE RAISONNEMENT OBLIGATOIRE
+────────────────────────────────────────
+
+Tu dois impérativement respecter l’ordre de raisonnement suivant :
+
+1. Identifier les enjeux stratégiques Data & IA de niveau macro, du point de vue de la Direction Générale
+2. Vérifier que chaque enjeu est réellement transverse, business et stratégique
+3. SEULEMENT ENSUITE, rattacher chaque enjeu à des besoins identifiés
+   qui en sont des manifestations concrètes observées sur le terrain
+
+Les besoins ne définissent JAMAIS un enjeu.
+Ils servent uniquement à justifier et illustrer l’enjeu a posteriori.
+
+────────────────────────────────────────
+LANGAGE ET TON ATTENDUS
+────────────────────────────────────────
+
+- Utiliser un vocabulaire de comité exécutif :
+  stratégie, performance, création de valeur, risque, compétitivité,
+  scalabilité, résilience, gouvernance, pilotage, différenciation
+- Éviter tout vocabulaire trop opérationnel, technique ou orienté solution
+- Ne jamais mentionner d’outils, de modèles, de technologies ou d’implémentation
+- Être précis, factuel, crédible et orienté décision
+
+────────────────────────────────────────
+RÈGLES CRITIQUES SUR LES BESOINS LIÉS
+────────────────────────────────────────
+
+- Chaque enjeu DOIT être rattaché à un ou plusieurs besoins identifiés
+- Les besoins listés doivent correspondre EXACTEMENT aux titres fournis
+- Tu ne peux PAS inventer de nouveaux besoins
+- Les besoins servent de justification terrain, pas de point de départ
+
+────────────────────────────────────────
+FORMAT ATTENDU POUR CHAQUE ENJEU
+────────────────────────────────────────
+
+Pour chaque enjeu, fournir STRICTEMENT les champs suivants :
+
+- ID : identifiant unique (E1, E2, E3, …)
+- TITRE : formulation courte, percutante, niveau COMEX (maximum 10 mots)
+- DESCRIPTION :
+  3 à 5 lignes décrivant :
+  - la nature stratégique de l’enjeu
+  - son impact business et organisationnel
+  - la valeur créée ou le risque adressé à l’échelle de l’entreprise
+- BESOINS_LIÉS :
+  Liste des titres EXACTS des besoins identifiés qui illustrent cet enjeu
+
+────────────────────────────────────────
+TEST DE VALIDATION COMEX (AUTO-ÉVALUATION)
+────────────────────────────────────────
+
+Avant de finaliser chaque enjeu, applique mentalement le test suivant :
+
+“Cet enjeu pourrait-il être présenté tel quel en titre de slide
+et débattu en comité exécutif sans entrer dans des détails techniques ?”
+
+Si la réponse est NON, l’enjeu n’est PAS assez macro et doit être reformulé.
+
+────────────────────────────────────────
+EXEMPLE D’ENJEU STRATÉGIQUE Data & IA (NIVEAU MACRO)
+────────────────────────────────────────
+
 - ID: E1
-- TITRE: Capitalisation des connaissances internes
-- DESCRIPTION: Transformer le capital intellectuel actuellement dispersé de l'entreprise en avantage concurrentiel durable. L'enjeu est de créer un "cerveau collectif" organisationnel qui pourrait automatiser l'accès à l'expertise technique et clinique, faciliter le partage des bonnes pratiques entre équipes, et accélérer la formation des nouvelles recrues pour réduire les délais de montée en compétence tout en préservant le savoir-faire critique.
-- BESOINS_LIÉS: ["Analyse des Données de Marché", "Veille Commerciale Proactive"]
+- TITRE: Avantage concurrentiel durable par l’IA
+- DESCRIPTION:
+Positionner l’IA comme un levier structurant de différenciation stratégique
+en renforçant la qualité des décisions, la capacité d’anticipation et la vitesse d’exécution.
+L’enjeu est de transformer l’IA en actif stratégique pérenne,
+créateur de valeur mesurable à l’échelle de l’entreprise,
+et non en une juxtaposition d’initiatives isolées à faible impact global.
+- BESOINS_LIÉS:
+["Analyse des Données de Marché", "Veille Commerciale Proactive"]
 
-La réponse sera automatiquement structurée selon le format attendu.
+La réponse doit être STRICTEMENT conforme à ce format.
 """
 
 REGENERATE_CHALLENGES_PROMPT = """
-Tu dois régénérer les enjeux stratégiques en tenant compte du feedback utilisateur.
+Tu es un expert senior en conseil Data & IA, spécialisé dans les missions de transformation stratégique
+auprès des Comités Exécutifs.
 
-ENJEUX DÉJÀ PROPOSÉS LORS DE L'ITÉRATION PRÉCÉDENTE (À NE JAMAIS REPROPOSER) :
+Ta mission est de RÉGÉNÉRER de NOUVEAUX ENJEUX STRATÉGIQUES Data & IA de niveau Direction Générale,
+en tenant compte du feedback utilisateur et des itérations précédentes.
+
+Les enjeux générés doivent être STRICTEMENT macro, orientés business et création de valeur,
+et valables sur un horizon stratégique de 3 à 5 ans.
+
+────────────────────────────────────────
+ENJEUX DES ITÉRATIONS PRÉCÉDENTES
+────────────────────────────────────────
+
+ENJEUX DÉJÀ PROPOSÉS (VALIDÉS ET REJETÉS — À NE JAMAIS REPROPOSER) :
 {previous_challenges}
 
-Note importante : La liste ci-dessus contient TOUS les enjeux proposés précédemment (validés ET rejetés).
-Tu dois générer des enjeux COMPLÈTEMENT DIFFÉRENTS de ces thèmes.
+⚠️ RÈGLE ABSOLUE :
+La liste ci-dessus contient TOUS les enjeux déjà formulés.
+Tu dois générer des enjeux dont les THÈMES STRATÉGIQUES sont
+COMPLÈTEMENT DIFFÉRENTS de tous ceux listés ci-dessus.
 
-ENJEUX EXPLICITEMENT REJETÉS PAR L'UTILISATEUR :
+ENJEUX EXPLICITEMENT REJETÉS PAR L’UTILISATEUR :
 {rejected_challenges}
 
-ENJEUX VALIDÉS (À CONSERVER - NE PAS LES RÉGÉNÉRER) :
+ENJEUX VALIDÉS (À CONSERVER — NE PAS RÉGÉNÉRER) :
 {validated_challenges}
 
-COMMENTAIRES DE L'UTILISATEUR :
+────────────────────────────────────────
+FEEDBACK UTILISATEUR
+────────────────────────────────────────
+
+COMMENTAIRES ET ATTENTES DE L’UTILISATEUR :
 {challenges_feedback}
 
 RÉSUMÉ DE LA VALIDATION :
 - Enjeux validés : {validated_count}
 - Enjeux rejetés : {rejected_count}
 
-NOMBRE D'ENJEUX :
-- Le nombre d'enjeux à identifier peut être spécifié dans les informations supplémentaires fournies par l'utilisateur
-- Si l'utilisateur demande explicitement un nombre, respecte cette demande
-- Sinon, propose un nombre raisonnable (généralement entre 6 et 8 enjeux) en fonction de la richesse des données
+Tu dois tenir compte de ces éléments pour :
+- Éviter les thèmes rejetés
+- Monter le niveau stratégique si demandé
+- Explorer de nouveaux axes encore non couverts
 
-NOTE DE L'INTERVIEWER (Contexte et insights clés) :
+────────────────────────────────────────
+CONTEXTE MÉTIER DISPONIBLE
+────────────────────────────────────────
+
+NOTE DE L’INTERVIEWER (Contexte et insights clés) :
 {interviewer_note}
 
-DONNÉES TRANSCRIPTS :
+DONNÉES TRANSCRIPTS (Entretiens collaborateurs) :
 {transcript_content}
 
-DONNÉES ATELIERS :
+DONNÉES ATELIERS (Co-création) :
 {workshop_content}
 
-BESOINS IDENTIFIÉS (liste des titres uniquement) :
+BESOINS IDENTIFIÉS (titres EXACTS uniquement) :
 {final_needs}
 
-RÈGLE CRITIQUE POUR LES BESOINS LIÉS :
-Les besoins liés que tu indiques DOIVENT correspondre EXACTEMENT aux titres listés ci-dessus.
-Tu ne peux PAS inventer de nouveaux besoins. Utilise UNIQUEMENT les titres de la liste fournie.
+────────────────────────────────────────
+NOMBRE D’ENJEUX À PRODUIRE
+────────────────────────────────────────
 
-INSTRUCTIONS CRITIQUES POUR LA NOUVELLE ITÉRATION :
+- Si un nombre précis est explicitement demandé par l’utilisateur, respecte strictement cette demande
+- Sinon, propose un nombre cohérent et raisonnable (généralement entre 6 et 8),
+en fonction de la richesse des données et des enjeux déjà validés
 
-INTERDICTIONS ABSOLUES :
-1. NE JAMAIS reproposer un enjeu déjà proposé dans l'itération précédente (même avec un titre légèrement différent)
-2. NE PAS créer de variantes ou reformulations des enjeux déjà proposés
-3. Exemples à éviter :
-   - Si "Capitalisation des connaissances internes" a déjà été proposé
-   - NE PAS proposer "Gestion des connaissances" (trop similaire)
-   - NE PAS proposer "Partage des savoirs" (même domaine)
-   - PLUTÔT explorer d'autres domaines : transformation digitale, optimisation opérationnelle, innovation, stratégie commerciale, etc.
+────────────────────────────────────────
+DÉFINITION D’UN ENJEU STRATÉGIQUE Data & IA (NIVEAU MACRO)
+────────────────────────────────────────
 
-OBLIGATIONS :
-4. Explorer des DOMAINES STRATÉGIQUES COMPLÈTEMENT DIFFÉRENTS de ceux déjà proposés
-5. Identifier des ENJEUX NON ENCORE COUVERTS dans les données
-6. Proposer des enjeux plus concrets, actionnables et mieux sourcés depuis les transcripts et ateliers
-7. Générer de nouveaux enjeux DISTINCTS (nombre défini par l'utilisateur ou raisonnable selon les données)
-8. Chaque enjeu doit être unique et spécifique au contexte de l'entreprise
+Un enjeu stratégique Data & IA est un défi ou une opportunité MAJEURE
+qui se situe au niveau Direction Générale.
 
-RÈGLES DE FORMAT :
-9. VÉRIFIE L'UNICITÉ DES THÈMES : Assure-toi qu'aucun thème n'est utilisé deux fois dans ta proposition ET qu'aucun thème ne ressemble aux enjeux déjà proposés
-10. Chaque enjeu doit avoir un ID unique (E1, E2, E3, ...)
-11. Chaque enjeu doit avoir un TITRE court et percutant (max 10 mots)
-12. Chaque enjeu doit avoir une DESCRIPTION détaillée en 3-5 lignes
-13. Chaque enjeu doit avoir des BESOINS_LIÉS : liste des titres EXACTS des besoins de la liste fournie qui se rattachent à cet enjeu
-14. IMPORTANT : Les besoins liés doivent être des titres EXACTS de la liste des besoins identifiés. Ne crée pas de nouveaux besoins.
+Il :
+- S’exprime au niveau BUSINESS, ORGANISATIONNEL ou COMPÉTITIF
+- Est transverse à plusieurs métiers ou fonctions
+- Est valable sur un horizon stratégique de 3 à 5 ans
+- Peut être discuté en COMEX sans référence à des solutions techniques
+- Ne décrit PAS un besoin, un projet, un outil ou un cas d’usage
 
-STRATÉGIE DE DIVERSIFICATION :
-- Analyse les enjeux déjà proposés pour identifier les domaines/processus déjà couverts
-- Cherche dans les TRANSCRIPTS et ATELIERS des aspects complètement différents
-- Si un domaine a déjà été exploré (ex: connaissances, qualité), passe à un autre domaine (ex: commercial, supply chain, R&D, formation, etc.)
+────────────────────────────────────────
+ORDRE DE RAISONNEMENT OBLIGATOIRE
+────────────────────────────────────────
 
-🚀 OBJECTIF : Génère de nouveaux enjeux avec des THÈMES VRAIMENT DIFFÉRENTS de tous les enjeux déjà proposés (validés ou rejetés). VÉRIFIE que chaque thème est UNIQUE et DISTINCT de TOUS les enjeux déjà proposés. Les enjeux validés sont conservés séparément, donc génère de nouveaux enjeux à chaque itération.
+Tu dois impérativement respecter la séquence suivante :
+
+1. Identifier de NOUVEAUX enjeux stratégiques Data & IA de niveau macro,
+   différents de tous les enjeux déjà proposés
+2. Vérifier que chaque enjeu correspond à une tension stratégique majeure
+   pour la Direction Générale
+3. Vérifier que le thème stratégique n’a JAMAIS été abordé dans les itérations précédentes
+4. SEULEMENT ENSUITE, rattacher chaque enjeu à des besoins identifiés
+   qui en sont des manifestations concrètes sur le terrain
+
+Les besoins ne définissent JAMAIS un enjeu.
+Ils servent uniquement à le justifier a posteriori.
+
+────────────────────────────────────────
+STRATÉGIE DE DIVERSIFICATION STRATÉGIQUE
+────────────────────────────────────────
+
+Avant de générer les nouveaux enjeux :
+
+- Analyse les enjeux déjà proposés pour identifier les domaines déjà couverts
+  (exemples : connaissance, qualité, performance opérationnelle, etc.)
+- Écarte complètement ces domaines
+- Explore des DOMAINES STRATÉGIQUES NOUVEAUX, par exemple :
+  - Création de valeur et modèle économique
+  - Pilotage de la performance et décision stratégique
+  - Compétitivité et différenciation marché
+  - Scalabilité et passage à l’échelle
+  - Résilience organisationnelle et gestion des risques
+  - Gouvernance, responsabilisation et alignement stratégique
+
+────────────────────────────────────────
+LANGAGE ET TON ATTENDUS
+────────────────────────────────────────
+
+- Vocabulaire de comité exécutif : stratégie, valeur, compétitivité, risque,
+  scalabilité, gouvernance, pilotage, résilience, différenciation
+- Aucun vocabulaire technique ou orienté solution
+- Pas de mention d’outils, de technologies, de modèles ou d’algorithmes
+- Ton professionnel, crédible, orienté décision
+
+────────────────────────────────────────
+RÈGLES CRITIQUES SUR LES BESOINS LIÉS
+────────────────────────────────────────
+
+- Chaque enjeu DOIT être rattaché à un ou plusieurs besoins identifiés
+- Les besoins listés doivent correspondre EXACTEMENT aux titres fournis
+- Tu ne peux PAS inventer de nouveaux besoins
+- Les besoins servent de justification terrain, pas de point de départ
+
+────────────────────────────────────────
+FORMAT STRICTEMENT ATTENDU POUR CHAQUE ENJEU
+────────────────────────────────────────
+
+Pour chaque enjeu, fournir STRICTEMENT :
+
+- ID : identifiant unique (E1, E2, E3, …)
+- TITRE : formulation courte, percutante, niveau COMEX (maximum 10 mots)
+- DESCRIPTION :
+  3 à 5 lignes décrivant :
+  - la nature stratégique de l’enjeu
+  - son impact business et organisationnel
+  - la valeur créée ou le risque adressé à l’échelle de l’entreprise
+- BESOINS_LIÉS :
+  Liste des titres EXACTS des besoins identifiés qui illustrent cet enjeu
+
+────────────────────────────────────────
+TEST DE VALIDATION COMEX (AUTO-CONTRÔLE)
+────────────────────────────────────────
+
+Avant de finaliser chaque enjeu, applique le test suivant :
+
+“Cet enjeu pourrait-il être présenté tel quel en titre de slide
+et débattu en comité exécutif sans entrer dans des détails techniques ?”
+
+Si la réponse est NON, l’enjeu doit être reformulé ou abandonné.
+
+────────────────────────────────────────
+OBJECTIF FINAL
+────────────────────────────────────────
+
+🚀 Générer de NOUVEAUX enjeux stratégiques Data & IA,
+vraiment distincts de tous les enjeux déjà proposés,
+plus macro, plus transverses et plus stratégiques,
+tout en restant rigoureusement ancrés dans les besoins identifiés.
 """
 
 EVALUATE_MATURITY_PROMPT = """
-Évalue la maturité IA de l'entreprise à partir des données suivantes :
+Évalue la maturité Data & IA de l'entreprise à partir des données suivantes :
 
 DONNÉES TRANSCRIPTS (Entretiens avec les collaborateurs) :
 {transcript_content}
@@ -156,11 +322,11 @@ DONNÉES ATELIERS (Ateliers de co-création) :
 BESOINS IDENTIFIÉS :
 {final_needs}
 
-CAS D'USAGE IA PROPOSÉS :
+CAS D'USAGE Data & IA PROPOSÉS :
 {final_use_cases}
 
 INSTRUCTIONS D'ÉVALUATION :
-1. Analyse la culture numérique de l'entreprise (mentions d'outils digitaux, compétences IA, ouverture au changement)
+1. Analyse la culture numérique de l'entreprise (mentions d'outils digitaux, compétences Data & IA, ouverture au changement)
 2. Évalue la gestion des données (qualité, centralisation, formats exploitables)
 3. Identifie les processus automatisés existants (nombre et sophistication)
 4. Analyse la complexité des besoins et solutions proposées
@@ -171,143 +337,204 @@ CRITÈRES D'ÉVALUATION :
 
 Format de réponse :
 Échelle: [1-5]
-Phrase résumant: [phrase décrivant la maturité IA avec détails sur les données et outils numériques]
+Phrase résumant: [phrase décrivant la maturité Data & IA avec détails sur les données et outils numériques]
 """
 
 GENERATE_RECOMMENDATIONS_PROMPT = """
-Génère des recommandations clés personnalisées selon la maturité IA de l'entreprise :
+Génère des recommandations STRATÉGIQUES Data & IA de niveau MACRO pour l’entreprise.
 
-MATURITÉ IA ÉVALUÉE :
+OBJECTIF :
+Produire des recommandations de haut niveau destinées à une direction générale / COMEX,
+en tenant explicitement compte des attentes, priorités et contraintes exprimées par l’utilisateur.
+
+MATURITÉ Data & IA ÉVALUÉE :
 {maturite_ia}
 
 BESOINS IDENTIFIÉS :
 {final_needs}
 
-CAS D'USAGE IA PROPOSÉS :
+CAS D’USAGE Data & IA IDENTIFIÉS (CONTEXTE UNIQUEMENT) :
 {final_use_cases}
 
-INSTRUCTIONS ET COMMENTAIRES DE L'UTILISATEUR :
+INSTRUCTIONS ET COMMENTAIRES DE L’UTILISATEUR :
 {recommendations_feedback}
 
+INSTRUCTIONS CLÉS – NIVEAU STRATÉGIQUE OBLIGATOIRE :
+1. Les recommandations doivent être de NIVEAU STRATÉGIQUE (macro), pas opérationnel
+2. Les recommandations doivent PRIORITAIREMENT refléter les orientations, contraintes,
+   points d’insistance ou arbitrages exprimés dans les commentaires de l’utilisateur
+3. Elles doivent porter sur :
+   - la vision Data & IA cible à moyen / long terme
+   - les principes structurants de transformation
+   - l’organisation, la gouvernance et la priorisation Data & IA
+   - la trajectoire de montée en maturité (horizon 12 à 36 mois)
+4. NE PAS proposer :
+   - d’outils spécifiques
+   - de solutions techniques
+   - d’actions court terme
+   - de “quick wins” ou tâches opérationnelles
+5. Les cas d’usage servent uniquement de CONTEXTE pour orienter la réflexion stratégique
+6. Les recommandations doivent être compréhensibles et exploitables au niveau décisionnel
+   (direction générale, comité de pilotage, responsables métiers)
+
 NOMBRE DE RECOMMANDATIONS :
-- Le nombre de recommandations à identifier peut être spécifié dans les informations supplémentaires fournies par l'utilisateur
-- Si l'utilisateur demande explicitement un nombre, respecte cette demande
-- Sinon, propose un nombre raisonnable (généralement entre 6 et 8 recommandations) en fonction de la richesse des données
+- Si l’utilisateur précise un nombre, respecte-le strictement
+- Sinon, propose un nombre raisonnable (généralement entre 5 et 6 recommandations)
 
-INSTRUCTIONS :
-1. Génère des recommandations personnalisées selon la maturité IA évaluée (nombre défini par l'utilisateur ou raisonnable selon les données)
-2. Adapte les recommandations au niveau de maturité de l'entreprise
-3. Base-toi sur les besoins et cas d'usage identifiés
-4. Prends en compte les instructions et commentaires de l'utilisateur ci-dessus pour orienter la génération des recommandations
-5. Sois concret et actionnable
-6. Chaque recommandation doit avoir :
-   - Un ID unique (R1, R2, R3, ...)
-   - Un TITRE court et percutant (max 10 mots, style actionnable, verbe à l'infinitif ou impératif)
-   - Une DESCRIPTION courte (1-2 lignes maximum) expliquant la recommandation
+FORMAT DE CHAQUE RECOMMANDATION (OBLIGATOIRE) :
+- id : R1, R2, R3, …
+- titre :
+  • Orientation stratégique Data & IA
+  • Max 10 mots
+  • Formulation non opérationnelle
+  • Niveau vision / principe / axe structurant
+- description :
+  • 2 à 4 phrases maximum
+  • Explique :
+    - l’intention stratégique
+    - l’impact structurant pour l’entreprise
+    - la prise en compte explicite du feedback utilisateur
+    - le lien avec la maturité Data & IA actuelle
+  • Mentionne implicitement l’horizon moyen / long terme
+  • Aucune référence à des outils, technologies ou implémentations précises
 
-EXEMPLES DE RECOMMANDATIONS (format à suivre) :
-- TITRE: Fiabiliser et centraliser les données dans un format exploitable
-  DESCRIPTION: Mettre en place une infrastructure de données unifiée pour garantir la qualité et l'accessibilité des informations.
+EXEMPLES DE FORMULATION ATTENDUE (À TITRE INDICATIF) :
+- TITRE : Définir une vision cible de la donnée à l’échelle
+  DESCRIPTION : Structurer une ambition data partagée permettant de soutenir durablement les futurs usages Data & IA et la prise de décision métier.
 
-- TITRE: Acculturer les équipes aux IA simples
-  DESCRIPTION: Former les collaborateurs aux outils d'IA accessibles pour développer une culture numérique progressive.
+- TITRE : Installer une culture Data & IA transverse et progressive
+  DESCRIPTION : Faire évoluer les pratiques et les compétences des équipes pour accompagner la transformation Data & IA sur le long terme.
 
-- TITRE: Encadrer chaque automatisation IA avec des règles métier claires
-  DESCRIPTION: Définir des processus et règles de gouvernance pour chaque solution IA déployée.
+- TITRE : Mettre en place une gouvernance Data & IA claire et pérenne
+  DESCRIPTION : Définir les rôles, responsabilités et principes de contrôle pour encadrer l’ensemble des initiatives Data & IA.
 
-- TITRE: Exécuter plusieurs "quick wins" IA
-  DESCRIPTION: Identifier et déployer rapidement des solutions IA à impact immédiat pour démontrer la valeur.
+- TITRE : Piloter la valeur IA par une logique de priorisation
+  DESCRIPTION : Structurer l’identification et l’arbitrage des initiatives IA en fonction de leur impact business et organisationnel.
 
-Les recommandations seront automatiquement structurées selon le format attendu.
+RÈGLES FINALES :
+- Chaque recommandation doit couvrir un THÈME STRATÉGIQUE DISTINCT
+- Aucune redondance de thèmes
+- Le niveau de détail doit rester volontairement stratégique
+- Le résultat doit ressembler à un livrable de cabinet de conseil IA
+- Toute divergence avec le feedback utilisateur doit être explicitement évitée
 """
 
 REGENERATE_RECOMMENDATIONS_PROMPT = """
-Tu dois régénérer les recommandations en tenant compte du feedback utilisateur.
+Tu dois RÉGÉNÉRER des recommandations STRATÉGIQUES Data & IA de niveau MACRO
+en tenant strictement compte du feedback utilisateur et de l’historique complet
+des recommandations déjà proposées.
 
-RECOMMANDATIONS DÉJÀ PROPOSÉES LORS DE L'ITÉRATION PRÉCÉDENTE (À NE JAMAIS REPROPOSER) :
+OBJECTIF :
+Produire de NOUVELLES recommandations de haut niveau destinées à une direction générale / COMEX,
+complémentaires aux recommandations validées, et portant sur des axes stratégiques
+encore non couverts.
+
+RECOMMANDATIONS DÉJÀ PROPOSÉES (VALIDÉES + REJETÉES) — INTERDICTION ABSOLUE DE RÉUTILISATION :
 {previous_recommendations}
 
-Note importante : La liste ci-dessus contient TOUTES les recommandations proposées précédemment (validées ET rejetées).
-Tu dois générer des recommandations COMPLÈTEMENT DIFFÉRENTES de ces thèmes.
+IMPORTANT :
+La liste ci-dessus contient TOUTES les recommandations déjà proposées.
+Aucune nouvelle recommandation ne doit reprendre :
+- le même thème
+- le même axe stratégique
+- le même domaine de transformation
+même avec une formulation différente.
 
-RECOMMANDATIONS EXPLICITEMENT REJETÉES PAR L'UTILISATEUR :
+RECOMMANDATIONS EXPLICITEMENT REJETÉES :
 {rejected_recommendations}
 
-RECOMMANDATIONS VALIDÉES (À CONSERVER - NE PAS LES RÉGÉNÉRER) :
+RECOMMANDATIONS VALIDÉES (À CONSERVER — NE PAS RÉGÉNÉRER) :
 {validated_recommendations}
 
-COMMENTAIRES DE L'UTILISATEUR :
+COMMENTAIRES ET ATTENTES DE L’UTILISATEUR (PRIORITAIRES) :
 {recommendations_feedback}
 
 RÉSUMÉ DE LA VALIDATION :
 - Recommandations validées : {validated_count}
 - Recommandations rejetées : {rejected_count}
 
-MATURITÉ IA ÉVALUÉE :
+CONTEXTE STRATÉGIQUE :
+MATURITÉ Data & IA ÉVALUÉE :
 {maturite_ia}
 
 BESOINS IDENTIFIÉS :
 {final_needs}
 
-CAS D'USAGE IA PROPOSÉS :
+CAS D’USAGE Data & IA IDENTIFIÉS (CONTEXTE UNIQUEMENT) :
 {final_use_cases}
 
-INSTRUCTIONS CRITIQUES POUR LA NOUVELLE ITÉRATION :
+INSTRUCTIONS CRITIQUES – NIVEAU STRATÉGIQUE OBLIGATOIRE :
 
-INTERDICTIONS ABSOLUES :
-1. NE JAMAIS reproposer une recommandation déjà proposée dans l'itération précédente (même avec une formulation légèrement différente)
-2. NE PAS créer de variantes ou reformulations des recommandations déjà proposées
-3. Exemples à éviter :
-   - Si "Mettre en place un CRM" a déjà été proposé
-   - NE PAS proposer "Déployer un système CRM" (trop similaire)
-   - NE PAS proposer "Centraliser les données clients" (même domaine)
-   - PLUTÔT explorer d'autres domaines : formation, automatisation, analyse de données, innovation, etc.
+1. Les recommandations doivent être de NIVEAU STRATÉGIQUE (macro), pas opérationnel
+2. Elles doivent explorer des AXES STRATÉGIQUES COMPLÈTEMENT DIFFÉRENTS
+   de tous ceux déjà couverts (validés ou rejetés)
+3. Les recommandations doivent refléter PRIORITAIREMENT :
+   - les arbitrages exprimés par l’utilisateur
+   - les raisons implicites des rejets précédents
+4. Les recommandations doivent porter sur :
+   - la vision Data & IA cible
+   - l’organisation et la gouvernance Data & IA
+   - la priorisation et le pilotage de la valeur Data & IA
+   - la trajectoire de transformation à moyen / long terme (12 à 36 mois)
+5. NE PAS proposer :
+   - d’outils spécifiques
+   - de solutions techniques
+   - d’actions court terme
+   - de quick wins ou de tâches opérationnelles
+6. Les cas d’usage servent uniquement de CONTEXTE stratégique, jamais de point de départ opérationnel
 
 NOMBRE DE RECOMMANDATIONS :
-- Le nombre de recommandations à identifier peut être spécifié dans les informations supplémentaires fournies par l'utilisateur
-- Si l'utilisateur demande explicitement un nombre, respecte cette demande
-- Sinon, propose un nombre raisonnable (généralement entre 6 et 8 recommandations) en fonction de la richesse des données
+- Si l’utilisateur impose un nombre, respecte-le strictement
+- Sinon, propose un nombre raisonnable (généralement entre 4 et 6 recommandations),
+  en privilégiant la profondeur stratégique à la quantité
 
-OBLIGATIONS :
-4. Explorer des DOMAINES COMPLÈTEMENT DIFFÉRENTS de ceux déjà proposés
-5. Identifier des RECOMMANDATIONS NON ENCORE COUVERTS dans les données
-6. Proposer des recommandations plus concrètes, actionnables et mieux adaptées à la maturité IA
-7. Générer de nouvelles recommandations DISTINCTES (nombre défini par l'utilisateur ou raisonnable selon les données)
-8. Chaque recommandation doit être unique et spécifique au contexte de l'entreprise
+FORMAT DE CHAQUE RECOMMANDATION (OBLIGATOIRE) :
+- id : R1, R2, R3, …
+- titre :
+  • Orientation stratégique Data & IA
+  • Max 10 mots
+  • Formulation non opérationnelle
+  • Niveau vision / principe / axe structurant
+- description :
+  • 2 à 4 phrases maximum
+  • Explique clairement :
+    - l’intention stratégique
+    - l’impact structurant à l’échelle de l’entreprise
+    - la prise en compte du feedback utilisateur
+    - l’alignement avec la maturité Data & IA actuelle
+  • Mention implicite de l’horizon moyen / long terme
+  • Aucune référence à des outils, technologies ou implémentations précises
 
-RÈGLES DE FORMAT :
-9. VÉRIFIE L'UNICITÉ DES THÈMES : Assure-toi qu'aucun thème n'est utilisé deux fois dans ta proposition ET qu'aucun thème ne ressemble aux recommandations déjà proposées
-10. Chaque recommandation doit avoir :
-    - Un ID unique (R1, R2, R3, ...)
-    - Un TITRE court et percutant (max 10 mots, style actionnable, verbe à l'infinitif ou impératif)
-    - Une DESCRIPTION courte (1-2 lignes maximum) expliquant la recommandation
-11. Sois concret et actionnable
-12. Adapte les recommandations au niveau de maturité IA évalué
-13. Les recommandations seront automatiquement structurées selon le format attendu
+EXEMPLES DE RECOMMANDATIONS STRATÉGIQUES (FORMAT À SUIVRE) :
+- TITRE : Structurer une vision Data & IA cible partagée
+  DESCRIPTION : Définir une ambition Data & IA claire et alignée sur les priorités business afin de guider l’ensemble des décisions futures liées à l’IA.
 
-EXEMPLES DE RECOMMANDATIONS (format à suivre) :
-- TITRE: Fiabiliser et centraliser les données dans un format exploitable
-  DESCRIPTION: Mettre en place une infrastructure de données unifiée pour garantir la qualité et l'accessibilité des informations.
+- TITRE : Mettre en place une gouvernance IA transverse
+  DESCRIPTION : Clarifier les rôles, responsabilités et mécanismes d’arbitrage pour encadrer durablement les initiatives IA à l’échelle de l’entreprise.
 
-- TITRE: Acculturer les équipes aux IA simples
-  DESCRIPTION: Former les collaborateurs aux outils d'IA accessibles pour développer une culture numérique progressive.
+- TITRE : Piloter la valeur IA par la priorisation stratégique
+  DESCRIPTION : Organiser l’identification et l’arbitrage des initiatives IA selon leur impact métier et leur contribution à la maturité globale.
 
-- TITRE: Encadrer chaque automatisation IA avec des règles métier claires
-  DESCRIPTION: Définir des processus et règles de gouvernance pour chaque solution IA déployée.
+STRATÉGIE DE DIVERSIFICATION STRATÉGIQUE :
+- Analyse les recommandations déjà proposées pour identifier les axes stratégiques couverts
+- Explore ensuite des AXES DE TRANSFORMATION NON ENCORE TRAITÉS
+  (ex : gouvernance, organisation, pilotage de la valeur, conduite du changement, éthique, modèle opérationnel IA)
+- Si un axe a déjà été exploré, passe obligatoirement à un autre axe stratégique
 
-- TITRE: Exécuter plusieurs "quick wins" IA
-  DESCRIPTION: Identifier et déployer rapidement des solutions IA à impact immédiat pour démontrer la valeur.
+RÈGLES FINALES :
+- Chaque recommandation doit couvrir un AXE STRATÉGIQUE UNIQUE
+- Aucune redondance explicite ou implicite avec les recommandations passées
+- Le niveau de détail doit rester volontairement stratégique
+- Le résultat final doit ressembler à un livrable de cabinet de conseil IA
 
-STRATÉGIE DE DIVERSIFICATION :
-- Analyse les recommandations déjà proposées pour identifier les domaines/processus déjà couverts
-- Cherche dans les BESOINS, QUICK WINS et STRUCTURATION IA des aspects complètement différents
-- Si un domaine a déjà été exploré (ex: CRM, données), passe à un autre domaine (ex: formation, automatisation, innovation, etc.)
-
-OBJECTIF : Génère de nouvelles recommandations avec des THÈMES VRAIMENT DIFFÉRENTS de toutes les recommandations déjà proposées (validées ou rejetées). VÉRIFIE que chaque thème est UNIQUE et DISTINCT de TOUTES les recommandations déjà proposées.
+OBJECTIF FINAL :
+Générer des recommandations STRATÉGIQUES Data & IA réellement nouvelles,
+distinctes, alignées avec le feedback utilisateur,
+et adaptées à la maturité Data & IA de l’entreprise.
 """
 
 EXTRACT_ENJEUX_CITATIONS_PROMPT = """
-Extrait les citations pertinentes pour identifier les enjeux stratégiques de l'IA dans cette transcription.
+Extrait les citations pertinentes pour identifier les enjeux stratégiques de la Data & l'IA dans cette transcription.
 
 TRANSCRIPTION :
 {transcript_text}
@@ -318,11 +545,11 @@ INSTRUCTIONS :
 3. Exclut les citations purement opérationnelles ou techniques sans dimension stratégique
 4. Pour chaque citation, indique le speaker
 
-Extrait uniquement les citations qui sont pertinentes pour identifier les ENJEUX STRATÉGIQUES de l'IA.
+Extrait uniquement les citations qui sont pertinentes pour identifier les ENJEUX STRATÉGIQUES de la Data & l'IA.
 """
 
 EXTRACT_MATURITE_CITATIONS_PROMPT = """
-Extrait les citations pertinentes pour évaluer la maturité IA de l'entreprise dans cette transcription.
+Extrait les citations pertinentes pour évaluer la maturité Data & IA de l'entreprise dans cette transcription.
 
 TRANSCRIPTION :
 {transcript_text}
@@ -332,7 +559,7 @@ INSTRUCTIONS :
    - Des outils digitaux utilisés (Excel, systèmes, logiciels, plateformes)
    - Des processus automatisés existants
    - La gestion des données (qualité, centralisation, formats)
-   - La culture numérique (compétences IA, ouverture au changement, formation)
+   - La culture numérique (compétences Data & IA, ouverture au changement, formation)
 2. Pour chaque citation, classe-la selon le type d'information :
    - 'outils_digitaux' : mentions d'outils, logiciels, systèmes
    - 'processus_automatises' : processus déjà automatisés
@@ -340,11 +567,11 @@ INSTRUCTIONS :
    - 'culture_numérique' : compétences, formation, ouverture au changement
 3. Indique le speaker
 
-Extrait uniquement les citations qui sont pertinentes pour évaluer la MATURITÉ IA.
+Extrait uniquement les citations qui sont pertinentes pour évaluer la MATURITÉ Data & IA.
 """
 
 EXTRACT_WORKSHOP_ENJEUX_PROMPT = """
-Extrait les cas d'usage pertinents pour identifier les enjeux stratégiques de l'IA depuis cet atelier.
+Extrait les cas d'usage pertinents pour identifier les enjeux stratégiques de la Data & l'IA depuis cet atelier.
 
 DONNÉES ATELIER :
 {workshop_data}
@@ -356,11 +583,11 @@ INSTRUCTIONS :
 4. Exclut les cas d'usage purement opérationnels ou techniques sans dimension stratégique
 5. Pour chaque cas d'usage retenu, indique le thème de l'atelier, le titre du cas d'usage et son objectif
 
-Extrait uniquement les cas d'usage qui sont pertinents pour identifier les ENJEUX STRATÉGIQUES de l'IA.
+Extrait uniquement les cas d'usage qui sont pertinents pour identifier les ENJEUX STRATÉGIQUES de la Data & l'Data & IA.
 """
 
 EXTRACT_WORKSHOP_MATURITE_PROMPT = """
-Extrait les informations pertinentes pour évaluer la maturité IA depuis cet atelier.
+Extrait les informations pertinentes pour évaluer la maturité Data & IA depuis cet atelier.
 
 DONNÉES ATELIER :
 {workshop_data}
@@ -374,10 +601,10 @@ INSTRUCTIONS :
    - 'outils_digitaux' : mentions d'outils existants
    - 'processus_automatises' : processus déjà automatisés mentionnés
    - 'gestion_donnees' : besoins liés aux données
-   - 'culture_numérique' : niveau de compréhension et d'ambition IA
+   - 'culture_numérique' : niveau de compréhension et d'ambition Data & IA
 3. Extrait les descriptions qui montrent la maturité actuelle
 
-Extrait les informations pertinentes pour la MATURITÉ IA.
+Extrait les informations pertinentes pour la MATURITÉ Data & IA.
 """
 
 WORD_REPORT_EXTRACTION_PROMPT = """
