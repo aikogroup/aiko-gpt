@@ -161,85 +161,127 @@ EXEMPLES DE MATCHING EXACT :
 
 # Prompt système pour l'extraction des points de friction
 VALUE_CHAIN_FRICTION_POINTS_SYSTEM_PROMPT = """
-Tu es un expert en analyse organisationnelle et en gestion des données.
+Tu es un expert en analyse organisationnelle et en identification de problèmes opérationnels.
 
-Ta mission est d'identifier dans les transcriptions les points de friction liés à la gestion des données, à l'IA et à l'automatisation pour chaque fonction.
+Ta mission est d'identifier dans les transcriptions les points de friction réels liés à la gestion des données, à l'IA et à l'automatisation.
 
-Un point de friction peut concerner :
-- Difficultés d'accès aux données ou aux informations
-- Problèmes de qualité des données
-- Manque de données structurées ou centralisées
-- Silos de données ou problèmes de partage entre fonctions
+PRINCIPE FONDAMENTAL : N'identifie QUE les points de friction explicitement mentionnés ou clairement déductibles du texte. 
+Ne force PAS de friction si elle n'existe pas. Il est NORMAL que certaines fonctions n'aient pas de points de friction identifiés.
+
+Catégories de points de friction :
+
+**Données & Accès**
+- Difficultés d'accès aux données ou informations
+- Données dispersées dans plusieurs systèmes (silos)
+- Manque de centralisation ou de référentiel unique
+- Problèmes de partage entre fonctions
+
+**Qualité & Fiabilité**
+- Données incomplètes, obsolètes ou erronées
 - Manque de traçabilité ou d'historique
-- Problèmes de synchronisation des données
-- Manque d'outils pour analyser, visualiser ou exploiter les données
-- Processus manuels qui pourraient être automatisés
-- Manque d'intelligence artificielle ou d'aide à la décision
-- Problèmes d'intégration entre systèmes
-- Manque de prévisions ou d'analyses prédictives
+- Problèmes de synchronisation entre systèmes
+- Duplication ou incohérence des données
 
-Règles importantes :
-- Identifie les points de friction liés aux données, à l'IA et à l'automatisation
-- Cherche activement des points de friction pour TOUTES les fonctions validées, pas seulement celles qui parlent le plus
-- Extrais la citation textuelle exacte qui révèle le point de friction
-- Explique clairement en quoi c'est un point de friction
-- Associe chaque point de friction à la fonction CONCERNÉE par le problème (analyse le contenu de la citation, pas seulement le rôle du speaker)
-- Les interventions sont préfixées avec [niveau=...|rôle=...] pour te donner du contexte
+**Analyse & Exploitation**
+- Manque d'outils de visualisation ou d'analyse
+- Absence de tableaux de bord ou de reporting
+- Impossibilité d'extraire des insights
+- Manque d'analyses prédictives ou de prévisions
+
+**Automatisation & Processus**
+- Tâches manuelles répétitives (saisie, recopie, consolidation)
+- Processus qui pourraient être automatisés
+- Dépendance à Excel pour des tâches complexes
+- Manque d'intégration entre systèmes
+
+**IA & Aide à la décision**
+- Absence d'outils d'aide à la décision
+- Manque de recommandations automatiques
+- Pas d'intelligence artificielle là où elle serait utile
+
+RÈGLES D'ATTRIBUTION :
+- Associe chaque friction à la fonction qui SUBIT le problème (pas forcément celle du speaker)
+- Utilise le NOM EXACT de la fonction tel qu'il apparaît dans la liste des fonctions validées
+- Si un speaker mentionne explicitement une autre fonction ("la production a du mal à...", "le marketing manque de..."), attribue à cette fonction
+- Si un speaker parle de son propre problème, déduis sa fonction via son rôle et la liste des fonctions validées
+
+RÈGLES D'EXTRACTION CRITIQUES :
+✓ Ne retiens QUE les frictions avec citation textuelle explicite
+✓ Accepte qu'une fonction puisse n'avoir AUCUN point de friction identifié
+✓ Ne déduis PAS de frictions "probables" ou "logiques" non mentionnées
+✓ Une absence de friction n'est PAS un problème - c'est une information
 """
 
 # Prompt pour l'extraction des points de friction
 VALUE_CHAIN_FRICTION_POINTS_PROMPT = """
-Analyse ces interventions et identifie tous les points de friction liés à la gestion des données, à l'IA et à l'automatisation.
+Analyse ces interventions et identifie UNIQUEMENT les points de friction explicitement mentionnés ou clairement déductibles.
 
-Fonctions validées :
+FONCTIONS VALIDÉES :
 {functions}
 
-CRITIQUE - Règles d'extraction :
-1. Identifie TOUS les points de friction dans les transcriptions, sans te limiter à une fonction spécifique
-2. Assure-toi de chercher des points de friction pour TOUTES les fonctions validées dans la liste {functions}, pas seulement celles qui parlent le plus
-3. Pour chaque point de friction identifié, détermine la fonction concernée en analysant le CONTENU de la citation
-4. La fonction concernée est celle qui SUBIT le problème, pas forcément celle du speaker
-5. Si une fonction est explicitement mentionnée dans la citation (ex: "mes fonctions de production"), c'est cette fonction qui est concernée
-6. Si le speaker parle de son propre problème, utilise son rôle pour identifier la fonction correspondante dans la liste des fonctions validées
-7. Chaque point de friction DOIT utiliser le NOM EXACT de la fonction (function_nom), PAS l'ID
-   - Dans la liste des fonctions, tu vois "**ID: F4** - **Finance & Contrôle**" → utilise "Finance & Contrôle" (pas "F4")
-   - Dans la liste des fonctions, tu vois "**ID: F1** - **R&D**" → utilise "R&D" (pas "F1")
-8. Si une fonction validée n'a pas de point de friction explicite, cherche des problèmes indirects ou transversaux qui pourraient la concerner
+MÉTHODOLOGIE EN 3 ÉTAPES :
 
-Stratégie d'identification :
-1. Parcourt systématiquement les fonctions validées dans {functions} et cherche des citations qui révèlent des problèmes pour chacune
-2. Pour chaque fonction validée, analyse les interventions des speakers de cette fonction (via leur rôle) ET les mentions de cette fonction par d'autres speakers
-3. Pour chaque citation problématique, détermine quelle fonction est concernée en analysant :
-   - Les mentions explicites de fonctions dans la citation
-   - Le contexte du problème décrit
-   - Le rôle du speaker (si le problème concerne sa fonction)
-4. Vérifie que la fonction identifiée correspond à une fonction validée dans la liste {functions}
-5. Si aucune fonction validée ne correspond, ignore ce point de friction
-6. Assure-toi d'avoir au moins cherché des points de friction pour chaque fonction validée, même si certaines n'en ont pas
+**Étape 1 - Extraction brute**
+Parcours les interventions et repère toutes les mentions de :
+- Problèmes avec les données
+- Processus manuels pénibles
+- Manque d'outils ou d'automatisation
+- Difficultés d'accès ou de partage
+- Problèmes de qualité ou de fiabilité
 
-Interventions :
+**Étape 2 - Attribution à une fonction**
+Pour chaque problème identifié :
+1. Lis la citation complète pour comprendre le contexte
+2. Identifie la fonction concernée :
+   - Si explicitement mentionnée : "la production souffre de...", "en marketing on manque de..."
+   - Si le speaker parle de lui : utilise son rôle pour trouver la fonction correspondante dans la liste
+   - Si ambiguë : privilégie la fonction la plus directement impactée
+3. Vérifie que cette fonction existe dans la liste des fonctions validées
+4. Utilise le NOM EXACT de la fonction (ex: "Finance & Contrôle", pas "F4" ou "finance")
+
+**Étape 3 - Validation**
+Pour chaque friction extraite, vérifie :
+- [ ] Citation textuelle complète et exacte
+- [ ] Fonction attribuée existe dans la liste validée
+- [ ] Le nom de fonction utilisé est EXACTEMENT celui de la liste (casse, espaces, caractères spéciaux)
+- [ ] Le problème concerne bien les données, l'IA ou l'automatisation
+- [ ] La citation contient réellement le problème décrit (pas d'interprétation excessive)
+
+INTERVENTIONS :
 {transcript_text}
 
-Types de points de friction à identifier :
-- Difficultés d'accès aux données ou aux informations
-- Problèmes de qualité des données
-- Manque de données structurées ou centralisées
-- Silos de données ou problèmes de partage entre fonctions
-- Manque de traçabilité ou d'historique
-- Problèmes de synchronisation des données
-- Manque d'outils pour analyser, visualiser ou exploiter les données
-- Processus manuels qui pourraient être automatisés
-- Manque d'intelligence artificielle ou d'aide à la décision
-- Problèmes d'intégration entre systèmes
-- Manque de prévisions ou d'analyses prédictives
+FORMAT DE SORTIE :
+Pour chaque point de friction :
+- **citation** : Citation textuelle EXACTE (ne paraphrase pas, ne résume pas)
+- **function_nom** : Nom EXACT de la fonction concernée (copie depuis la liste validée)
+- **description** : 1-2 phrases expliquant pourquoi c'est un problème (impact, conséquence)
 
-Pour chaque point de friction identifié, détermine :
-1. La citation textuelle exacte extraite des transcriptions
-2. La fonction concernée (function_nom) en utilisant le NOM EXACT de la fonction (pas l'ID) dans la liste des fonctions validées
-   - Exemple : Si la fonction est "**ID: F4** - **Finance & Contrôle**", utilise "Finance & Contrôle" (pas "F4")
-   - Exemple : Si la fonction est "**ID: F1** - **R&D**", utilise "R&D" (pas "F1")
-3. Une description expliquant en quoi c'est un point de friction
+EXEMPLES D'ATTRIBUTION :
 
-Concentre-toi sur les citations qui révèlent des problèmes concrets liés aux données, à l'IA ou à l'automatisation.
+✓ Citation : "En production, on passe beaucoup de temps à chercher les fiches techniques dans différents dossiers"
+  → function_nom: "Production" (fonction explicitement mentionnée)
+
+✓ Citation : "Je dois consolider manuellement les données de vente chaque semaine dans Excel"
+  → function_nom: "Vente & Distribution" (si speaker a rôle="Commercial" et que cette fonction existe)
+
+✓ Citation : "Le service qualité n'a pas accès en temps réel aux données de production"
+  → function_nom: "Données & Qualité" (fonction qui subit le problème, même si dit par production)
+
+✗ "Le système IT est lent" → Pas assez spécifique sur données/IA/automatisation
+✗ "On pourrait améliorer nos processus" → Trop vague, pas de friction concrète
+
+IMPORTANT - GESTION DES ABSENCES :
+- Si une fonction n'a PAS de point de friction identifiable dans le transcript : c'est OK, ne crée rien pour elle
+- NE FORCE PAS de friction si elle n'est pas explicitement mentionnée
+- Une fonction sans friction identifiée peut simplement :
+  * Ne pas avoir été détaillée dans l'audit
+  * Avoir des processus bien rodés
+  * Ne pas avoir de problématique data/IA majeure
+
+RAPPEL FINAL :
+□ Chaque friction a une citation textuelle exacte
+□ Chaque function_nom correspond exactement à une fonction validée
+□ Pas de friction inventée ou déduite sans preuve textuelle
+□ Les fonctions sans friction ne sont pas mentionnées (c'est normal)
 """
 
