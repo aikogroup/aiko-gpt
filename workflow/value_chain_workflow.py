@@ -861,10 +861,10 @@ class ValueChainWorkflow:
         Reprend le workflow après validation avec le feedback.
         
         Args:
-            validation_type: Type de validation ("teams", "missions", "friction_points")
+            validation_type: Type de validation ("functions", "missions", "friction_points")
             validated_items: Items validés par l'utilisateur
             rejected_items: Items rejetés par l'utilisateur
-            user_action: Action demandée ("continue_teams", "continue_to_missions", etc.)
+            user_action: Action demandée ("continue_functions", "continue_to_missions", etc.)
             thread_id: ID du thread
             
         Returns:
@@ -885,11 +885,11 @@ class ValueChainWorkflow:
         
         # Mettre à jour selon le type de validation
         if validation_type == "functions":
-            updated_values["teams_validation_result"] = {
+            updated_values["functions_validation_result"] = {
                 "validated_functions": validated_items,
                 "rejected_functions": rejected_items
             }
-            updated_values["teams_user_action"] = user_action
+            updated_values["functions_user_action"] = user_action
         elif validation_type == "missions":
             updated_values["missions_validation_result"] = {
                 "validated_missions": validated_items,

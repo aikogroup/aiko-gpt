@@ -5435,10 +5435,6 @@ def display_value_chain_validation_interface():
                 # Initialiser les valeurs dans session_state si nécessaire pour préserver les modifications
                 if resume_key not in st.session_state:
                     st.session_state[resume_key] = original_resume
-                # Initialiser function_key si nécessaire pour le selectbox
-                if function_key not in st.session_state:
-                    # Utiliser le nom directement
-                    st.session_state[function_key] = original_function_nom if original_function_nom in function_names else (function_names[0] if function_names else '')
                 
                 # Champs éditables (ne pas passer value pour éviter d'écraser les modifications)
                 modified_resume = st.text_input(
@@ -5448,8 +5444,14 @@ def display_value_chain_validation_interface():
                 )
                 
                 if function_names:
-                    # Utiliser directement les noms de fonctions
-                    current_index = function_names.index(st.session_state[function_key]) if st.session_state[function_key] in function_names else 0
+                    # Calculer l'index depuis session_state ou utiliser la valeur originale
+                    if function_key in st.session_state:
+                        current_value = st.session_state[function_key]
+                        current_index = function_names.index(current_value) if current_value in function_names else 0
+                    else:
+                        # Utiliser la valeur originale pour déterminer l'index
+                        current_index = function_names.index(original_function_nom) if original_function_nom in function_names else 0
+                    
                     modified_function_nom = st.selectbox(
                         "**Fonction**",
                         options=function_names,
@@ -5479,9 +5481,6 @@ def display_value_chain_validation_interface():
                     # Initialiser les valeurs dans session_state si nécessaire pour préserver les modifications
                     if resume_key not in st.session_state:
                         st.session_state[resume_key] = original_resume
-                    # Initialiser function_key si nécessaire
-                    if function_key not in st.session_state:
-                        st.session_state[function_key] = original_function_nom if original_function_nom in function_names else (function_names[0] if function_names else '')
                     
                     # Champs éditables (ne pas passer value pour éviter d'écraser les modifications)
                     modified_resume = st.text_input(
@@ -5491,7 +5490,14 @@ def display_value_chain_validation_interface():
                     )
                     
                     if function_names:
-                        current_index = function_names.index(st.session_state[function_key]) if st.session_state[function_key] in function_names else 0
+                        # Calculer l'index depuis session_state ou utiliser la valeur originale
+                        if function_key in st.session_state:
+                            current_value = st.session_state[function_key]
+                            current_index = function_names.index(current_value) if current_value in function_names else 0
+                        else:
+                            # Utiliser la valeur originale pour déterminer l'index
+                            current_index = function_names.index(original_function_nom) if original_function_nom in function_names else 0
+                        
                         modified_function_nom = st.selectbox(
                             "**Fonction**",
                             options=function_names,

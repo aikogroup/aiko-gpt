@@ -196,7 +196,7 @@ Fonctions validées :
 
 CRITIQUE - Règles d'extraction :
 1. Identifie TOUS les points de friction dans les transcriptions, sans te limiter à une fonction spécifique
-2. Assure-toi de chercher des points de friction pour TOUTES les fonctions validées dans la liste {teams}, pas seulement celles qui parlent le plus
+2. Assure-toi de chercher des points de friction pour TOUTES les fonctions validées dans la liste {functions}, pas seulement celles qui parlent le plus
 3. Pour chaque point de friction identifié, détermine la fonction concernée en analysant le CONTENU de la citation
 4. La fonction concernée est celle qui SUBIT le problème, pas forcément celle du speaker
 5. Si une fonction est explicitement mentionnée dans la citation (ex: "mes fonctions de production"), c'est cette fonction qui est concernée
@@ -207,13 +207,13 @@ CRITIQUE - Règles d'extraction :
 8. Si une fonction validée n'a pas de point de friction explicite, cherche des problèmes indirects ou transversaux qui pourraient la concerner
 
 Stratégie d'identification :
-1. Parcourt systématiquement les fonctions validées dans {teams} et cherche des citations qui révèlent des problèmes pour chacune
+1. Parcourt systématiquement les fonctions validées dans {functions} et cherche des citations qui révèlent des problèmes pour chacune
 2. Pour chaque fonction validée, analyse les interventions des speakers de cette fonction (via leur rôle) ET les mentions de cette fonction par d'autres speakers
 3. Pour chaque citation problématique, détermine quelle fonction est concernée en analysant :
    - Les mentions explicites de fonctions dans la citation
    - Le contexte du problème décrit
    - Le rôle du speaker (si le problème concerne sa fonction)
-4. Vérifie que la fonction identifiée correspond à une fonction validée dans la liste {teams}
+4. Vérifie que la fonction identifiée correspond à une fonction validée dans la liste {functions}
 5. Si aucune fonction validée ne correspond, ignore ce point de friction
 6. Assure-toi d'avoir au moins cherché des points de friction pour chaque fonction validée, même si certaines n'en ont pas
 
