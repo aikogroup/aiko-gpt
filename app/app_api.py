@@ -479,11 +479,8 @@ def upload_files_to_api(files: List[Any]) -> Dict[str, Any]:
     """
     try:
         files_data = []
-        # Stocker les fichiers en mémoire pour pouvoir les copier localement si nécessaire
-        files_content = {}
         for uploaded_file in files:
             file_content = uploaded_file.getvalue()
-            files_content[uploaded_file.name] = file_content
             files_data.append(
                 ("files", (uploaded_file.name, file_content, uploaded_file.type))
             )
@@ -495,73 +492,16 @@ def upload_files_to_api(files: List[Any]) -> Dict[str, Any]:
         response.raise_for_status()
         
         result = response.json()
+        # IMPORTANT: toujours retourner les chemins renvoyés par l'API.
+        # Streamlit et l'API tournent sur des conteneurs/machines différentes (Cloud Run),
+        # donc tout test Path(...).exists() côté Streamlit sur un chemin /tmp de l'API est faux,
+        # et un fallback local (ex: /tmp/aiko_uploads_local) casserait les appels à l'API.
         api_paths = {
             "workshop": result.get("file_types", {}).get("workshop", []),
             "transcript": result.get("file_types", {}).get("transcript", []),
             "file_paths": result.get("file_paths", [])
         }
-        
-        # Vérifier que les fichiers existent bien dans /tmp/aiko_uploads/ de l'API
-        # Si ce n'est pas le cas (API et Streamlit sur des machines/conteneurs différents),
-        # copier les fichiers localement
-        local_upload_dir = Path("/tmp/aiko_uploads_local")
-        local_upload_dir.mkdir(exist_ok=True)
-        
-        local_paths = {
-            "workshop": [],
-            "transcript": [],
-            "file_paths": []
-        }
-        
-        # Créer une liste des fichiers uploadés avec leur index pour le mapping
-        uploaded_files_list = list(files_content.items())
-        
-        # Fonction helper pour vérifier et copier si nécessaire
-        def ensure_file_accessible(api_path: str, file_type: str = None) -> str:
-            """Vérifie que le fichier existe, sinon le copie localement"""
-            api_path_obj = Path(api_path)
-            
-            # Vérifier si le fichier existe sur le chemin de l'API
-            if api_path_obj.exists():
-                # Le fichier existe dans /tmp/aiko_uploads/ de l'API, l'utiliser
-                return api_path
-            else:
-                # Le fichier n'existe pas, le copier localement comme fallback
-                file_name = api_path_obj.name
-                matching_file = None
-                
-                # Chercher le fichier correspondant dans les fichiers uploadés
-                for orig_name, content in files_content.items():
-                    # Le nom de l'API contient l'UUID suivi du nom original
-                    if orig_name in file_name or file_name.endswith(orig_name):
-                        matching_file = (orig_name, content)
-                        break
-                
-                if matching_file:
-                    orig_name, content = matching_file
-                    # Créer un chemin local unique
-                    local_file_id = str(uuid.uuid4())
-                    local_path = local_upload_dir / f"{local_file_id}_{orig_name}"
-                    # Copier le fichier localement
-                    with open(local_path, "wb") as f:
-                        f.write(content)
-                    print(f"⚠️ Fichier copié localement (API non accessible): {local_path}")
-                    return str(local_path)
-                else:
-                    # Si on ne trouve pas, retourner le chemin de l'API quand même
-                    print(f"⚠️ Fichier non trouvé, utilisation du chemin API: {api_path}")
-                    return api_path
-        
-        # Pour chaque type de fichier, vérifier l'accessibilité
-        for file_type in ["workshop", "transcript"]:
-            for api_path in api_paths[file_type]:
-                local_paths[file_type].append(ensure_file_accessible(api_path, file_type))
-        
-        # Faire de même pour file_paths
-        for api_path in api_paths["file_paths"]:
-            local_paths["file_paths"].append(ensure_file_accessible(api_path))
-        
-        return local_paths
+        return api_paths
     
     except Exception as e:
         st.error(f"❌ Erreur lors de l'upload: {str(e)}")
@@ -2732,29 +2672,30 @@ def display_upload_documents_section():
                     document_id = None
                     file_name = None
                     if st.session_state.current_project_id:
-                        # Vérifier que le fichier existe avant de le parser
-                        from pathlib import Path
-                        file_path_obj = Path(st.session_state.current_transcript_file_path)
-                        if not file_path_obj.exists():
-                            st.error(f"❌ Le fichier n'existe pas : {st.session_state.current_transcript_file_path}")
-                            st.error(f"   Vérifiez que le fichier a bien été uploadé et que le chemin est correct.")
-                            st.stop()
-                        
                         try:
-                            # Parser et sauvegarder directement avec DocumentParserService
                             file_name = os.path.basename(st.session_state.current_transcript_file_path)
-                            document_id = document_parser_service.parse_and_save_transcript(
-                                file_path=st.session_state.current_transcript_file_path,
-                                project_id=st.session_state.current_project_id,
-                                file_name=file_name,
-                                validated_speakers=validated_speakers_list  # Passer les speakers validés avec level
+                            # Parser et sauvegarder via l'API (le fichier est stocké sur l'API, pas sur Streamlit)
+                            response = requests.post(
+                                f"{API_URL}/documents/parse-transcript",
+                                json={
+                                    "file_path": st.session_state.current_transcript_file_path,
+                                    "project_id": st.session_state.current_project_id,
+                                    "file_name": file_name,
+                                    "validated_speakers": validated_speakers_list,
+                                    "metadata": {},
+                                },
+                                timeout=300,
                             )
-                        except ValueError as e:
-                            st.error(f"❌ {str(e)}")
+                            response.raise_for_status()
+                            document_id = response.json().get("document_id")
+                        except requests.exceptions.HTTPError as e:
+                            if e.response is not None:
+                                st.error(f"❌ Erreur HTTP {e.response.status_code} lors de la sauvegarde du transcript: {e.response.text}")
+                            else:
+                                st.error(f"❌ Erreur HTTP lors de la sauvegarde du transcript: {str(e)}")
                             st.stop()
-                        except FileNotFoundError as e:
-                            st.error(f"❌ {str(e)}")
-                            st.error(f"   Le fichier a peut-être été supprimé ou n'est pas accessible.")
+                        except requests.exceptions.RequestException as e:
+                            st.error(f"❌ Erreur réseau lors de la sauvegarde du transcript: {str(e)}")
                             st.stop()
                         except Exception as e:
                             st.error(f"❌ Erreur lors de la sauvegarde en base de données: {str(e)}")
@@ -2963,26 +2904,29 @@ def display_upload_documents_section():
                 from database.db import get_db_context
                 
                 for i, file_path in enumerate(new_paths):
-                    # Vérifier que le fichier existe avant de le parser
-                    from pathlib import Path
-                    file_path_obj = Path(file_path)
-                    if not file_path_obj.exists():
-                        st.error(f"❌ Le fichier n'existe pas : {file_path}")
-                        st.error(f"   Vérifiez que le fichier a bien été uploadé et que le chemin est correct.")
-                        continue
-                    
-                    # Parser et sauvegarder directement avec DocumentParserService
+                    # Parser et sauvegarder via l'API (le fichier est stocké sur l'API, pas sur Streamlit)
                     file_name = os.path.basename(file_path)
                     try:
-                        document_id = document_parser_service.parse_and_save_workshop(
-                            file_path=file_path,
-                            project_id=st.session_state.current_project_id,
-                            file_name=file_name,
-                            metadata={}
+                        response = requests.post(
+                            f"{API_URL}/documents/parse-workshop",
+                            json={
+                                "file_path": file_path,
+                                "project_id": st.session_state.current_project_id,
+                                "file_name": file_name,
+                                "metadata": {},
+                            },
+                            timeout=300,
                         )
-                    except FileNotFoundError as e:
-                        st.error(f"❌ {str(e)}")
-                        st.error(f"   Le fichier a peut-être été supprimé ou n'est pas accessible.")
+                        response.raise_for_status()
+                        document_id = response.json().get("document_id")
+                    except requests.exceptions.HTTPError as e:
+                        if e.response is not None:
+                            st.error(f"❌ Erreur HTTP {e.response.status_code} lors du parsing du workshop: {e.response.text}")
+                        else:
+                            st.error(f"❌ Erreur HTTP lors du parsing du workshop: {str(e)}")
+                        continue
+                    except requests.exceptions.RequestException as e:
+                        st.error(f"❌ Erreur réseau lors du parsing du fichier {file_name}: {str(e)}")
                         continue
                     except Exception as e:
                         st.error(f"❌ Erreur lors du parsing du fichier {file_name}: {str(e)}")
