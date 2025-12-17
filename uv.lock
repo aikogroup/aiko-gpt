@@ -25,7 +25,6 @@ dependencies = [
     { name = "openpyxl" },
     { name = "pandas" },
     { name = "pdfplumber" },
-    { name = "perplexityai" },
     { name = "psycopg2-binary" },
     { name = "pydantic" },
     { name = "python-docx" },
@@ -57,7 +56,6 @@ requires-dist = [
     { name = "openpyxl", specifier = ">=3.1.0" },
     { name = "pandas", specifier = ">=2.0.0" },
     { name = "pdfplumber", specifier = ">=0.10.0" },
-    { name = "perplexityai", specifier = ">=0.16.0" },
     { name = "psycopg2-binary", specifier = ">=2.9.0" },
     { name = "pydantic", specifier = ">=2.0.0" },
     { name = "python-docx", specifier = ">=1.0.0" },
@@ -2307,23 +2305,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/6d/0d/4135821aa7b1a0b77a29fac881ef0890b46b0b002290d04915ed7acc0043/pdfplumber-0.11.7.tar.gz", hash = "sha256:fa67773e5e599de1624255e9b75d1409297c5e1d7493b386ce63648637c67368", size = 115518, upload-time = "2025-06-12T11:30:49.864Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/db/e0/52b67d4f00e09e497aec4f71bc44d395605e8ebcea52543242ed34c25ef9/pdfplumber-0.11.7-py3-none-any.whl", hash = "sha256:edd2195cca68bd770da479cf528a737e362968ec2351e62a6c0b71ff612ac25e", size = 60029, upload-time = "2025-06-12T11:30:48.89Z" },
-]
-
-[[package]]
-name = "perplexityai"
-version = "0.16.1"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "anyio" },
-    { name = "distro" },
-    { name = "httpx" },
-    { name = "pydantic" },
-    { name = "sniffio" },
-    { name = "typing-extensions" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/81/38/6ad733ba10936ef8840b94fc0604a2ffcdbe7176a544661f67582a37a40d/perplexityai-0.16.1.tar.gz", hash = "sha256:385bc23cd00a4f8f86ff0c7957113f53eaa6f5a8945d25dc7763afe7b0fc1ffa", size = 111268, upload-time = "2025-10-15T15:23:49.226Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/63/52/77750ab1564ee8b0445a8787d0a01e4b4c9654dd9387de5c413ebac59791/perplexityai-0.16.1-py3-none-any.whl", hash = "sha256:a0412feeb97ae263e5c2e37656faf9b79c7e2abf7a77011e398799874d0727a2", size = 97215, upload-time = "2025-10-15T15:23:48.118Z" },
 ]
 
 [[package]]

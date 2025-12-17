@@ -99,7 +99,7 @@ API_DEPLOY_OPTS=(
 )
 
 # Ajouter les secrets pour l'API
-API_SECRETS="OPENAI_API_KEY=API_KEY_OPENAI:latest,LANGSMITH_API_KEY=API_KEY_LANGSMITH:latest,PERPLEXITY_API_KEY=API_KEY_PERPLEXITY:latest"
+API_SECRETS="OPENAI_API_KEY=API_KEY_OPENAI:latest,LANGSMITH_API_KEY=API_KEY_LANGSMITH:latest"
 API_DEPLOY_OPTS+=(--set-secrets "${API_SECRETS}")
 
 # Ajouter les variables d'environnement pour l'API
@@ -152,7 +152,7 @@ STREAMLIT_DEPLOY_OPTS=(
 )
 
 # Ajouter les secrets pour Streamlit (nécessaires pour WebSearchAgent)
-STREAMLIT_SECRETS="OPENAI_API_KEY=API_KEY_OPENAI:latest,PERPLEXITY_API_KEY=API_KEY_PERPLEXITY:latest"
+STREAMLIT_SECRETS="OPENAI_API_KEY=API_KEY_OPENAI:latest"
 STREAMLIT_DEPLOY_OPTS+=(--set-secrets "${STREAMLIT_SECRETS}")
 
 # Ajouter les variables d'environnement pour Streamlit

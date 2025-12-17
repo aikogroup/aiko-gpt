@@ -1,5 +1,5 @@
 """
-Web Search Agent - Collecte d'informations sur les entreprises via Perplexity Sonar
+Web Search Agent - Collecte d'informations sur les entreprises via OpenAI Web Search tool
 """
 
 import os
@@ -7,7 +7,6 @@ import sys
 import json
 from typing import Dict, Any, Optional
 from dotenv import load_dotenv
-from perplexity import Perplexity
 from openai import OpenAI
 
 # Ajouter le répertoire parent au PYTHONPATH pour les imports
@@ -29,17 +28,12 @@ class WebSearchAgent:
     """
     
     def __init__(self):
-        """Initialise l'agent avec les clés API Perplexity et OpenAI"""
-        self.perplexity_api_key = os.getenv("PERPLEXITY_API_KEY")
+        """Initialise l'agent avec la clé API OpenAI"""
         self.openai_api_key = os.getenv("OPENAI_API_KEY")
         
-        if not self.perplexity_api_key:
-            raise ValueError("PERPLEXITY_API_KEY non trouvée dans les variables d'environnement")
         if not self.openai_api_key:
             raise ValueError("OPENAI_API_KEY non trouvée dans les variables d'environnement")
         
-        # Initialiser le client Perplexity
-        self.perplexity_client = Perplexity(api_key=self.perplexity_api_key)
         self.openai_client = OpenAI(api_key=self.openai_api_key)
         self.model = os.getenv('OPENAI_MODEL', 'gpt-5-nano')
     
@@ -74,29 +68,33 @@ class WebSearchAgent:
             if context_parts:
                 context_section = "\n\nCONTEXTE SUPPLÉMENTAIRE:\n" + "\n".join(context_parts) + "\n"
             
-            # Recherche avec Perplexity Sonar - une seule requête complète
+            # Recherche via OpenAI Web Search tool - une seule requête complète
             search_query = f"""Recherche des informations détaillées sur l'entreprise {company_name}:
 - Nom complet officiel de l'entreprise
 - Secteur d'activité principal
 - Nombre d'employés (approximatif)
 - Chiffre d'affaires (le plus récent disponible)
 - Description de l'activité de l'entreprise
+- Sources: liste les URLs utilisées ou mentionnées
 
 {context_section}Fournis des informations précises et vérifiables. Utilise le contexte supplémentaire fourni pour affiner ta recherche et donner des informations plus pertinentes."""
             
             print(f"🔍 Recherche pour: {company_name}")
             
-            perplexity_response = self.perplexity_client.chat.completions.create(
-                model="sonar",
-                messages=[
-                    {"role": "system", "content": "Tu es un assistant de recherche spécialisé dans l'analyse d'entreprises. Tu fournis des informations précises, factuelles et vérifiables."},
-                    {"role": "user", "content": search_query}
-                ]
+            web_search_response = self.openai_client.responses.create(
+                model=self.model,
+                tools=[{"type": "web_search"}],
+                instructions=(
+                    "Tu es un assistant de recherche spécialisé dans l'analyse d'entreprises. "
+                    "Tu fournis des informations précises, factuelles et vérifiables. "
+                    "Quand c'est possible, tu inclus les sources (URLs)."
+                ),
+                input=search_query,
             )
-            
-            search_results = perplexity_response.choices[0].message.content
-            
-            print(f"📊 Résultats Perplexity:\n{search_results}")
+
+            search_results = web_search_response.output_text or ""
+
+            print(f"📊 Résultats Web Search:\n{search_results}")
             
             # Traitement et structuration des résultats avec LLM
             company_info = self._process_search_results(

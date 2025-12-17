@@ -53,7 +53,7 @@ RÈGLES POUR LE TEXTE D'ÉVALUATION :
 - Garder une description concise (2-3 phrases)
 
 EXEMPLE DE TEXTE D'ÉVALUATION :
-La direction de Cousin Surgery démontre une ouverture à l'innovation et comprend les enjeux de transformation digitale dans le secteur des dispositifs médicaux. Cependant, la stratégie IA nécessite une formalisation plus précise avec des objectifs métier spécifiques.
+La direction de l'entreprise démontre une ouverture à l'innovation et comprend les enjeux de transformation digitale dans le secteur des dispositifs médicaux. Cependant, la stratégie IA nécessite une formalisation plus précise avec des objectifs métier spécifiques.
 
 {comment_specific}
 
@@ -92,7 +92,7 @@ RÈGLES POUR LE TEXTE D'ÉVALUATION :
 - Garder une description concise (2-3 phrases)
 
 EXEMPLE DE TEXTE D'ÉVALUATION :
-Cousin Surgery dispose d'équipes techniques compétentes (IT, Qualité, Commercial) mais manque encore d'une gouvernance IA structurée. La sensibilisation aux enjeux environnementaux (RSE, consommation énergétique des solutions IA) est un atout différentiant. Il faut renforcer la coordination entre départements et définir les rôles décisionnels dans la gouvernance des projets IA.
+L'entreprise dispose d'équipes techniques compétentes (IT, Qualité, Commercial) mais manque encore d'une gouvernance IA structurée. La sensibilisation aux enjeux environnementaux (RSE, consommation énergétique des solutions IA) est un atout différentiant. Il faut renforcer la coordination entre départements et définir les rôles décisionnels dans la gouvernance des projets IA.
 
 {comment_specific}
 
@@ -209,7 +209,7 @@ RÈGLES POUR LE TEXTE D'ÉVALUATION :
 - Garder une description concise (2-3 phrases)
 
 EXEMPLE DE TEXTE D'ÉVALUATION :
-Cousin Surgery montre une dynamique de transformation remarquable : déploiement CRM Sogema en cours, migration ERP de systèmes développés en interne vers Sylob (production), projets IA déjà initiés (analyse commandes par mail pour les services clients), infrastructure Office 365/SharePoint, et forte culture d'amélioration continue à une conscience RSE exemplaire. Cette transformation active constitue un terreau fertile pour l'adoption de solutions IA.
+L'entreprise montre une dynamique de transformation remarquable : déploiement CRM Sogema en cours, migration ERP de systèmes développés en interne vers Sylob (production), projets IA déjà initiés (analyse commandes par mail pour les services clients), infrastructure Office 365/SharePoint, et forte culture d'amélioration continue à une conscience RSE exemplaire. Cette transformation active constitue un terreau fertile pour l'adoption de solutions IA.
 
 {comment_specific}
 
